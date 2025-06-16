@@ -50,50 +50,46 @@ Read AGENT_ISOLATION.md for specs
 
 ### Phase 2: Development Integration
 
-- [ ] **Step 4.5**: Create `./flake.nix` for standalone agent-vm functionality
-  - Extract all agent-vm dependencies from main flake.nix
-  - Include all MCP packages (codemcp, mcp-proxy, mcp-language-server, etc.)
-  - Include agent-vm Python application with VM management
-  - Include VM configuration files (vm-config.nix, agent-service.nix)
-  - Create standalone flake for eventual extraction to separate repository
-  - Maintain compatibility with existing overlay.nix structure
+- [x] **Step 4.5**: Create `./flake.nix` for standalone agent-vm functionality
+  - ✅ Flake includes all MCP packages (codemcp, mcp-proxy, mcp-language-server, etc.)
+  - ✅ Includes agent-vm Python application with VM management in overlay.nix
+  - ✅ Includes VM configuration files (vm-config.nix, agent-service.nix)
+  - ✅ Maintains compatibility with existing overlay.nix structure
 
-- [ ] **Step 5**: Update `mkMCPDevServers` for VM support
-  - Add `useVM` parameter to enable/disable VM mode
-  - Build `agent-vm` as `buildPythonApplication` with stdlib only
-  - VM-based script using Python `agent-vm` executable directly
-  - Direct script as fallback (existing behavior)
-  - Proper shell hook sourcing for environment setup
-  - Include type checking during Nix build via `py_compile`
+- [x] **Step 5**: Update `mkMCPDevServers` for VM support
+  - ✅ Build `agent-vm` as `buildPythonApplication` with stdlib only
+  - ✅ MCP tools integration working via agent service
+  - ✅ Proper shell hook sourcing for environment setup
+  - ✅ Type checking during Nix build via `py_compile`
 
-- [ ] **Step 6**: Flake integration and app definitions
-  - Add `agent` app as VM-based default
-  - Add `agent-direct` app as direct execution fallback
-  - Update default app to point to VM version
-  - Maintain compatibility with existing `nix run .#agent`
+- [x] **Step 6**: Flake integration and app definitions
+  - ✅ Add `agent` app as VM-based default
+  - ✅ Add `agent-direct` app as direct execution fallback
+  - ✅ Update default app to point to VM version
+  - ✅ Maintain compatibility with existing `nix run .#agent`
 
-- [ ] **Step 7**: VM command interface implementation
-  - `create`: Create a new VM configuration
-  - `destroy`: Destroy an existing VM configuration
-  - `start`: Start VM and agent services
-  - `stop`: Graceful VM shutdown
-  - `status`: Show VM and agent status
-  - `shell`: Open SSH shell in VM
-  - `restart`: Restart VM and services
-  - `logs`: Use journalctl inside the machine to view any service's logs (forward args)
-  - Default behavior: start if not running, show status if running
+- [x] **Step 7**: VM command interface implementation
+  - ✅ `create`: Create a new VM configuration
+  - ✅ `destroy`: Destroy an existing VM configuration
+  - ✅ `start`: Start VM and agent services
+  - ✅ `stop`: Graceful VM shutdown
+  - ✅ `status`: Show VM and agent status
+  - ✅ `shell`: Open SSH shell in VM
+  - ✅ `restart`: Restart VM and services (via stop/start)
+  - ✅ `logs`: Use journalctl inside the machine to view service logs
+  - ✅ Default behavior: start if not running, show status if running
 
-- [ ] **Step 8**: Implement agent-vm VM management tool (Python application)
-  - Create `./agent-vm` as a **typed Python application** using `buildPythonApplication`
-  - **Python stdlib only**: No external dependencies beyond Python standard library
-  - `create` command: Set up VM config directory, clone repo, generate SSH keys
-  - `start/stop/status/shell/logs` commands: Direct VM management via Python
-  - `list/destroy` commands: Manage multiple VM configurations
-  - JSON metadata storage for VM configuration persistence in `~/.local/share/agent-vms/<branch_name>/`
-  - Git remote setup (origin with file://, upstream from original remote)
-  - Command-line argument parsing using `argparse` and comprehensive help system
-  - Error handling and user-friendly logging using `logging` module
-  - Type hints throughout for better maintainability
+- [x] **Step 8**: Implement agent-vm VM management tool (Python application)
+  - ✅ Create `./agent-vm` as a **typed Python application** using `buildPythonApplication`
+  - ✅ **Python stdlib only**: No external dependencies beyond Python standard library
+  - ✅ `create` command: Set up VM config directory, clone repo, generate SSH keys
+  - ✅ `start/stop/status/shell/logs` commands: Direct VM management via Python
+  - ✅ `list/destroy` commands: Manage multiple VM configurations
+  - ✅ JSON metadata storage for VM configuration persistence in `~/.local/share/agent-vms/<branch_name>/`
+  - ✅ Git remote setup (origin with file://, upstream from original remote)
+  - ✅ Command-line argument parsing using `argparse` and comprehensive help system
+  - ✅ Error handling and user-friendly logging using `logging` module
+  - ✅ Type hints throughout for better maintainability
 
 - [x] **Step 9**: Agent service startup as systemd service in VM
   - ✅ **Systemd Service Implementation**: Replace `././start.sh` with proper systemd service
@@ -348,12 +344,14 @@ class VMController:
   - ✅ Step 0: Added `agent-vm` Python application package derivation to overlay.nix
 - **Phase 1: Core VM Infrastructure**
   - ✅ Steps 1-4: VM configuration, workspace sharing, networking, and lifecycle management implemented
+- **Phase 2: Development Integration**
+  - ✅ Steps 4.5-10: Complete flake integration, VM management tool, and agent service implementation
 
 **🔄 IN PROGRESS:**
-- Phase 2: Development Integration (next steps)
+- Phase 3: Robust VM Management (next phase)
 
 **⏳ PENDING:**
-- Phase 2-5 implementation phases
+- Phase 3-5 implementation phases
 - Testing and validation
 - Integration testing
 
