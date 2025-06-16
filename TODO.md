@@ -110,22 +110,26 @@ Read AGENT_ISOLATION.md for specs
 
 ### Phase 3: Robust VM Management
 
-- [ ] **Step 11**: Implement secure SSH authentication and VM config management
-  - Create persistent SSH keypair in VM config directory (not tempdir)
-  - SSH keys created once during `agent-vm create` command
-  - Store SSH keys in `~/.local/share/agent-vms/<branch_name>/ssh/`
-  - Store all VM state (config, workspace, SSH keys, PID files) in `~/.local/share/agent-vms/<branch_name>/`
-  - Inject public key into VM during startup
-  - Use key-based authentication instead of passwords
-  - Secure key permissions (600 for private, 644 for public)
-  - Implement `agent-vm create` command for VM setup
-  - Create branch workspace and git remote configuration
+- [x] **Step 11**: Implement secure SSH authentication and VM config management
+  - ✅ Create persistent SSH keypair in VM config directory (not tempdir)
+  - ✅ SSH keys created once during `agent-vm create` command
+  - ✅ Store SSH keys in `~/.local/share/agent-vms/<branch_name>/ssh/`
+  - ✅ Store all VM state (config, workspace, SSH keys, PID files) in `~/.local/share/agent-vms/<branch_name>/`
+  - ✅ Inject public key into VM during startup
+  - ✅ Use key-based authentication instead of passwords
+  - ✅ Secure key permissions (600 for private, 644 for public)
+  - ✅ Implement `agent-vm create` command for VM setup
+  - ✅ Create branch workspace and git remote configuration
 
-- [ ] **Step 12**: Enhanced VM status monitoring
-  - Process detection using VM name matching
-  - SSH connectivity health checks
-  - MCP service status verification in VM
-  - Detailed status reporting and logging
+- [x] **Step 12**: Enhanced VM status monitoring
+  - ✅ Process detection using VM name matching
+  - ✅ SSH connectivity health checks with detailed diagnostics
+  - ✅ MCP service status verification in VM with service details
+  - ✅ Detailed status reporting and logging with resource monitoring
+  - ✅ VM resource usage monitoring (CPU, memory, uptime)
+  - ✅ MCP proxy health checks with response time measurement
+  - ✅ Workspace status monitoring (size, git status)
+  - ✅ Visual status indicators and structured output formatting
 
 - [ ] **Step 13**: Error handling and recovery
   - VM startup failure recovery

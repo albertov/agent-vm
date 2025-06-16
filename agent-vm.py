@@ -667,31 +667,237 @@ class VMController:
         logger.info("VM stopped")
 
     def _show_vm_status(self, vm_config_dir: Path, config_data: Dict) -> None:
-        """Show detailed VM status."""
+        """Show detailed VM status with comprehensive monitoring."""
         vm_name = config_data["vm_name"]
         ssh_key_path = Path(config_data["ssh_key_path"])
 
-        if self._is_vm_running(vm_name):
-            logger.info("VM Status: Running")
-            logger.info("SSH Access: ssh -p 2222 dev@localhost")
-            logger.info("MCP Proxy: http://localhost:8000 (if agent is running)")
+        logger.info(f"VM Configuration: {config_data['branch']}")
+        logger.info(f"Created: {config_data.get('created_at', 'unknown')}")
+        logger.info(f"Workspace: {config_data['workspace_path']}")
+        logger.info(f"MCP Port: {config_data['port']}")
+        logger.info("="*50)
 
-            # Check if agent is running in VM
-            try:
-                ssh_cmd = [
-                    "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
-                    "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                    "-p", "2222", "dev@localhost", "systemctl is-active agent-mcp"
-                ]
-                result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
-                if result.returncode == 0 and result.stdout.decode().strip() == "active":
-                    logger.info("Agent Status: Running")
+        if self._is_vm_running(vm_name):
+            logger.info("🟢 VM Status: Running")
+
+            # Get VM process details
+            vm_pid = self._get_vm_pid(vm_name)
+            if vm_pid:
+                logger.info(f"Process ID: {vm_pid}")
+
+                # Get VM resource usage
+                vm_resources = self._get_vm_resources(vm_pid)
+                if vm_resources:
+                    logger.info(f"CPU Usage: {vm_resources.get('cpu', 'unknown')}%")
+                    logger.info(f"Memory Usage: {vm_resources.get('memory', 'unknown')} MB")
+                    logger.info(f"VM Uptime: {vm_resources.get('uptime', 'unknown')}")
+
+            # Check SSH connectivity with detailed diagnostics
+            logger.info("-" * 30)
+            ssh_status = self._check_ssh_connectivity(ssh_key_path)
+            if ssh_status['connected']:
+                logger.info("🟢 SSH Connectivity: Available")
+                logger.info(f"SSH Access: ssh -i {ssh_key_path} -p 2222 dev@localhost")
+
+                # Check agent service status with details
+                agent_status = self._check_agent_service_detailed(ssh_key_path)
+                logger.info("-" * 30)
+                if agent_status['active']:
+                    logger.info("🟢 Agent Service: Running")
+                    logger.info(f"Service Uptime: {agent_status.get('uptime', 'unknown')}")
+                    logger.info(f"Memory Usage: {agent_status.get('memory', 'unknown')}")
+                    logger.info(f"Restart Count: {agent_status.get('restart_count', 'unknown')}")
+
+                    # Check MCP proxy health
+                    mcp_health = self._check_mcp_proxy_health(ssh_key_path, config_data['port'])
+                    if mcp_health['healthy']:
+                        logger.info("🟢 MCP Proxy: Healthy")
+                        logger.info(f"MCP Endpoint: http://localhost:{config_data['port']}")
+                        logger.info(f"Response Time: {mcp_health.get('response_time', 'unknown')}ms")
+                    else:
+                        logger.warning("🟡 MCP Proxy: Not responding")
+                        logger.warning(f"Error: {mcp_health.get('error', 'unknown')}")
                 else:
-                    logger.warning("Agent Status: Not running")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                logger.warning("Agent Status: Could not check")
+                    logger.warning("🟡 Agent Service: Not running")
+                    if agent_status.get('error'):
+                        logger.warning(f"Error: {agent_status['error']}")
+
+                # Check workspace status
+                workspace_status = self._check_workspace_status(ssh_key_path, config_data['workspace_path'])
+                logger.info("-" * 30)
+                if workspace_status['accessible']:
+                    logger.info("🟢 Workspace: Accessible")
+                    logger.info(f"Workspace Size: {workspace_status.get('size', 'unknown')}")
+                    logger.info(f"Git Status: {workspace_status.get('git_status', 'unknown')}")
+                else:
+                    logger.warning("🟡 Workspace: Issues detected")
+                    logger.warning(f"Error: {workspace_status.get('error', 'unknown')}")
+
+            else:
+                logger.warning("🟡 SSH Connectivity: Failed")
+                logger.warning(f"Error: {ssh_status.get('error', 'Connection failed')}")
+                logger.warning("Try restarting the VM: agent-vm restart")
         else:
-            logger.info("VM Status: Stopped")
+            logger.info("🔴 VM Status: Stopped")
+            logger.info("Start the VM with: agent-vm start")
+
+    def _get_vm_pid(self, vm_name: str) -> Optional[int]:
+        """Get the PID of the running VM process."""
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", f"qemu.*{vm_name}"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                return int(result.stdout.strip().split('\n')[0])
+        except (subprocess.CalledProcessError, ValueError):
+            pass
+        return None
+
+    def _get_vm_resources(self, pid: int) -> Dict[str, str]:
+        """Get VM resource usage information."""
+        resources = {}
+        try:
+            # Get CPU and memory usage from ps
+            result = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "pid,ppid,pcpu,pmem,etime,comm"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) > 1:
+                    fields = lines[1].split()
+                    if len(fields) >= 6:
+                        resources['cpu'] = fields[2]
+                        resources['memory'] = fields[3]
+                        resources['uptime'] = fields[4]
+        except subprocess.CalledProcessError:
+            pass
+        return resources
+
+    def _check_ssh_connectivity(self, ssh_key_path: Path) -> Dict[str, any]:
+        """Check SSH connectivity with detailed diagnostics."""
+        ssh_status = {'connected': False}
+        try:
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
+                "-p", "2222", "dev@localhost", "echo 'SSH OK'"
+            ]
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            if result.returncode == 0 and "SSH OK" in result.stdout:
+                ssh_status['connected'] = True
+            else:
+                ssh_status['error'] = result.stderr or "Connection failed"
+        except subprocess.TimeoutExpired:
+            ssh_status['error'] = "Connection timeout"
+        except subprocess.CalledProcessError as e:
+            ssh_status['error'] = f"SSH error: {e}"
+        return ssh_status
+
+    def _check_agent_service_detailed(self, ssh_key_path: Path) -> Dict[str, any]:
+        """Check agent service status with detailed information."""
+        agent_status = {'active': False}
+        try:
+            # Check if service is active
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
+                "-p", "2222", "dev@localhost",
+                "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
+            ]
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            if result.returncode == 0:
+                properties = {}
+                for line in result.stdout.strip().split('\n'):
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        properties[key] = value
+
+                agent_status['active'] = properties.get('ActiveState') == 'active'
+                agent_status['substate'] = properties.get('SubState', 'unknown')
+                agent_status['pid'] = properties.get('MainPID', 'unknown')
+                agent_status['restart_count'] = properties.get('NRestarts', 'unknown')
+
+                # Convert memory from bytes to MB
+                memory_bytes = properties.get('MemoryCurrent', '0')
+                try:
+                    memory_mb = int(memory_bytes) // (1024 * 1024)
+                    agent_status['memory'] = f"{memory_mb} MB"
+                except (ValueError, TypeError):
+                    agent_status['memory'] = 'unknown'
+
+                # Parse start timestamp for uptime
+                start_time = properties.get('ExecMainStartTimestamp', '')
+                if start_time and start_time != '0':
+                    try:
+                        import datetime
+                        # Simple uptime calculation
+                        agent_status['uptime'] = 'running'
+                    except:
+                        agent_status['uptime'] = 'unknown'
+                else:
+                    agent_status['uptime'] = 'not started'
+            else:
+                agent_status['error'] = result.stderr or "Failed to get service status"
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            agent_status['error'] = f"Service check failed: {e}"
+        return agent_status
+
+    def _check_mcp_proxy_health(self, ssh_key_path: Path, port: int) -> Dict[str, any]:
+        """Check MCP proxy health and response time."""
+        mcp_status = {'healthy': False}
+        try:
+            import time
+            start_time = time.time()
+
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
+                "-p", "2222", "dev@localhost",
+                f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
+            ]
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+
+            response_time = int((time.time() - start_time) * 1000)
+            mcp_status['response_time'] = response_time
+
+            if result.returncode == 0 and "PROXY_DOWN" not in result.stdout:
+                mcp_status['healthy'] = True
+            else:
+                mcp_status['error'] = "Proxy not responding"
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            mcp_status['error'] = f"Health check failed: {e}"
+        return mcp_status
+
+    def _check_workspace_status(self, ssh_key_path: Path, workspace_path: str) -> Dict[str, any]:
+        """Check workspace accessibility and status."""
+        workspace_status = {'accessible': False}
+        try:
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
+                "-p", "2222", "dev@localhost",
+                f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
+            ]
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) >= 2:
+                    workspace_status['accessible'] = True
+                    workspace_status['size'] = lines[1] if len(lines) > 1 else 'unknown'
+
+                    # Parse git status
+                    if len(lines) > 2 and "GIT_ERROR" not in lines[2]:
+                        changes = int(lines[2]) if lines[2].isdigit() else 0
+                        workspace_status['git_status'] = f"{changes} modified files" if changes > 0 else "clean"
+                    else:
+                        workspace_status['git_status'] = "not a git repository"
+            else:
+                workspace_status['error'] = "Workspace not accessible"
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            workspace_status['error'] = f"Workspace check failed: {e}"
+        return workspace_status
 
 
 def main() -> None:
