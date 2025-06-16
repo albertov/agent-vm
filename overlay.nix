@@ -105,4 +105,20 @@ inputs: final: prev:
       platforms = platforms.linux;
     };
   };
+
+  # Integration test executable (separate from normal test suite)
+  integration-test = final.writeShellApplication {
+    name = "integration-test";
+    runtimeInputs = with final; [
+      python3
+      agent-vm
+      git
+      openssh
+      qemu
+      curl
+    ];
+    text = ''
+      exec ${./integration-test.py} "$@"
+    '';
+  };
 }

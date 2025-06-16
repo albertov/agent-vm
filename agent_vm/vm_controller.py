@@ -115,10 +115,13 @@ logger = logging.getLogger(__name__)
 class VMController:
     """VM lifecycle management controller."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_dir: Optional[str] = None) -> None:
         """Initialize VM controller with configuration paths."""
         self.home_dir = Path.home()
-        self.base_dir = self.home_dir / ".local" / "share" / "agent-vms"
+        if state_dir:
+            self.base_dir = Path(state_dir).expanduser().resolve()
+        else:
+            self.base_dir = self.home_dir / ".local" / "share" / "agent-vms"
         self.origin_repo = self._get_origin_repo()
 
     def _get_origin_repo(self) -> str:
@@ -1066,6 +1069,8 @@ Examples:
     # Global options
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging with debug information')
+    parser.add_argument('--state-dir', type=str,
+                       help='Override default state base directory (default: ~/.local/share/agent-vms)')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
@@ -1116,7 +1121,7 @@ Examples:
     # Set up logging based on verbose flag
     setup_logging(verbose=args.verbose)
 
-    controller = VMController()
+    controller = VMController(state_dir=args.state_dir)
 
     try:
         if args.command == 'create':
