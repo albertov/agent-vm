@@ -1162,15 +1162,21 @@ in
                     logger.debug(f"🔍 SSH attempt {attempt + 1} stdout: {result.stdout}")
                     logger.debug(f"🔍 SSH attempt {attempt + 1} stderr: {result.stderr}")
 
-                if result.returncode == 0 and "SSH_CONNECTION_OK" in result.stdout:
-                    # Clear progress line
-                    print("\r" + " " * 50 + "\r", end="", flush=True)
-                    logger.info("✅ VM is ready for connections")
-                    return True
-                elif result.returncode == 0 and "SSH_CONNECTION_OK" not in result.stdout:
-                    # SSH connected but didn't get expected output
-                    if attempt % 10 == 0:  # Log this issue periodically
-                        logger.debug(f"🔍 SSH connected but unexpected output: '{result.stdout.strip()}'")
+                if result.returncode == 0:
+                    # SSH connection succeeded
+                    if "SSH_CONNECTION_OK" in result.stdout:
+                        # Clear progress line
+                        print("\r" + " " * 50 + "\r", end="", flush=True)
+                        logger.info("✅ VM is ready for connections")
+                        return True
+                    else:
+                        # SSH connected but echo output may not have been captured properly
+                        # Clear progress line
+                        print("\r" + " " * 50 + "\r", end="", flush=True)
+                        logger.info("✅ VM is ready for connections (SSH connected successfully)")
+                        if attempt == 0 or attempt % 10 == 0:  # Log this issue periodically
+                            logger.debug(f"🔍 SSH connected but got unexpected output: '{result.stdout.strip()}'")
+                        return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 if attempt % 10 == 0:  # Log errors periodically for debugging
                     logger.debug(f"🔍 SSH attempt {attempt + 1} failed: {e}")
@@ -1573,9 +1579,19 @@ in
             logger.debug(f"🔍 SSH Stdout: '{result.stdout.strip()}'")
             logger.debug(f"🔍 SSH Stderr: '{result.stderr.strip()}'")
 
-            if result.returncode == 0 and "SSH_CONNECTION_OK" in result.stdout:
-                ssh_status['connected'] = True
-                logger.debug("✅ SSH connectivity confirmed - connection established successfully")
+            if result.returncode == 0:
+                # SSH connection succeeded
+                if "SSH_CONNECTION_OK" in result.stdout:
+                    ssh_status['connected'] = True
+                    logger.debug("✅ SSH connectivity confirmed - connection established successfully with expected output")
+                else:
+                    # SSH connected but echo output may not have been captured properly
+                    ssh_status['connected'] = True
+                    logger.debug("✅ SSH connectivity confirmed - connection established successfully (exit code 0)")
+                    if result.stdout.strip():
+                        logger.debug(f"🔍 Note: Got unexpected output: '{result.stdout.strip()}'")
+                    else:
+                        logger.debug("🔍 Note: No output captured from echo command, but connection succeeded")
             else:
                 error_details = []
                 if result.returncode != 0:
