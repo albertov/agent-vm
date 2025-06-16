@@ -1,0 +1,5 @@
+run_hoogle.sh
+rescript_sys.sh
+*.sw?
+result*
+*.log

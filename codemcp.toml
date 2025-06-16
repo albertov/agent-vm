@@ -1,0 +1,73 @@
+# codemcp configuration file
+project_prompt = """
+# Instructions
+- MUST use the agent-vm command frequently to test your changes and fix them
+- You cannot modify anything outside ./, or  Capisce?!
+- Don't use nix-build, nix-instantiate, etc.. use the modern "nix" command.
+- Don't use "<nixpkgs>", always use the flake in this repo as the "pkgs" set
+- Before starting work, add what you're going to do to the TODO.md
+document if it is not already there.
+- Keep the AGENT_ISOLATION.md document and TODO.md up to date with
+your changes when you're done with them.
+- Use the 'branch_log' command before starting work to see where you left off.
+Ignore changes to codemcp.toml and under the ./ directory.
+- When leaving code incomplete, stubbed or mocked. Write a FIXME or TODO comment
+explaining why.
+
+## Final tasks
+
+When your work is ready, you MUST:
+
+1) Run the tests again.  ALL tests MUST pass! We allow no flaky tests here. Fix
+them if they don't and repeat. If you get stuck write a FIXME
+
+2) Run the 'branch_log' command to get a log and diff of all the files
+that have been modified in this branch. Then bump the version and
+update the CHANGELOG.md of their package and any other '*.md'
+documents in the repository so they reflect correct and up-to-date
+information. Don't repeat this information to the user, only edit the `*.md`
+files.
+Do not bump the version more than once per branch.
+"""
+
+[commands.format]
+command = ["./agents/run_format.sh"]
+doc = "Accepts the name of the files that need formatting as arguments"
+
+[commands.branch_log]
+command = ["./run_branch_log.sh"]
+doc = """
+Show the log messages of the changes done in this branch
+
+Accepts an optional path list to restrict query to a specific set of files or
+directories
+"""
+
+[commands.branch_changed_files]
+command = ["git", "diff", "--name-only", "origin/master...HEAD", "--"]
+doc = """
+List the file names that have been changed in this branch
+
+Accepts an optional path list to restrict query to a specific set of files or
+directories
+"""
+
+[commands.git_show]
+command = ["git", "show"]
+doc = """
+Use "git show" to show the changes of a commit ot range of commits
+"""
+
+# Logging stuff
+[logger]
+# Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+verbosity = "DEBUG"
+
+
+[commands.agent-vm]
+command = ["./nix.sh", "run", "--show-trace", ".#", "--"]
+doc = """
+Calls "nix run .# --" which runs ./agent-vm.py
+
+Arguments are passed to the python script. Make sure you quote them properly!
+"""
