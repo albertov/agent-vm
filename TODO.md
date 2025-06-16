@@ -28,6 +28,11 @@ Read README.md for specs
   - **Added**: VM startup monitoring with process status checks
   - **Issue found**: Integration test flag passing needs to be fixed to enable debug output in agent-vm commands
 
+- [x] **Added**: Timeout parameter integration test (`test_timeout_parameter_handling`)
+  - **Feature**: Verifies that --timeout parameter is properly passed from integration-test.py to agent-vm
+  - **Tests**: Help output includes --timeout, parameter passing works, timeout enforcement validation
+  - **Status**: Timeout functionality was already working, now has comprehensive test coverage
+
 ### DEBUG LOGGING STATUS
 
 ✅ **Improved VM Controller Debug Logging**:
