@@ -762,17 +762,13 @@ class VMController:
 
             logger.info("✅ Agent services started in VM")
 
-            # Wait for service to be ready - temporarily disabled for debugging
-            # if self._wait_for_agent_ready(ssh_key_path):
-            #     logger.info("🎉 MCP Proxy available at: http://localhost:8000")
-            #     logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
-            # else:
-            #     logger.warning("⚠️ Agent services started but MCP proxy is not responding")
-            #     logger.info("🔍 Check service logs with: agent-vm logs")
-
-            # For debugging - just assume success
-            logger.info("🎉 MCP Proxy should be available at: http://localhost:8000")
-            logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+            # Wait for service to be ready
+            if self._wait_for_agent_ready(ssh_key_path):
+                logger.info("🎉 MCP Proxy available at: http://localhost:8000")
+                logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+            else:
+                logger.warning("⚠️ Agent services started but MCP proxy is not responding")
+                logger.info("🔍 Check service logs with: agent-vm logs")
 
         except subprocess.CalledProcessError as e:
             logger.error("❌ Failed to start agent services in VM")
