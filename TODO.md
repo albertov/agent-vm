@@ -276,8 +276,15 @@ class VMController:
   - ✅ Destroy tempfiles at program exit (regardless of exceptions)
   - ✅ Display last 20 lines and paths as log.error on subprocess failures
 
+- [x] **Step 28**: Replace custom test framework with pytest in integration-test.py
+  - ✅ Convert AgentVMIntegrationTest class to use pytest framework
+  - ✅ Use pytest fixtures for setup/teardown and test isolation
+  - ✅ Leverage pytest-timeout, pytest-mock, and other testing plugins
+  - ✅ Replace custom assertion handling with pytest assertions
+  - ✅ Maintain CLI interface but use pytest test execution internally
+
 **🔄 IN PROGRESS:**
-- **Step 28**: Add specific agent service startup integration test
+- **Step 29**: Add specific agent service startup integration test
   - Create test that validates agent-mcp systemd service starts correctly in VM
   - Verify service is active and healthy after VM startup
   - Test MCP proxy endpoint accessibility and functionality
