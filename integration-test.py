@@ -10,7 +10,7 @@ This is designed to be run manually or by CI systems and is separate from
 the normal test suite to avoid interfering with development workflows.
 """
 
-import argparse
+import typer
 import atexit
 import json
 import logging
@@ -573,12 +573,19 @@ class AgentVMIntegrationTest:
             return True
 
 
-def main():
-    """Main entry point for integration test executable."""
-    parser = argparse.ArgumentParser(
-        description="Integration test executable for agent-vm",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+# Global state for options
+_global_state = {
+    "agent_vm_cmd": "agent-vm",
+    "verbose": False,
+    "debug": False,
+    "timeout": 120
+}
+
+# Initialize typer app
+app = typer.Typer(
+    name="integration-test",
+    help="Integration test executable for agent-vm",
+    epilog="""
 This executable runs comprehensive integration tests for agent-vm by calling
 the CLI exclusively (no mocks). It creates an isolated test environment and
 tests the complete workflow from VM creation to cleanup.
@@ -589,40 +596,63 @@ Examples:
   integration-test --verbose         # Enable verbose output
   integration-test --debug           # Enable debug output with full stderr/stdout capture
   integration-test --timeout 180     # Set custom timeout to 180 seconds
-        """
-    )
+    """
+)
 
-    parser.add_argument('--agent-vm', default='agent-vm',
-                       help='Path to agent-vm executable (default: agent-vm in PATH)')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Enable verbose logging and debugging')
-    parser.add_argument('--debug', '-d', action='store_true',
-                       help='Enable debug mode with comprehensive stderr/stdout capture')
-    parser.add_argument('--timeout', '-t', type=int, default=120,
-                       help='Timeout in seconds for VM operations (default: 120)')
 
-    args = parser.parse_args()
+@app.callback()
+def main_callback(
+    agent_vm: str = typer.Option("agent-vm", help="Path to agent-vm executable (default: agent-vm in PATH)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging and debugging"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug mode with comprehensive stderr/stdout capture"),
+    timeout: int = typer.Option(120, "--timeout", "-t", help="Timeout in seconds for VM operations (default: 120)")
+) -> None:
+    """Main callback to handle global options."""
+    _global_state["agent_vm_cmd"] = agent_vm
+    _global_state["verbose"] = verbose
+    _global_state["debug"] = debug
+    _global_state["timeout"] = timeout
 
     # Set up logging - debug mode implies verbose
-    setup_logging(verbose=args.verbose or args.debug)
+    setup_logging(verbose=verbose or debug)
 
-    # Run integration tests
-    test_runner = AgentVMIntegrationTest(
-        agent_vm_cmd=args.agent_vm,
-        verbose=args.verbose,
-        debug=args.debug,
-        timeout=args.timeout
-    )
 
+@app.command()
+def run(
+    ctx: typer.Context
+) -> None:
+    """Run all integration tests."""
     try:
+        # Run integration tests
+        test_runner = AgentVMIntegrationTest(
+            agent_vm_cmd=_global_state["agent_vm_cmd"],
+            verbose=_global_state["verbose"],
+            debug=_global_state["debug"],
+            timeout=_global_state["timeout"]
+        )
+
         success = test_runner.run_all_tests()
-        sys.exit(0 if success else 1)
+        raise typer.Exit(0 if success else 1)
+
+    except typer.Exit:
+        # Re-raise typer.Exit exceptions (these are normal)
+        raise
     except KeyboardInterrupt:
         logger.info("Integration tests cancelled by user")
-        sys.exit(130)
+        raise typer.Exit(130)
     except Exception as e:
         logger.error(f"Unexpected error during integration tests: {e}")
-        sys.exit(1)
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    """Main entry point for integration test executable."""
+    # If no command is provided, run the tests by default
+    if len(sys.argv) == 1 or (len(sys.argv) > 1 and not any(arg in ["run", "--help", "-h"] for arg in sys.argv)):
+        # Add "run" command if not present
+        sys.argv.insert(1, "run")
+
+    app()
 
 
 if __name__ == "__main__":
