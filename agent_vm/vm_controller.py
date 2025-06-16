@@ -637,100 +637,47 @@ class VMController:
 
         os.chdir(workspace_dir)
 
-        # Build VM configuration
-        logger.info("🔧 Building VM configuration...")
+        # Build VM configuration using existing vm-config.nix with agent service
+        logger.info("🔧 Building VM configuration with agent service...")
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
-        # Create a simplified VM configuration that doesn't depend on overlay
-        temp_config_content = f'''
-# Simplified VM config for integration testing (no agent service)
-{{ config, pkgs, lib, ... }}:
-{{
-  virtualisation.vmVariant = {{
-    # System configuration
-    virtualisation = {{
-      memorySize = 2048;
-      cores = 2;
-      diskSize = 8192;
-      graphics = false;
-
-      # Port forwarding
-      forwardPorts = [
-        {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
-        {{ from = "host"; host.port = {ssh_port}; guest.port = 22; }}
-      ];
-
-      # Shared directories
-      sharedDirectories.workspace = {{
-        source = "{workspace_dir}";
-        target = "/workspace";
-        securityModel = "mapped-xattr";
-      }};
-    }};
-  }};
-
-  # Enable SSH
-  services.openssh = {{
-    enable = true;
-    settings = {{
-      PermitRootLogin = "no";
-      PasswordAuthentication = false;
-    }};
-  }};
-
-  # Create development user
-  users.users.dev = {{
-    isNormalUser = true;
-    extraGroups = [ "wheel" ];
-    openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
-    packages = with pkgs; [
-      git
-      openssh
-      curl
-      python3
-      nix
-    ];
-  }};
-
-  # Enable sudo without password for dev user
-  security.sudo.extraRules = [
-    {{
-      users = [ "dev" ];
-      commands = [
-        {{
-          command = "ALL";
-          options = [ "NOPASSWD" ];
-        }}
-      ];
-    }}
-  ];
-
-  # Firewall configuration
-  networking.firewall.allowedTCPPorts = [ 22 {config_data["port"]} ];
-
-  # System state version
-  system.stateVersion = "24.11";
-}}
-'''
-
-        temp_config_path = Path("temp-vm-config.nix")
-        with temp_config_path.open('w') as f:
-            f.write(temp_config_content)
-
         try:
-            # Build using a simple nixos-rebuild approach
+            # Use the project's flake to build VM with agent service
             vm_build_cmd = [
                 "nix", "build", "--no-link", "--print-out-paths", "--impure",
-                "--expr", f'''
+                f"{workspace_dir}#nixosConfigurations.vm.config.system.build.vm"
+            ]
+
+            # If that doesn't work, try the direct approach with the existing vm-config.nix
+            if True:  # Always use fallback for now
+                vm_build_cmd = [
+                    "nix", "build", "--no-link", "--print-out-paths", "--impure",
+                    "--expr", f'''
 let
-  nixpkgs = builtins.getFlake "github:NixOS/nixpkgs/nixos-unstable";
+  flake = builtins.getFlake "{workspace_dir}";
+  nixpkgs = flake.inputs.nixpkgs;
+  pkgs = flake.legacyPackages.${{builtins.currentSystem}};
 in
   (nixpkgs.lib.nixosSystem {{
     system = builtins.currentSystem;
-    modules = [ {workspace_dir}/temp-vm-config.nix ];
+    pkgs = pkgs;
+    modules = [
+      {workspace_dir}/vm-config.nix
+      {{
+        # Override SSH key and ports for this specific VM instance
+        users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];
+        services.agent-mcp.port = pkgs.lib.mkForce {config_data["port"]};
+        networking.firewall.allowedTCPPorts = pkgs.lib.mkForce [ 22 {config_data["port"]} ];
+        virtualisation.vmVariant.virtualisation.forwardPorts = pkgs.lib.mkForce [
+          {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
+          {{ from = "host"; host.port = {ssh_port}; guest.port = 22; }}
+        ];
+        virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = pkgs.lib.mkForce "{workspace_dir}";
+      }}
+    ];
   }}).config.system.build.vm
-                '''
-            ]
+                    '''
+                ]
 
             logger.debug(f"Running VM build command: {' '.join(vm_build_cmd)}")
             result = subprocess.run(
@@ -738,7 +685,7 @@ in
                 capture_output=True,
                 text=True,
                 cwd=workspace_dir,
-                timeout=120
+                timeout=300  # Increased timeout for building with agent service
             )
 
             if result.returncode != 0:
@@ -752,9 +699,6 @@ in
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to build VM configuration: {e}")
             sys.exit(1)
-        finally:
-            # Clean up temporary config file
-            temp_config_path.unlink(missing_ok=True)
 
         if not vm_path:
             logger.error("Failed to build VM")
@@ -1266,6 +1210,7 @@ in
         """Show detailed VM status with comprehensive monitoring."""
         vm_name = config_data["vm_name"]
         ssh_key_path = Path(config_data["ssh_key_path"])
+        ssh_port = config_data.get("ssh_port", 2222)  # Use the correct SSH port
 
         logger.info(f"VM Configuration: {config_data['branch']}")
         logger.info(f"Created: {config_data.get('created_at', 'unknown')}")
@@ -1290,13 +1235,13 @@ in
 
             # Check SSH connectivity with detailed diagnostics
             logger.info("-" * 30)
-            ssh_status = self._check_ssh_connectivity(ssh_key_path)
+            ssh_status = self._check_ssh_connectivity(ssh_key_path, ssh_port)
             if ssh_status['connected']:
                 logger.info("🟢 SSH Connectivity: Available")
-                logger.info(f"SSH Access: ssh -i {ssh_key_path} -p 2222 dev@localhost")
+                logger.info(f"SSH Access: ssh -i {ssh_key_path} -p {ssh_port} dev@localhost")
 
                 # Check agent service status with details
-                agent_status = self._check_agent_service_detailed(ssh_key_path)
+                agent_status = self._check_agent_service_detailed(ssh_key_path, ssh_port)
                 logger.info("-" * 30)
                 if agent_status['active']:
                     logger.info("🟢 Agent Service: Running")
@@ -1305,7 +1250,7 @@ in
                     logger.info(f"Restart Count: {agent_status.get('restart_count', 'unknown')}")
 
                     # Check MCP proxy health
-                    mcp_health = self._check_mcp_proxy_health(ssh_key_path, config_data['port'])
+                    mcp_health = self._check_mcp_proxy_health(ssh_key_path, config_data['port'], ssh_port)
                     if mcp_health['healthy']:
                         logger.info("🟢 MCP Proxy: Healthy")
                         logger.info(f"MCP Endpoint: http://localhost:{config_data['port']}")
@@ -1319,7 +1264,7 @@ in
                         logger.warning(f"Error: {agent_status['error']}")
 
                 # Check workspace status
-                workspace_status = self._check_workspace_status(ssh_key_path, config_data['workspace_path'])
+                workspace_status = self._check_workspace_status(ssh_key_path, config_data['workspace_path'], ssh_port)
                 logger.info("-" * 30)
                 if workspace_status['accessible']:
                     logger.info("🟢 Workspace: Accessible")
@@ -1371,7 +1316,7 @@ in
             pass
         return resources
 
-    def _check_ssh_connectivity(self, ssh_key_path: Path) -> Dict[str, any]:
+    def _check_ssh_connectivity(self, ssh_key_path: Path, ssh_port: int = 2222) -> Dict[str, any]:
         """Check SSH connectivity with detailed diagnostics."""
         ssh_status = {'connected': False}
 
@@ -1385,7 +1330,7 @@ in
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                "-p", "2222", "dev@localhost", "echo 'SSH OK'"
+                "-p", str(ssh_port), "dev@localhost", "echo 'SSH OK'"
             ]
 
             logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
@@ -1413,7 +1358,7 @@ in
 
         return ssh_status
 
-    def _check_agent_service_detailed(self, ssh_key_path: Path) -> Dict[str, any]:
+    def _check_agent_service_detailed(self, ssh_key_path: Path, ssh_port: int = 2222) -> Dict[str, any]:
         """Check agent service status with detailed information."""
         agent_status = {'active': False}
         try:
@@ -1421,7 +1366,7 @@ in
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                "-p", "2222", "dev@localhost",
+                "-p", str(ssh_port), "dev@localhost",
                 "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
             ]
             result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
