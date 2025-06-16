@@ -63,7 +63,7 @@ verbosity = "DEBUG"
 command = ["nix", "flake", "check"]
 
 [commands.integration-test]
-command = ["nix", "run", ".#integration-test", "--"]
+command = ["nix", "run", ".#integration-test"]
 doc = """
 Runs the .#integration-test flake app with the arguments you pass"
 
@@ -79,7 +79,7 @@ Use it to move files around efficiently
 """
 
 [commands.agent-vm]
-command = ["nix", "run", "--show-trace", ".#", "--"]
+command = ["nix", "run", "--show-trace", ".#"]
 doc = """
 Calls "nix run .# --" which runs ./agent-vm.py
 

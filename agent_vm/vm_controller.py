@@ -942,12 +942,12 @@ in
     def _is_vm_running(self, vm_name: str) -> bool:
         """Check if VM is running by process name."""
         try:
-            run_subprocess(
+            result = subprocess.run(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
-                capture_output=True, check=True
+                capture_output=True, text=True
             )
-            return True
-        except subprocess.CalledProcessError:
+            return result.returncode == 0
+        except Exception:
             return False
 
     def _wait_for_vm_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: int = 30) -> bool:
@@ -1406,7 +1406,7 @@ in
             agent_status['error'] = f"Service check failed: {e}"
         return agent_status
 
-    def _check_mcp_proxy_health(self, ssh_key_path: Path, port: int) -> Dict[str, any]:
+    def _check_mcp_proxy_health(self, ssh_key_path: Path, port: int, ssh_port: int = 2222) -> Dict[str, any]:
         """Check MCP proxy health and response time."""
         mcp_status = {'healthy': False}
         try:
@@ -1416,7 +1416,7 @@ in
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                "-p", "2222", "dev@localhost",
+                "-p", str(ssh_port), "dev@localhost",
                 f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
             ]
             result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
@@ -1432,14 +1432,14 @@ in
             mcp_status['error'] = f"Health check failed: {e}"
         return mcp_status
 
-    def _check_workspace_status(self, ssh_key_path: Path, workspace_path: str) -> Dict[str, any]:
+    def _check_workspace_status(self, ssh_key_path: Path, workspace_path: str, ssh_port: int = 2222) -> Dict[str, any]:
         """Check workspace accessibility and status."""
         workspace_status = {'accessible': False}
         try:
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                "-p", "2222", "dev@localhost",
+                "-p", str(ssh_port), "dev@localhost",
                 f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
             ]
             result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
