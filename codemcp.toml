@@ -70,6 +70,8 @@ command = ["nix", "flake", "check"]
 command = ["nix", "run", ".#integration-test", "--"]
 doc = """
 Runs the .#integration-test flake app with the arguments you pass"
+
+Max --timeout you can add is 30s. This machine is fast
 """
 
 [commands.git_mv]
