@@ -18,6 +18,8 @@ Read README.md for specs
 
 ### URGENT
 
+- [ ] Make sure the agent integration tests pass without disabling the agent
+  service. WE NEED THIS SERVICE!
 - [x] **Fixed**: SSH connectivity issue in integration tests
   - **Issue**: SSH connections were succeeding but echo command output wasn't being captured properly
   - **Fix**: Modified `_check_ssh_connectivity` and `_wait_for_vm_ready` to accept successful SSH connections (exit code 0) even without expected echo output
