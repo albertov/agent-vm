@@ -11,10 +11,12 @@ the normal test suite to avoid interfering with development workflows.
 """
 
 import argparse
+import atexit
 import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -125,10 +127,23 @@ class AgentVMIntegrationTest:
         self.timeout = timeout
         self.test_state_dir = None
         self.test_branch = f"integration-test-{int(time.time())}"
-        self.test_port = 8001  # Use different port to avoid conflicts
+        self.test_port = self._find_free_port(start_port=12000)  # Use dynamic port allocation
         self.tests_passed = 0
         self.tests_failed = 0
         self.tests_skipped = 0
+
+    def _find_free_port(self, start_port: int = 12000, max_attempts: int = 100) -> int:
+        """Find a free port starting from start_port."""
+        for port in range(start_port, start_port + max_attempts):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('localhost', port))
+                    logger.debug(f"Found free port: {port}")
+                    return port
+            except OSError:
+                continue
+
+        raise RuntimeError(f"Could not find a free port after {max_attempts} attempts starting from {start_port}")
 
     def run_agent_vm_command(self, args: List[str], check: bool = True,
                            timeout: Optional[int] = None) -> subprocess.CompletedProcess:
@@ -202,6 +217,10 @@ class AgentVMIntegrationTest:
         # Create temporary state directory
         self.test_state_dir = Path(tempfile.mkdtemp(prefix="agent-vm-integration-test-"))
         logger.info(f"Test state directory: {self.test_state_dir}")
+        logger.info(f"Using dynamically allocated port: {self.test_port}")
+
+        # Register cleanup function to run on exit (even if script is interrupted)
+        atexit.register(self._emergency_cleanup)
 
         # Ensure we're in a git repository
         try:
@@ -211,16 +230,50 @@ class AgentVMIntegrationTest:
             logger.error("Not in a git repository. Integration tests require git.")
             sys.exit(1)
 
+    def _emergency_cleanup(self):
+        """Emergency cleanup function registered with atexit."""
+        if hasattr(self, 'test_state_dir') and self.test_state_dir and self.test_state_dir.exists():
+            try:
+                logger.debug("Emergency cleanup: removing test state directory")
+                shutil.rmtree(self.test_state_dir)
+            except Exception as e:
+                # Use print instead of logger as logging might be shut down
+                print(f"Warning: Emergency cleanup failed: {e}")
+
     def cleanup_test_environment(self):
-        """Clean up test environment."""
+        """Clean up test environment with robust error handling."""
         logger.info("🧹 CLEANUP: Removing test environment")
 
-        if self.test_state_dir and self.test_state_dir.exists():
+        # First try to stop any running VMs
+        if hasattr(self, 'test_branch') and self.test_branch:
             try:
-                shutil.rmtree(self.test_state_dir)
-                logger.info("Test state directory cleaned up")
-            except OSError as e:
-                logger.warning(f"Failed to clean up test directory: {e}")
+                logger.debug("Attempting to stop test VM before cleanup...")
+                self.run_agent_vm_command(["stop", self.test_branch], check=False, timeout=30)
+            except Exception as e:
+                logger.debug(f"VM stop during cleanup failed (this is expected): {e}")
+
+        # Clean up test state directory with multiple attempts
+        if self.test_state_dir and self.test_state_dir.exists():
+            cleanup_attempts = 3
+            for attempt in range(cleanup_attempts):
+                try:
+                    shutil.rmtree(self.test_state_dir)
+                    logger.info("Test state directory cleaned up successfully")
+                    # Unregister emergency cleanup since we succeeded
+                    try:
+                        atexit.unregister(self._emergency_cleanup)
+                    except ValueError:
+                        pass  # Function wasn't registered
+                    break
+                except OSError as e:
+                    if attempt < cleanup_attempts - 1:
+                        logger.warning(f"Cleanup attempt {attempt + 1} failed, retrying: {e}")
+                        time.sleep(1)  # Wait a bit before retrying
+                    else:
+                        logger.error(f"Failed to clean up test directory after {cleanup_attempts} attempts: {e}")
+                        logger.error(f"Manual cleanup may be required: {self.test_state_dir}")
+        else:
+            logger.debug("No test state directory to clean up")
 
     def test_vm_creation(self):
         """Test VM creation functionality."""
@@ -459,11 +512,12 @@ class AgentVMIntegrationTest:
         return True
 
     def run_all_tests(self):
-        """Run all integration tests."""
+        """Run all integration tests with robust cleanup."""
         logger.info("🚀 Starting agent-vm integration tests")
         logger.info(f"Using agent-vm command: {self.agent_vm_cmd}")
 
         start_time = time.time()
+        cleanup_attempted = False
 
         try:
             self.setup_test_environment()
@@ -484,8 +538,16 @@ class AgentVMIntegrationTest:
                     logger.error(f"Test {test_method.__name__} failed: {e}")
                     # Continue with other tests
 
+        except Exception as e:
+            logger.error(f"Critical error during test setup or execution: {e}")
         finally:
-            self.cleanup_test_environment()
+            # Always attempt cleanup, even if tests failed or were interrupted
+            try:
+                self.cleanup_test_environment()
+                cleanup_attempted = True
+            except Exception as e:
+                logger.error(f"Cleanup failed: {e}")
+                cleanup_attempted = False
 
         end_time = time.time()
         duration = end_time - start_time
@@ -499,6 +561,9 @@ class AgentVMIntegrationTest:
         logger.info(f"❌ Failed: {self.tests_failed}")
         logger.info(f"⚠️ Skipped: {self.tests_skipped}")
         logger.info(f"⏱️ Duration: {duration:.1f} seconds")
+
+        if not cleanup_attempted:
+            logger.warning("⚠️ Cleanup may have failed - manual cleanup might be required")
 
         if self.tests_failed > 0:
             logger.error("❌ Integration tests FAILED")

@@ -409,14 +409,17 @@ class VMController:
   - ✅ Include comprehensive workflow testing (create, start, test, stop, destroy)
   - ✅ Make executable available as flake app for easy running
 
+- [x] **Step 26**: Improve integration tests with port probing and cleanup
+  - ✅ Add port probing functionality to find free ports starting at 12000
+  - ✅ Ensure temporary directories are ALWAYS deleted (even in case of test failure)
+  - ✅ Update integration test script to use dynamic port allocation
+
 **🔄 IN PROGRESS:**
 - **Step 16**: VM security hardening
   - Disable user namespaces in VM
   - Lock kernel modules and protect kernel image
   - SELinux/AppArmor policies for QEMU processes
   - Resource limits and monitoring
-
-**⏳ PENDING:**
 - Multi-instance support (Step 16 alternate)
 - Phase 4-5 implementation phases (security, performance, documentation)
 - Testing and validation
