@@ -63,6 +63,20 @@
   # Define the dev group
   users.groups.dev = {};
 
+  # Agent user for running MCP services
+  users.users.agent = {
+    isNormalUser = true;
+    group = "agent";
+    home = "/workspace";
+    createHome = false;  # Don't create home directory since it's a shared mount
+    shell = pkgs.bash;
+    # uid will be set by the VM generation to match host user
+  };
+
+  # Define the agent group
+  users.groups.agent = {};
+  # gid will be set by the VM generation to match host user
+
   # SSH access for development with secure key-based authentication
   services.openssh = {
     enable = true;
@@ -104,8 +118,8 @@
   # Enable and configure the agent service
   services.agent-mcp = {
     enable = true;
-    user = "dev";
-    group = "dev";
+    user = "agent";
+    group = "agent";
     workspaceDir = "/workspace";
     # Pass the development shell with all MCP tools using mkMCPDevServers
     shell = pkgs.mkShell {

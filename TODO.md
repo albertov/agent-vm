@@ -18,11 +18,17 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] Home direcotory of dev user in VM should be /workspace and have the same
-  uid and git as the user who created the script so we don't have permission
+- [x] **Completed**: Home directory of agent user in VM should be /workspace and have the same
+  uid and gid as the user who created the script so we don't have permission
   problems when the host user touches that directory when collaborating
-- [ ] disk images should not live in the workspace/git-clone got in the VM's
+  - Added agent user configuration with home=/workspace
+  - VM generation now sets agent uid/gid to match host user
+  - Agent service configured to run as agent user (not dev)
+- [ ] **IN PROGRESS**: disk images should not live in the workspace/git-clone got in the VM's
   state directory
+  - Modified VM startup to run from vm-state subdirectory in the state directory
+  - This ensures QEMU disk images are created in ~/.local/share/agent-vms/{branch}/vm-state/
+  - Prevents disk images from polluting the git workspace
 - [ ] Make sure the agent integration tests pass without disabling the agent
   service. WE NEED THIS SERVICE!
 - [x] **Fixed**: SSH connectivity issue in integration tests
