@@ -17,9 +17,9 @@ mcp-proxy \
   --allow-origin="${ALLOW_ORIGIN}" \
   --named-server codemcp \
     codemcp \
-  --named-server rescript-lsp \
-    "${REPO_ROOT}/mcp_rescript_lsp.sh" \
-  --named-server mcp-nixos \
-    mcp-nixos \
   --named-server selenium \
     "${REPO_ROOT}/mcp_selenium.sh"
+  #--named-server rescript-lsp \
+    #"${REPO_ROOT}/mcp_rescript_lsp.sh" \
+  #--named-server mcp-nixos \
+    #mcp-nixos \
