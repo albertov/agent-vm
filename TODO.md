@@ -16,14 +16,9 @@ Read README.md for specs
 
 ## Implementation Steps
 
-### URGENT - COMPLETED ✅
+### URGENT
 
-- [x] Address FIXME you find in agent_vm/vm_controller.py
-  - Fixed error handling in `_get_last_lines` function
-  - Added cleanup of temp log files on successful command execution
-  - Removed outdated FIXME comment about passwordless SSH keys
-- [x] Fix this failing test: `integration-test --verbose --debug --timeout 90 run -- -k test_agent_service_startup`
-  - Test was already passing - all integration tests now pass successfully
+- [ ] Fix this failing test: `integration-test --verbose --debug --timeout 90 run -- -k test_agent_service_startup`
 
 ### KNOWN ISSUES
 
