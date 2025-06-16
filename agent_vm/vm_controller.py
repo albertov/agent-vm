@@ -138,6 +138,7 @@ def _get_last_lines(file_path: str, num_lines: int = 20) -> List[str]:
             lines = f.readlines()
             return lines[-num_lines:] if len(lines) > num_lines else lines
     except Exception:
+        # FIXME: Do not ignore this error
         return []
 
 
@@ -239,6 +240,7 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
                 logger.error(f"stderr: {line.rstrip()}")
 
         raise
+    # FIXME: If no exception delete log files
 
 
 class ProcessWithOutput:
@@ -424,6 +426,8 @@ class VMController:
         ssh_private_key = ssh_dir / "id_ed25519"
         ssh_public_key = ssh_dir / "id_ed25519.pub"
 
+        # FIXME: Make it passwordless. This is probably why integration tests
+        # don't pass don't you think?
         run_subprocess([
             "ssh-keygen", "-t", "ed25519", "-f", str(ssh_private_key),
             "-N", "", "-C", f"vm-key-{branch}"
@@ -437,6 +441,8 @@ class VMController:
         current_branch = self._get_current_branch()
 
         try:
+            #FIXME: Make this configurable thru cli and default to what it is
+            # doing now
             repo_root = run_subprocess(
                 ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True, text=True, check=True
