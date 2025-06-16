@@ -27,8 +27,10 @@ classifiers = [
     "Topic :: System :: Virtualization",
 ]
 
-# Runtime dependencies - Python stdlib only for main functionality
-dependencies = []
+# Runtime dependencies
+dependencies = [
+    "typer>=0.9.0",
+]
 
 # Optional test dependencies
 [project.optional-dependencies]

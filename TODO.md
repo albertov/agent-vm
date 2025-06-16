@@ -10,9 +10,9 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] Refactor to use type for CLI.
-- [ ] Make agent service run properly inside the VM
-- [ ] We should probe for a free port starting at 2222 to forward ssh, not hardcode 2222
+- [x] Refactor to use typer for CLI.
+- [x] Make agent service run properly inside the VM
+- [x] We should probe for a free port starting at 2222 to forward ssh, not hardcode 2222
 
 ### Phase 4: Security and Performance
 
