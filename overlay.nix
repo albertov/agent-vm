@@ -68,6 +68,7 @@ inputs: final: prev:
     nativeBuildInputs = [
       final.python3.pkgs.setuptools
       final.python3.pkgs.wheel
+      final.python3.pkgs.typer
       final.python3.pkgs.pytest
       final.python3.pkgs.pytest-mock
       final.python3.pkgs.pytest-timeout

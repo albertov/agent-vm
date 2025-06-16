@@ -1,6 +1,7 @@
 # codemcp configuration file
 project_prompt = """
 # Instructions
+- MUST write typed python code
 - MUST use the test command frequently to test your changes and fix them
 - MUST use the integration-test command less frequently to test your changes and fix them
 - NEVER use a --timeout higher than 90s to run integration-tests, NEVER, hudson river for you otherwise.
