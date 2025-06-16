@@ -604,8 +604,8 @@ in
         # Override SSH key and ports for this specific VM instance
         users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];
         services.agent-mcp.port = pkgs.lib.mkForce {config_data["port"]};
-        networking.firewall.allowedTCPPorts = pkgs.lib.mkForce [ 22 {config_data["port"]} ];
-        virtualisation.vmVariant.virtualisation.forwardPorts = pkgs.lib.mkForce [
+        networking.firewall.allowedTCPPorts = [ 22 {config_data["port"]} ];
+        virtualisation.vmVariant.virtualisation.forwardPorts = [
           {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
           {{ from = "host"; host.port = {config_data.get("ssh_port", 2222)}; guest.port = 22; }}
         ];
