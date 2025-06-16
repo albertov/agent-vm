@@ -78,10 +78,6 @@
           mcp-selenium = inputs.mcp-selenium.packages.${system}.default;
           mcp-nixos = inputs.mcp-nixos.packages.${system}.default;
 
-          # VM configuration modules (not actual packages, but for reference)
-          vm-config = ./vm-config.nix;
-          agent-service = ./agent-service.nix;
-
           # Create an agent development servers package
           agent-servers = pkgs.mkMCPDevServers {
             name = "agent-vm-servers";
