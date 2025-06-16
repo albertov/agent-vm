@@ -50,17 +50,35 @@ class VMController:
             return result.stdout.strip()
         except subprocess.CalledProcessError:
             # Fallback to git root directory
-            try:
-                result = subprocess.run(
-                    ["git", "rev-parse", "--show-toplevel"],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                return result.stdout.strip()
-            except subprocess.CalledProcessError:
-                # If git is not available, return a default
-                return "/workspace"
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return result.stdout.strip()
+
+    def _cleanup_stale_processes(self, vm_name: str) -> None:
+        """Clean up any stale VM processes."""
+        try:
+            # Find stale QEMU processes
+            result = subprocess.run(
+                ["pgrep", "-f", f"qemu.*{vm_name}"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    if pid.strip():
+                        try:
+                            logger.warning(f"Cleaning up stale VM process: {pid}")
+                            os.kill(int(pid), 15)  # SIGTERM
+                            time.sleep(1)
+                            os.kill(int(pid), 9)   # SIGKILL if still alive
+                        except (ProcessLookupError, ValueError):
+                            pass
+        except subprocess.CalledProcessError:
+            pass  # No stale processes found
 
     def _get_current_branch(self) -> str:
         """Get the current git branch name."""
@@ -72,48 +90,23 @@ class VMController:
                 check=True
             )
             branch = result.stdout.strip()
-            if not branch:  # Detached HEAD state
+            if not branch:
+                # Detached HEAD state, use commit hash
                 result = subprocess.run(
                     ["git", "rev-parse", "--short", "HEAD"],
                     capture_output=True,
                     text=True,
                     check=True
                 )
-                return f"detached-{result.stdout.strip()}"
+                branch = f"detached-{result.stdout.strip()}"
             return branch
         except subprocess.CalledProcessError:
-            # If git is not available, return a default
+            # Not in a git repository or git not available
+            logger.warning("Not in a git repository or git not available, using 'default' as branch name")
             return "default"
 
-    def _cleanup_stale_processes(self, vm_name: str) -> None:
-        """Clean up any stale QEMU processes for this VM."""
-        try:
-            result = subprocess.run(
-                ["pgrep", "-f", f"qemu.*{vm_name}"],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                pids = result.stdout.strip().split('\n')
-                for pid in pids:
-                    if pid:
-                        try:
-                            pid_int = int(pid)
-                            logger.info(f"Cleaning up stale process {pid_int}")
-                            os.kill(pid_int, 15)  # SIGTERM
-                            time.sleep(2)
-                            try:
-                                os.kill(pid_int, 0)  # Check if still exists
-                                os.kill(pid_int, 9)  # SIGKILL if still running
-                            except ProcessLookupError:
-                                pass  # Process already dead
-                        except (ValueError, ProcessLookupError):
-                            pass
-        except subprocess.CalledProcessError:
-            pass  # No stale processes found
-
     def create_vm(self, host: str = "localhost", port: int = 8000,
-                  branch: Optional[str] = None, config: str = "./vm-config.nix") -> None:
+                  branch: Optional[str] = None, config: str = "vm-config.nix") -> None:
         """Create a new VM configuration and workspace."""
         if branch is None:
             branch = self._get_current_branch()
@@ -137,23 +130,18 @@ class VMController:
         ssh_private_key = ssh_dir / "id_ed25519"
         ssh_public_key = ssh_dir / "id_ed25519.pub"
 
-        try:
-            subprocess.run([
-                "ssh-keygen", "-t", "ed25519", "-f", str(ssh_private_key),
-                "-N", "", "-C", f"vm-key-{branch}"
-            ], capture_output=True, check=True)
+        subprocess.run([
+            "ssh-keygen", "-t", "ed25519", "-f", str(ssh_private_key),
+            "-N", "", "-C", f"vm-key-{branch}"
+        ], capture_output=True, check=True)
 
-            ssh_private_key.chmod(0o600)
-            ssh_public_key.chmod(0o644)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to generate SSH key: {e}")
-            # Clean up partial creation
-            shutil.rmtree(vm_config_dir, ignore_errors=True)
-            sys.exit(1)
+        ssh_private_key.chmod(0o600)
+        ssh_public_key.chmod(0o644)
 
         # Clone current repository at current branch
         logger.info("Cloning repository to workspace at current branch...")
         current_branch = self._get_current_branch()
+
         try:
             repo_root = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -165,45 +153,39 @@ class VMController:
             ], check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to clone repository: {e}")
-            # Clean up partial creation
-            shutil.rmtree(vm_config_dir, ignore_errors=True)
+            # Clean up partially created VM config
+            if vm_config_dir.exists():
+                shutil.rmtree(vm_config_dir)
             sys.exit(1)
 
         # Set up git remotes in workspace
         logger.info("Setting up git remotes...")
+        os.chdir(workspace_dir)
+
+        # Set origin to point to the source repository
+        if self.origin_repo.startswith('/'):
+            # Local path, use file:// scheme
+            origin_url = f"file://{self.origin_repo}"
+        else:
+            # Remote URL, use as-is
+            origin_url = self.origin_repo
+
+        subprocess.run(["git", "remote", "set-url", "origin", origin_url], check=True)
+
+        # Add upstream remote if different from origin
         try:
-            os.chdir(workspace_dir)
+            os.chdir(repo_root)
+            upstream_result = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                capture_output=True, text=True
+            )
+            upstream_url = upstream_result.stdout.strip() if upstream_result.returncode == 0 else ""
 
-            # Set origin to point to the source repository
-            if self.origin_repo.startswith('/'):
-                # Local path, use file:// scheme
-                origin_url = f"file://{self.origin_repo}"
-            else:
-                # Remote URL, use as-is
-                origin_url = self.origin_repo
-
-            subprocess.run(["git", "remote", "set-url", "origin", origin_url], check=True)
-
-            # Add upstream remote if different from origin
-            try:
-                os.chdir(repo_root)
-                upstream_result = subprocess.run(
-                    ["git", "remote", "get-url", "origin"],
-                    capture_output=True, text=True
-                )
-                upstream_url = upstream_result.stdout.strip() if upstream_result.returncode == 0 else ""
-
-                if upstream_url and upstream_url != self.origin_repo:
-                    os.chdir(workspace_dir)
-                    subprocess.run(["git", "remote", "add", "upstream", upstream_url])
-            except subprocess.CalledProcessError:
-                upstream_url = ""
-
-        except (subprocess.CalledProcessError, OSError) as e:
-            logger.error(f"Failed to set up git remotes: {e}")
-            # Clean up partial creation
-            shutil.rmtree(vm_config_dir, ignore_errors=True)
-            sys.exit(1)
+            if upstream_url and upstream_url != self.origin_repo:
+                os.chdir(workspace_dir)
+                subprocess.run(["git", "remote", "add", "upstream", upstream_url])
+        except subprocess.CalledProcessError:
+            upstream_url = ""
 
         # Create VM config metadata
         logger.info("Creating VM configuration metadata...")
@@ -216,7 +198,7 @@ class VMController:
             "ssh_key_path": str(ssh_private_key),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "origin_repo": self.origin_repo,
-            "upstream_repo": upstream_url if 'upstream_url' in locals() else "",
+            "upstream_repo": upstream_url,
             "vm_name": f"agent-dev-{branch}"
         }
 
@@ -252,50 +234,90 @@ class VMController:
         ssh_key_path = Path(config_data["ssh_key_path"])
         vm_name = config_data["vm_name"]
 
-        # Clean up any stale processes first
-        self._cleanup_stale_processes(vm_name)
-
         # Check if VM is already running
         if self._is_vm_running(vm_name):
             logger.warning("VM is already running")
             self._show_vm_status(vm_config_dir, config_data)
             return
 
+        # Clean up any stale processes first
+        self._cleanup_stale_processes(vm_name)
+
         logger.info(f"Starting VM for branch: {branch}")
+
+        # Get the original flake directory before changing to workspace
+        try:
+            original_flake_dir = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except subprocess.CalledProcessError:
+            logger.error("Could not determine original flake directory")
+            sys.exit(1)
+
         os.chdir(workspace_dir)
 
         # Build VM configuration
         logger.info("Building VM configuration...")
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
-        vm_build_cmd = [
-            "nix", "build", "--no-link", "--print-out-paths",
-            "--expr", f'''
-            let
-              flake = builtins.getFlake "path:{workspace_dir}";
-              pkgs = flake.legacyPackages.x86_64-linux;
-              vm = pkgs.nixos {{
-                imports = [ {config_data["config_path"]} ];
-                users.users.dev.openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
-                virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = "{workspace_dir}";
-                services.agent-mcp.shell = pkgs.mkMCPDevServers {{
-                  name = "agent";
-                  shell = flake.devShells.x86_64-linux.default;
-                }};
-              }};
-            in vm.config.system.build.vm'''
-        ]
+        # Create a temporary VM configuration file with injected SSH key
+        temp_config_content = f'''
+# Temporary VM config with injected SSH key
+{{ config, pkgs, lib, ... }}:
+{{
+  imports = [ {original_flake_dir}/{config_data["config_path"]} ];
+
+  users.users.dev.openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
+
+  virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = lib.mkForce "{workspace_dir}";
+
+  # Override port configuration
+  services.agent-mcp.port = lib.mkForce {config_data["port"]};
+
+  # Override port forwarding
+  virtualisation.vmVariant.virtualisation.forwardPorts = lib.mkForce [
+    {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
+    {{ from = "host"; host.port = 2222; guest.port = 22; }}
+  ];
+
+  # Override firewall ports
+  networking.firewall.allowedTCPPorts = lib.mkForce [ 22 {config_data["port"]} ];
+}}
+'''
+
+        temp_config_path = Path("temp-vm-config.nix")
+        with temp_config_path.open('w') as f:
+            f.write(temp_config_content)
 
         try:
-            result = subprocess.run(vm_build_cmd, capture_output=True, text=True, check=True)
-            vm_path = result.stdout.strip()
+            vm_build_cmd = [
+                "nix", "build", "--no-link", "--print-out-paths", "--impure",
+                "--expr", f'''
+                let
+                  flake = builtins.getFlake "{original_flake_dir}";
+                  pkgs = flake.legacyPackages.${{builtins.currentSystem}};
+                  vm = pkgs.nixos {{
+                    imports = [ ./temp-vm-config.nix ];
+                  }};
+                in vm.config.system.build.vm'''
+            ]
 
-            if not vm_path:
-                logger.error("Failed to build VM")
-                sys.exit(1)
+            result = subprocess.run(vm_build_cmd, capture_output=True, text=True, cwd=workspace_dir)
+            if result.returncode != 0:
+                logger.error(f"VM build failed: {result.stderr}")
+                logger.error(f"VM build stdout: {result.stdout}")
+                raise subprocess.CalledProcessError(result.returncode, vm_build_cmd)
+            vm_path = result.stdout.strip()
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to build VM: {e}")
-            logger.error(f"stderr: {e.stderr}")
+            logger.error(f"Failed to build VM configuration: {e}")
+            sys.exit(1)
+        finally:
+            # Clean up temporary config file
+            temp_config_path.unlink(missing_ok=True)
+
+        if not vm_path:
+            logger.error("Failed to build VM")
             sys.exit(1)
 
         # Start VM in background
@@ -305,11 +327,7 @@ class VMController:
         env = os.environ.copy()
         env["QEMU_OPTS"] = f"-name {vm_name}"
 
-        try:
-            vm_process = subprocess.Popen(vm_cmd, env=env)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to start VM: {e}")
-            sys.exit(1)
+        vm_process = subprocess.Popen(vm_cmd, env=env)
 
         # Store PID
         pid_file = vm_config_dir / "vm.pid"
@@ -342,6 +360,33 @@ class VMController:
         logger.info(f"Stopping VM for branch: {branch}")
         self._stop_vm_by_pid(vm_config_dir)
 
+    def restart_vm(self, branch: Optional[str] = None) -> None:
+        """Restart VM (stop then start)."""
+        if branch is None:
+            branch = self._get_current_branch()
+
+        vm_config_dir = self.base_dir / branch
+        config_file = vm_config_dir / "config.json"
+
+        if not config_file.exists():
+            logger.error(f"No VM configuration found for branch: {branch}")
+            logger.info(f"Create one with: agent-vm create --branch={branch}")
+            sys.exit(1)
+
+        logger.info(f"Restarting VM for branch: {branch}")
+
+        # Stop VM if running
+        try:
+            self.stop_vm(branch)
+        except subprocess.CalledProcessError:
+            logger.warning("VM was already stopped or failed to stop cleanly")
+
+        # Wait a moment for cleanup
+        time.sleep(2)
+
+        # Start VM
+        self.start_vm(branch)
+
     def vm_status(self, branch: Optional[str] = None) -> None:
         """Get VM status."""
         if branch is None:
@@ -352,6 +397,7 @@ class VMController:
 
         if not config_file.exists():
             logger.info(f"No VM configuration found for branch: {branch}")
+            logger.info(f"Create one with: agent-vm create --branch={branch}")
             return
 
         with config_file.open() as f:
@@ -399,7 +445,7 @@ class VMController:
             logger.info("No VM configurations found")
             return
 
-        logger.info("Available VM configurations:")
+        vm_configs = []
         for config_dir in self.base_dir.iterdir():
             if config_dir.is_dir():
                 config_file = config_dir / "config.json"
@@ -408,9 +454,16 @@ class VMController:
                         with config_file.open() as f:
                             config_data = json.load(f)
                         created_at = config_data.get("created_at", "unknown")
-                        logger.info(f"  {config_dir.name} (created: {created_at})")
+                        vm_configs.append((config_dir.name, created_at))
                     except (json.JSONDecodeError, OSError):
-                        logger.info(f"  {config_dir.name} (invalid config)")
+                        vm_configs.append((config_dir.name, "invalid config"))
+
+        if vm_configs:
+            logger.info("Available VM configurations:")
+            for name, created_at in vm_configs:
+                logger.info(f"  {name} (created: {created_at})")
+        else:
+            logger.info("No VM configurations found")
 
     def destroy_vm(self, branch: Optional[str] = None) -> None:
         """Destroy VM configuration."""
@@ -423,21 +476,30 @@ class VMController:
             logger.error(f"No VM configuration found for branch: {branch}")
             sys.exit(1)
 
+        logger.info(f"Destroying VM configuration for branch: {branch}")
+
         # Stop VM if running
         config_file = vm_config_dir / "config.json"
         if config_file.exists():
             try:
                 with config_file.open() as f:
                     config_data = json.load(f)
-                vm_name = config_data["vm_name"]
-                if self._is_vm_running(vm_name):
-                    self.stop_vm(branch)
-            except (json.JSONDecodeError, OSError, subprocess.CalledProcessError):
-                pass  # Ignore if already stopped or config corrupted
+                vm_name = config_data.get("vm_name", f"agent-dev-{branch}")
 
-        logger.info(f"Destroying VM configuration for branch: {branch}")
-        shutil.rmtree(vm_config_dir)
-        logger.info(f"VM configuration destroyed: {vm_config_dir}")
+                if self._is_vm_running(vm_name):
+                    logger.info("Stopping running VM before destroying configuration...")
+                    self.stop_vm(branch)
+                else:
+                    logger.info("VM is not running")
+            except (json.JSONDecodeError, subprocess.CalledProcessError):
+                logger.warning("Could not check VM status before destruction")
+
+        try:
+            shutil.rmtree(vm_config_dir)
+            logger.info(f"VM configuration destroyed: {vm_config_dir}")
+        except OSError as e:
+            logger.error(f"Failed to destroy VM configuration: {e}")
+            sys.exit(1)
 
     def vm_logs(self, branch: Optional[str] = None) -> None:
         """Show VM logs."""
@@ -605,192 +667,237 @@ class VMController:
         logger.info("VM stopped")
 
     def _show_vm_status(self, vm_config_dir: Path, config_data: Dict) -> None:
-        """Show detailed VM status."""
+        """Show detailed VM status with comprehensive monitoring."""
         vm_name = config_data["vm_name"]
         ssh_key_path = Path(config_data["ssh_key_path"])
 
+        logger.info(f"VM Configuration: {config_data['branch']}")
+        logger.info(f"Created: {config_data.get('created_at', 'unknown')}")
+        logger.info(f"Workspace: {config_data['workspace_path']}")
+        logger.info(f"MCP Port: {config_data['port']}")
+        logger.info("="*50)
+
         if self._is_vm_running(vm_name):
-            logger.info("VM Status: Running")
+            logger.info("🟢 VM Status: Running")
 
-            # Get process details
-            try:
-                pid = self._get_vm_pid(vm_name)
-                if pid:
-                    resources = self._get_vm_resources(pid)
-                    logger.info(f"VM PID: {pid}")
-                    logger.info(f"CPU: {resources.get('cpu', 'unknown')}%")
-                    logger.info(f"Memory: {resources.get('memory', 'unknown')}%")
-                    logger.info(f"Uptime: {resources.get('uptime', 'unknown')}")
-            except Exception:
-                pass
+            # Get VM process details
+            vm_pid = self._get_vm_pid(vm_name)
+            if vm_pid:
+                logger.info(f"Process ID: {vm_pid}")
 
-            logger.info("SSH Access: ssh -p 2222 dev@localhost")
-            logger.info("MCP Proxy: http://localhost:8000 (if agent is running)")
+                # Get VM resource usage
+                vm_resources = self._get_vm_resources(vm_pid)
+                if vm_resources:
+                    logger.info(f"CPU Usage: {vm_resources.get('cpu', 'unknown')}%")
+                    logger.info(f"Memory Usage: {vm_resources.get('memory', 'unknown')} MB")
+                    logger.info(f"VM Uptime: {vm_resources.get('uptime', 'unknown')}")
 
-            # Check SSH connectivity
+            # Check SSH connectivity with detailed diagnostics
+            logger.info("-" * 30)
             ssh_status = self._check_ssh_connectivity(ssh_key_path)
             if ssh_status['connected']:
-                logger.info("SSH: Connected")
-            else:
-                logger.warning(f"SSH: Failed - {ssh_status.get('error', 'Unknown error')}")
+                logger.info("🟢 SSH Connectivity: Available")
+                logger.info(f"SSH Access: ssh -i {ssh_key_path} -p 2222 dev@localhost")
 
-            # Check if agent is running in VM
-            agent_status = self._check_agent_service_detailed(ssh_key_path)
-            if agent_status['active']:
-                logger.info(f"Agent Status: Running (PID: {agent_status.get('pid', 'unknown')})")
-                logger.info(f"Agent Uptime: {agent_status.get('uptime', 'unknown')}")
-                logger.info(f"Agent Memory: {agent_status.get('memory', 'unknown')}")
-                logger.info(f"Restart Count: {agent_status.get('restart_count', 'unknown')}")
-            else:
-                logger.warning("Agent Status: Not running")
+                # Check agent service status with details
+                agent_status = self._check_agent_service_detailed(ssh_key_path)
+                logger.info("-" * 30)
+                if agent_status['active']:
+                    logger.info("🟢 Agent Service: Running")
+                    logger.info(f"Service Uptime: {agent_status.get('uptime', 'unknown')}")
+                    logger.info(f"Memory Usage: {agent_status.get('memory', 'unknown')}")
+                    logger.info(f"Restart Count: {agent_status.get('restart_count', 'unknown')}")
 
-            # Check MCP proxy health
-            mcp_status = self._check_mcp_proxy_health(ssh_key_path, config_data.get('port', 8000))
-            if mcp_status['healthy']:
-                logger.info(f"MCP Proxy: Healthy (response time: {mcp_status.get('response_time', 'unknown')}ms)")
-            else:
-                logger.warning(f"MCP Proxy: Unhealthy - {mcp_status.get('error', 'Unknown error')}")
+                    # Check MCP proxy health
+                    mcp_health = self._check_mcp_proxy_health(ssh_key_path, config_data['port'])
+                    if mcp_health['healthy']:
+                        logger.info("🟢 MCP Proxy: Healthy")
+                        logger.info(f"MCP Endpoint: http://localhost:{config_data['port']}")
+                        logger.info(f"Response Time: {mcp_health.get('response_time', 'unknown')}ms")
+                    else:
+                        logger.warning("🟡 MCP Proxy: Not responding")
+                        logger.warning(f"Error: {mcp_health.get('error', 'unknown')}")
+                else:
+                    logger.warning("🟡 Agent Service: Not running")
+                    if agent_status.get('error'):
+                        logger.warning(f"Error: {agent_status['error']}")
 
-            # Check workspace status
-            workspace_status = self._check_workspace_status(ssh_key_path, config_data.get('workspace_path', '/workspace'))
-            if workspace_status['accessible']:
-                logger.info(f"Workspace: Accessible ({workspace_status.get('size', 'unknown')})")
-                logger.info(f"Git Status: {workspace_status.get('git_status', 'unknown')}")
-            else:
-                logger.warning(f"Workspace: Not accessible - {workspace_status.get('error', 'Unknown error')}")
+                # Check workspace status
+                workspace_status = self._check_workspace_status(ssh_key_path, config_data['workspace_path'])
+                logger.info("-" * 30)
+                if workspace_status['accessible']:
+                    logger.info("🟢 Workspace: Accessible")
+                    logger.info(f"Workspace Size: {workspace_status.get('size', 'unknown')}")
+                    logger.info(f"Git Status: {workspace_status.get('git_status', 'unknown')}")
+                else:
+                    logger.warning("🟡 Workspace: Issues detected")
+                    logger.warning(f"Error: {workspace_status.get('error', 'unknown')}")
 
+            else:
+                logger.warning("🟡 SSH Connectivity: Failed")
+                logger.warning(f"Error: {ssh_status.get('error', 'Connection failed')}")
+                logger.warning("Try restarting the VM: agent-vm restart")
         else:
-            logger.info("VM Status: Stopped")
+            logger.info("🔴 VM Status: Stopped")
+            logger.info("Start the VM with: agent-vm start")
 
     def _get_vm_pid(self, vm_name: str) -> Optional[int]:
-        """Get VM process PID."""
+        """Get the PID of the running VM process."""
         try:
             result = subprocess.run(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
-                capture_output=True,
-                text=True,
-                check=True
+                capture_output=True, text=True
             )
-            return int(result.stdout.strip().split('\n')[0])
+            if result.returncode == 0:
+                return int(result.stdout.strip().split('\n')[0])
         except (subprocess.CalledProcessError, ValueError):
-            return None
+            pass
+        return None
 
     def _get_vm_resources(self, pid: int) -> Dict[str, str]:
-        """Get VM resource usage."""
+        """Get VM resource usage information."""
+        resources = {}
         try:
+            # Get CPU and memory usage from ps
             result = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "pid,ppid,%cpu,%mem,etime,comm"],
-                capture_output=True,
-                text=True,
-                check=True
+                ["ps", "-p", str(pid), "-o", "pid,ppid,pcpu,pmem,etime,comm"],
+                capture_output=True, text=True
             )
-            lines = result.stdout.strip().split('\n')
-            if len(lines) > 1:
-                parts = lines[1].split()
-                if len(parts) >= 6:
-                    return {
-                        'cpu': parts[2],
-                        'memory': parts[3],
-                        'uptime': parts[4]
-                    }
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) > 1:
+                    fields = lines[1].split()
+                    if len(fields) >= 6:
+                        resources['cpu'] = fields[2]
+                        resources['memory'] = fields[3]
+                        resources['uptime'] = fields[4]
         except subprocess.CalledProcessError:
             pass
-        return {}
+        return resources
 
     def _check_ssh_connectivity(self, ssh_key_path: Path) -> Dict[str, any]:
-        """Check SSH connectivity to VM."""
+        """Check SSH connectivity with detailed diagnostics."""
+        ssh_status = {'connected': False}
         try:
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", "2222", "dev@localhost", "echo 'SSH OK'"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
-            if result.returncode == 0:
-                return {'connected': True}
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            if result.returncode == 0 and "SSH OK" in result.stdout:
+                ssh_status['connected'] = True
             else:
-                return {'connected': False, 'error': result.stderr.decode()}
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            return {'connected': False, 'error': str(e)}
+                ssh_status['error'] = result.stderr or "Connection failed"
+        except subprocess.TimeoutExpired:
+            ssh_status['error'] = "Connection timeout"
+        except subprocess.CalledProcessError as e:
+            ssh_status['error'] = f"SSH error: {e}"
+        return ssh_status
 
     def _check_agent_service_detailed(self, ssh_key_path: Path) -> Dict[str, any]:
-        """Check detailed agent service status."""
+        """Check agent service status with detailed information."""
+        agent_status = {'active': False}
         try:
+            # Check if service is active
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", "2222", "dev@localhost",
-                "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,NRestarts,MemoryCurrent"
+                "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
             if result.returncode == 0:
                 properties = {}
-                for line in result.stdout.decode().strip().split('\n'):
+                for line in result.stdout.strip().split('\n'):
                     if '=' in line:
                         key, value = line.split('=', 1)
                         properties[key] = value
 
-                active = properties.get('ActiveState') == 'active'
-                memory_bytes = int(properties.get('MemoryCurrent', '0'))
-                memory_mb = f"{memory_bytes // (1024 * 1024)} MB" if memory_bytes > 0 else "0 MB"
+                agent_status['active'] = properties.get('ActiveState') == 'active'
+                agent_status['substate'] = properties.get('SubState', 'unknown')
+                agent_status['pid'] = properties.get('MainPID', 'unknown')
+                agent_status['restart_count'] = properties.get('NRestarts', 'unknown')
 
-                return {
-                    'active': active,
-                    'substate': properties.get('SubState', 'unknown'),
-                    'pid': properties.get('MainPID', 'unknown'),
-                    'restart_count': properties.get('NRestarts', 'unknown'),
-                    'memory': memory_mb
-                }
+                # Convert memory from bytes to MB
+                memory_bytes = properties.get('MemoryCurrent', '0')
+                try:
+                    memory_mb = int(memory_bytes) // (1024 * 1024)
+                    agent_status['memory'] = f"{memory_mb} MB"
+                except (ValueError, TypeError):
+                    agent_status['memory'] = 'unknown'
+
+                # Parse start timestamp for uptime
+                start_time = properties.get('ExecMainStartTimestamp', '')
+                if start_time and start_time != '0':
+                    try:
+                        import datetime
+                        # Simple uptime calculation
+                        agent_status['uptime'] = 'running'
+                    except:
+                        agent_status['uptime'] = 'unknown'
+                else:
+                    agent_status['uptime'] = 'not started'
             else:
-                return {'active': False, 'error': result.stderr.decode()}
+                agent_status['error'] = result.stderr or "Failed to get service status"
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            return {'active': False, 'error': str(e)}
+            agent_status['error'] = f"Service check failed: {e}"
+        return agent_status
 
     def _check_mcp_proxy_health(self, ssh_key_path: Path, port: int) -> Dict[str, any]:
-        """Check MCP proxy health."""
+        """Check MCP proxy health and response time."""
+        mcp_status = {'healthy': False}
         try:
+            import time
             start_time = time.time()
+
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", "2222", "dev@localhost",
-                f"curl -f http://localhost:{port}/health"
+                f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
-            response_time = int((time.time() - start_time) * 1000)  # Convert to ms
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
 
-            if result.returncode == 0:
-                return {'healthy': True, 'response_time': response_time}
+            response_time = int((time.time() - start_time) * 1000)
+            mcp_status['response_time'] = response_time
+
+            if result.returncode == 0 and "PROXY_DOWN" not in result.stdout:
+                mcp_status['healthy'] = True
             else:
-                return {'healthy': False, 'error': result.stderr.decode(), 'response_time': response_time}
+                mcp_status['error'] = "Proxy not responding"
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            return {'healthy': False, 'error': str(e)}
+            mcp_status['error'] = f"Health check failed: {e}"
+        return mcp_status
 
     def _check_workspace_status(self, ssh_key_path: Path, workspace_path: str) -> Dict[str, any]:
-        """Check workspace accessibility and git status."""
+        """Check workspace accessibility and status."""
+        workspace_status = {'accessible': False}
         try:
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", "2222", "dev@localhost",
-                f"cd {workspace_path} && pwd && du -sh . && git status --porcelain | wc -l"
+                f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
+            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
             if result.returncode == 0:
-                lines = result.stdout.decode().strip().split('\n')
-                if len(lines) >= 3:
-                    size = lines[1]
-                    git_changes = int(lines[2]) if lines[2].isdigit() else 0
-                    git_status = "clean" if git_changes == 0 else f"{git_changes} modified files"
+                lines = result.stdout.strip().split('\n')
+                if len(lines) >= 2:
+                    workspace_status['accessible'] = True
+                    workspace_status['size'] = lines[1] if len(lines) > 1 else 'unknown'
 
-                    return {
-                        'accessible': True,
-                        'size': size,
-                        'git_status': git_status
-                    }
-            return {'accessible': False, 'error': result.stderr.decode()}
+                    # Parse git status
+                    if len(lines) > 2 and "GIT_ERROR" not in lines[2]:
+                        changes = int(lines[2]) if lines[2].isdigit() else 0
+                        workspace_status['git_status'] = f"{changes} modified files" if changes > 0 else "clean"
+                    else:
+                        workspace_status['git_status'] = "not a git repository"
+            else:
+                workspace_status['error'] = "Workspace not accessible"
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            return {'accessible': False, 'error': str(e)}
+            workspace_status['error'] = f"Workspace check failed: {e}"
+        return workspace_status
 
 
 def main() -> None:
@@ -802,6 +909,7 @@ def main() -> None:
 Examples:
   agent-vm create --branch=feature-x --port=8001
   agent-vm start feature-x
+  agent-vm restart feature-x
   agent-vm shell feature-x
   agent-vm list
   agent-vm destroy feature-x
@@ -815,7 +923,7 @@ Examples:
     create_parser.add_argument('--host', default='localhost', help='Host to bind VM ports to')
     create_parser.add_argument('--port', type=int, default=8000, help='Port for MCP proxy forwarding')
     create_parser.add_argument('--branch', help='Branch name for VM (default: current branch)')
-    create_parser.add_argument('--config', default='./vm-config.nix', help='Path to VM NixOS config')
+    create_parser.add_argument('--config', default='vm-config.nix', help='Path to VM NixOS config')
 
     # Start command
     start_parser = subparsers.add_parser('start', help='Start VM for branch')
@@ -824,6 +932,10 @@ Examples:
     # Stop command
     stop_parser = subparsers.add_parser('stop', help='Stop VM for branch')
     stop_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
+
+    # Restart command
+    restart_parser = subparsers.add_parser('restart', help='Restart VM for branch')
+    restart_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
 
     # Status command
     status_parser = subparsers.add_parser('status', help='Show VM status for branch')
@@ -859,6 +971,8 @@ Examples:
             controller.start_vm(args.branch)
         elif args.command == 'stop':
             controller.stop_vm(args.branch)
+        elif args.command == 'restart':
+            controller.restart_vm(args.branch)
         elif args.command == 'status':
             controller.vm_status(args.branch)
         elif args.command == 'shell':

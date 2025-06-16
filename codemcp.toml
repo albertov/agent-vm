@@ -66,6 +66,14 @@ verbosity = "DEBUG"
 [commands.test]
 command = ["nix", "flake", "check"]
 
+[commands.git_mv]
+command = ["git", "mv"]
+doc = """
+git mv
+
+Use it to move files around efficiently
+"""
+
 [commands.agent-vm]
 command = ["nix", "run", "--show-trace", ".#", "--"]
 doc = """
