@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from unittest.mock import Mock, patch, call
 import pytest
-from vm_controller import VMController, main
+from agent_vm.vm_controller import VMController, main
 
 
 @pytest.mark.integration
