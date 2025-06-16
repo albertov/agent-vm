@@ -52,15 +52,7 @@
         };
 
         # Default shell for development
-        defaultShell = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            git
-            nix
-            openssh
-            qemu
-            curl
-          ];
-        };
+        defaultShell = self.outputs.devShells.${system}.default;
 
       in
       {
@@ -155,28 +147,13 @@
         # Development shells
         devShells = {
           default = pkgs.mkShell {
+            inputsFrom = [ pkgs.agent-vm ];
             buildInputs = with pkgs; [
-              # Development tools
-              git
-              nix
-              nixpkgs-fmt
-
-              # VM management
-              agent-vm
-              openssh
-              qemu
-
-              # MCP tools
-              codemcp
-              mcp-proxy
-              mcp-language-server
-              inputs.rescript-lsp.packages.${system}.default
-              inputs.mcp-selenium.packages.${system}.default
-              inputs.mcp-nixos.packages.${system}.default
 
               # Runtime tools
               curl
               python3
+              python3.pkgs.pytest
             ];
 
             shellHook = ''
@@ -223,14 +200,6 @@
             ];
           };
 
-          # Python syntax check for agent-vm
-          agent-vm-syntax = pkgs.runCommand "agent-vm-syntax-check"
-            {
-              buildInputs = [ pkgs.python3 ];
-            } ''
-            ${pkgs.python3}/bin/python -m py_compile ${./agent-vm.py}
-            touch $out
-          '';
         };
 
         # Formatter for the flake
