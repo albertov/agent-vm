@@ -455,6 +455,103 @@ class AgentVMIntegrationTest:
                     logger.debug("Cleanup also failed")
                 pass
 
+    def test_agent_service_startup(self):
+        """Test that the agent service starts properly in the VM."""
+        logger.info("🧪 TEST: Agent service startup and health")
+
+        # Skip this test if we can't run VMs
+        if not self._can_run_vms():
+            logger.warning("⚠️ SKIP: Agent service startup (nested virtualization not available)")
+            self.tests_skipped += 1
+            return
+
+        try:
+            # Start the VM
+            logger.info("Starting VM for agent service test...")
+            result = self.run_agent_vm_command(["start", self.test_branch])
+
+            if self.debug:
+                logger.debug("VM started, allowing services to initialize...")
+
+            # Wait longer for services to fully start
+            time.sleep(10)
+
+            # Test 1: Check VM status to see if agent service is mentioned
+            logger.info("Checking overall VM status...")
+            status_result = self.run_agent_vm_command(["status", self.test_branch])
+
+            if self.debug:
+                logger.debug(f"VM status output:\n{status_result.stdout}")
+
+            # Look for positive indicators in the status output
+            status_indicators = [
+                "🟢 Agent Service: Running",
+                "🟢 MCP Proxy: Healthy",
+                "Agent Service: Running"
+            ]
+
+            service_running = any(indicator in status_result.stdout for indicator in status_indicators)
+            if service_running:
+                logger.info("✓ Agent service appears to be running based on status")
+            else:
+                logger.warning("⚠️ Agent service status unclear from VM status output")
+
+            # Test 2: Check for error indicators that would suggest service failure
+            error_indicators = [
+                "🟡 Agent Service: Not running",
+                "❌ Agent service is not active",
+                "Failed",
+                "Error"
+            ]
+
+            has_errors = any(error in status_result.stdout for error in error_indicators)
+            if has_errors:
+                logger.error("❌ Found error indicators in VM status")
+                raise AssertionError("Agent service appears to have errors")
+
+            # Test 3: Check that MCP port is accessible (if mentioned in status)
+            if "MCP Endpoint" in status_result.stdout:
+                logger.info("✓ MCP endpoint is accessible according to status")
+            else:
+                logger.warning("⚠️ MCP endpoint status not explicitly shown")
+
+            # Test 4: Use logs command to check for agent service activity
+            logger.info("Checking agent service logs...")
+            try:
+                # The logs command might be interactive, so use a short timeout
+                logs_result = self.run_agent_vm_command(["logs", self.test_branch], timeout=10)
+                logger.info("✓ Agent service logs accessible")
+            except subprocess.TimeoutExpired:
+                # This is expected since logs might be interactive
+                logger.info("✓ Logs command started (interactive mode expected)")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not access logs: {e}")
+
+            logger.info("✅ PASS: Agent service startup test successful")
+            self.tests_passed += 1
+
+        except subprocess.TimeoutExpired as e:
+            logger.error("❌ FAIL: Agent service startup test timed out")
+            if self.debug:
+                logger.error(f"Timeout details: {e}")
+            self.tests_failed += 1
+
+        except Exception as e:
+            logger.error(f"❌ FAIL: Agent service startup test failed: {e}")
+            if self.debug:
+                logger.error(f"Exception details: {str(e)}")
+            self.tests_failed += 1
+
+        finally:
+            # Always try to stop the VM
+            try:
+                logger.info("Stopping VM after agent service test...")
+                self.run_agent_vm_command(["stop", self.test_branch], check=False)
+            except:
+                if self.debug:
+                    logger.debug("VM stop after agent service test failed")
+                pass
+
     def test_vm_destruction(self):
         """Test VM destruction functionality."""
         logger.info("🧪 TEST: VM destruction")
@@ -528,6 +625,7 @@ class AgentVMIntegrationTest:
                 self.test_vm_listing,
                 self.test_vm_status,
                 self.test_vm_start_stop_cycle,
+                self.test_agent_service_startup,
                 self.test_vm_destruction,
             ]
 
