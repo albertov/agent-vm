@@ -51,6 +51,9 @@ inputs: final: prev:
   mcp-selenium =
     inputs.mcp-selenium.packages.${final.system}.mcp-selenium-hs;
 
+  # ReScript language server from rescript-lsp input
+  rescript-language-server = inputs.rescript-lsp.packages.${final.system}.default;
+
   # VM management tool for agent isolation
   agent-vm = final.python3.pkgs.buildPythonApplication {
     pname = "agent-vm";

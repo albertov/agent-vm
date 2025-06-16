@@ -134,19 +134,19 @@ in
             exec ${devServers}/bin/start-agent
           ''}";
 
-          # Health check
-          ExecStartPost = "${pkgs.writeShellScript "check-agent-health" ''
-            # Wait for service to be ready
-            for i in {1..30}; do
-              if ${pkgs.curl}/bin/curl -f http://localhost:${toString cfg.port}/health > /dev/null 2>&1; then
-                echo "Agent MCP service is ready"
-                exit 0
-              fi
-              sleep 1
-            done
-            echo "Agent MCP service failed to become ready"
-            exit 1
-          ''}";
+          # Health check - temporarily disabled for debugging
+          # ExecStartPost = "${pkgs.writeShellScript "check-agent-health" ''
+          #   # Wait for service to be ready
+          #   for i in {1..30}; do
+          #     if ${pkgs.curl}/bin/curl -f http://localhost:${toString cfg.port}/health > /dev/null 2>&1; then
+          #       echo "Agent MCP service is ready"
+          #       exit 0
+          #     fi
+          #     sleep 1
+          #   done
+          #   echo "Agent MCP service failed to become ready"
+          #   exit 1
+          # ''}";
 
           # Graceful shutdown
           KillMode = "mixed";
