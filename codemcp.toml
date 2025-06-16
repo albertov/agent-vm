@@ -65,7 +65,7 @@ verbosity = "DEBUG"
 
 
 [commands.agent-vm]
-command = ["./nix.sh", "run", "--show-trace", ".#", "--"]
+command = ["nix", "run", "--show-trace", ".#", "--"]
 doc = """
 Calls "nix run .# --" which runs ./agent-vm.py
 
