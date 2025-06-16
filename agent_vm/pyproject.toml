@@ -40,7 +40,7 @@ test = [
 ]
 
 [project.scripts]
-agent-vm = "agent_vm:main"
+agent-vm = "vm_controller:main"
 
 [project.urls]
 Homepage = "https://github.com/example/agent-vm"
@@ -48,12 +48,8 @@ Documentation = "https://github.com/example/agent-vm#readme"
 Repository = "https://github.com/example/agent-vm.git"
 "Bug Tracker" = "https://github.com/example/agent-vm/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["agent_vm*"]
-
-[tool.setuptools.package-dir]
-agent_vm = "."
+[tool.setuptools]
+py-modules = ["vm_controller"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -95,6 +91,6 @@ exclude_lines = [
     "raise NotImplementedError",
     "if 0:",
     "if __name__ == .__main__.:",
-    "class .*\bProtocol\):",
-    "@(abc\.)?abstractmethod",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]

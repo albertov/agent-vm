@@ -205,7 +205,7 @@
             nixpkgs-fmt.enable = true;
             shellcheck.enable = true;
             deadnix.enable = true;
-            programs.ruff.enable = true;
+            ruff.enable = true;
           };
         };
       }

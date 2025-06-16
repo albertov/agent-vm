@@ -131,23 +131,31 @@ Read AGENT_ISOLATION.md for specs
   - ✅ Workspace status monitoring (size, git status)
   - ✅ Visual status indicators and structured output formatting
 
-- [ ] **Step 13**: Error handling and recovery
-  - VM startup failure recovery
-  - SSH connection timeout handling
-  - Workspace synchronization error handling
-  - Automatic cleanup of stale processes
+- [x] **Step 13**: Fix Python package structure and build system
+  - ✅ Fix agent-vm Python package to use proper pyproject.toml structure
+  - ✅ Clean up duplicate agent-vm/agent_vm directories
+  - ✅ Add pytest test dependencies and enable test running
+  - ✅ Fix flake.nix package exports that are causing check failures
+  - ✅ Ensure agent-vm package builds and tests run correctly
+  - ✅ Convert to simple module structure using py-modules instead of complex package structure
 
-- [ ] **Step 14**: Development experience improvements
-  - Colored logging with timestamps
-  - Progress indicators for VM startup
-  - Clear status messages and user guidance
-  - Passwordless SSH access with ephemeral keys
+- [x] **Step 14**: Development experience improvements
+  - ✅ Colored logging with timestamps
+  - ✅ Progress indicators for VM startup
+  - ✅ Clear status messages and user guidance
+  - ✅ Passwordless SSH access with ephemeral keys
+  - ✅ Interactive progress spinners with time estimates
+  - ✅ --verbose flag for detailed debugging
+  - ✅ Emoji indicators for different operation types
+  - ✅ Better error messages with troubleshooting tips
 
-- [ ] **Step 15**: Multi-instance support
-  - VM naming based on username and workspace
-  - Port allocation for multiple concurrent VMs
-  - Workspace isolation per instance
-  - Process tracking and cleanup per instance
+- [x] **Step 15**: Error handling and recovery
+  - ✅ VM startup failure recovery with automatic cleanup
+  - ✅ SSH connection timeout handling with retry logic
+  - ✅ Workspace synchronization error handling
+  - ✅ Automatic cleanup of stale processes
+  - ✅ Service startup failure recovery with detailed troubleshooting
+  - ✅ User-friendly error messages with actionable guidance
 
 ### Phase 4: Security and Performance
 
@@ -352,17 +360,19 @@ class VMController:
   - ✅ Steps 1-4: VM configuration, workspace sharing, networking, and lifecycle management implemented
 - **Phase 2: Development Integration**
   - ✅ Steps 4.5-10: Complete flake integration, VM management tool, and agent service implementation
+- **Phase 3: Robust VM Management**
+  - ✅ Steps 11-15: SSH authentication, status monitoring, package structure, UX improvements, and error handling
 
 **🔄 IN PROGRESS:**
-- **Step 13**: Fix Python package structure and build system
-  - Fix agent-vm Python package to use proper pyproject.toml structure
-  - Clean up duplicate agent-vm/agent_vm directories
-  - Add pytest test dependencies and enable test running
-  - Fix flake.nix package exports that are causing check failures
-  - Ensure agent-vm package builds and tests run correctly
+- **Step 16**: VM security hardening
+  - Disable user namespaces in VM
+  - Lock kernel modules and protect kernel image
+  - SELinux/AppArmor policies for QEMU processes
+  - Resource limits and monitoring
 
 **⏳ PENDING:**
-- Phase 3-5 implementation phases
+- Multi-instance support (Step 16 alternate)
+- Phase 4-5 implementation phases (security, performance, documentation)
 - Testing and validation
 - Integration testing
 
