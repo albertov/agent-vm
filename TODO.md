@@ -414,6 +414,11 @@ class VMController:
   - ✅ Ensure temporary directories are ALWAYS deleted (even in case of test failure)
   - ✅ Update integration test script to use dynamic port allocation
 
+- [x] **Step 27**: Add subprocess output capture with tempfile logging
+  - ✅ Capture stdout and stderr of every subprocess to tempfiles
+  - ✅ Destroy tempfiles at program exit (regardless of exceptions)
+  - ✅ Display last 20 lines and paths as log.error on subprocess failures
+
 **🔄 IN PROGRESS:**
 - **Step 16**: VM security hardening
   - Disable user namespaces in VM
