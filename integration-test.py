@@ -117,10 +117,11 @@ class AgentVMIntegrationTest:
     """Integration test runner for agent-vm using CLI calls only."""
 
     def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False,
-                 timeout: int = 60):
+                 debug: bool = False, timeout: int = 60):
         """Initialize integration test runner."""
         self.agent_vm_cmd = agent_vm_cmd
         self.verbose = verbose
+        self.debug = debug
         self.timeout = timeout
         self.test_state_dir = None
         self.test_branch = f"integration-test-{int(time.time())}"
@@ -153,19 +154,45 @@ class AgentVMIntegrationTest:
                 check=check,
                 timeout=timeout
             )
-            if self.verbose and result.stdout:
-                logger.debug(f"Command stdout: {result.stdout}")
-            if self.verbose and result.stderr:
-                logger.debug(f"Command stderr: {result.stderr}")
+
+            # Log stdout/stderr based on debug/verbose flags and result status
+            should_log_output = (
+                self.debug or  # Always log if debug is enabled
+                self.verbose or  # Always log if verbose is enabled
+                result.returncode != 0  # Always log if command failed
+            )
+
+            if should_log_output:
+                if result.stdout:
+                    logger.debug(f"Command stdout: {result.stdout}")
+                if result.stderr:
+                    logger.debug(f"Command stderr: {result.stderr}")
+
             return result
+
         except subprocess.TimeoutExpired as e:
             logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd)}")
+
+            # Log captured output from timeout exception when debug is enabled
+            if self.debug:
+                if hasattr(e, 'stdout') and e.stdout:
+                    logger.error(f"Timeout stdout: {e.stdout}")
+                if hasattr(e, 'stderr') and e.stderr:
+                    logger.error(f"Timeout stderr: {e.stderr}")
+
             raise
+
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed: {' '.join(cmd)}")
             logger.error(f"Exit code: {e.returncode}")
-            logger.error(f"Stdout: {e.stdout}")
-            logger.error(f"Stderr: {e.stderr}")
+
+            # Always log stdout/stderr for failed commands when debug is enabled
+            if self.debug or e.stdout or e.stderr:
+                if e.stdout:
+                    logger.error(f"Failed command stdout: {e.stdout}")
+                if e.stderr:
+                    logger.error(f"Failed command stderr: {e.stderr}")
+
             raise
 
     def setup_test_environment(self):
@@ -295,43 +322,84 @@ class AgentVMIntegrationTest:
         try:
             # Test starting VM
             logger.info("Starting VM...")
+
+            if self.debug:
+                logger.debug(f"About to start VM with timeout {self.timeout}s")
+
             result = self.run_agent_vm_command(["start", self.test_branch])
+
+            if self.debug:
+                logger.debug("VM start command completed successfully")
 
             # Give it a moment to fully start
             time.sleep(5)
 
             # Check status after start
+            logger.info("Checking VM status after start...")
             status_result = self.run_agent_vm_command(["status", self.test_branch])
+
+            if self.debug:
+                logger.debug(f"VM status after start: {status_result.stdout}")
+
             if "🟢 VM Status: Running" not in status_result.stdout:
                 logger.warning("VM may not have started properly")
 
             # Test stopping VM
             logger.info("Stopping VM...")
-            self.run_agent_vm_command(["stop", self.test_branch])
+            stop_result = self.run_agent_vm_command(["stop", self.test_branch])
+
+            if self.debug:
+                logger.debug(f"VM stop result: {stop_result.stdout}")
 
             # Check status after stop
+            logger.info("Checking VM status after stop...")
             status_result = self.run_agent_vm_command(["status", self.test_branch])
+
+            if self.debug:
+                logger.debug(f"VM status after stop: {status_result.stdout}")
+
             if "🔴 VM Status: Stopped" not in status_result.stdout:
                 logger.warning("VM may not have stopped properly")
 
             logger.info("✅ PASS: VM start/stop cycle successful")
             self.tests_passed += 1
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             logger.error("❌ FAIL: VM start/stop cycle timed out")
+
+            if self.debug:
+                logger.error(f"Timeout details: command={' '.join(e.cmd) if e.cmd else 'unknown'}, timeout={e.timeout}")
+                logger.error("This usually indicates VM startup issues. Check:")
+                logger.error("- Nested virtualization support (/dev/kvm exists)")
+                logger.error("- QEMU installation and dependencies")
+                logger.error("- Available system resources (RAM, CPU)")
+                logger.error("- Nix build system can create VMs")
+
             self.tests_failed += 1
             # Try to clean up
             try:
+                logger.info("Attempting cleanup after timeout...")
                 self.run_agent_vm_command(["stop", self.test_branch], check=False)
             except:
+                if self.debug:
+                    logger.debug("Cleanup also failed or timed out")
                 pass
+
         except Exception as e:
             logger.error(f"❌ FAIL: VM start/stop cycle failed: {e}")
+
+            if self.debug:
+                logger.error(f"Exception type: {type(e).__name__}")
+                logger.error(f"Exception details: {str(e)}")
+
             self.tests_failed += 1
             # Try to clean up
             try:
+                logger.info("Attempting cleanup after failure...")
                 self.run_agent_vm_command(["stop", self.test_branch], check=False)
             except:
+                if self.debug:
+                    logger.debug("Cleanup also failed")
                 pass
 
     def test_vm_destruction(self):
@@ -454,6 +522,7 @@ Examples:
   integration-test                    # Run all tests with agent-vm in PATH
   integration-test --agent-vm ./agent-vm  # Use specific agent-vm executable
   integration-test --verbose         # Enable verbose output
+  integration-test --debug           # Enable debug output with full stderr/stdout capture
   integration-test --timeout 120     # Set custom timeout to 120 seconds
         """
     )
@@ -462,18 +531,21 @@ Examples:
                        help='Path to agent-vm executable (default: agent-vm in PATH)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging and debugging')
+    parser.add_argument('--debug', '-d', action='store_true',
+                       help='Enable debug mode with comprehensive stderr/stdout capture')
     parser.add_argument('--timeout', '-t', type=int, default=60,
                        help='Timeout in seconds for VM operations (default: 60)')
 
     args = parser.parse_args()
 
-    # Set up logging
-    setup_logging(verbose=args.verbose)
+    # Set up logging - debug mode implies verbose
+    setup_logging(verbose=args.verbose or args.debug)
 
     # Run integration tests
     test_runner = AgentVMIntegrationTest(
         agent_vm_cmd=args.agent_vm,
         verbose=args.verbose,
+        debug=args.debug,
         timeout=args.timeout
     )
 
