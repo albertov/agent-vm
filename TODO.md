@@ -291,6 +291,14 @@ class VMController:
   - ✅ Add pytest timeout enforcement as backup mechanism
   - ✅ Ensure timeout is honored consistently across all VM operations
 
+**✅ COMPLETED:**
+- **Step 31**: Add --debug and --verbose options to create command
+  - ✅ Add --debug option (enhanced verbose logging) to all commands
+  - ✅ Add --verbose option as global option for better UX
+  - ✅ Ensure both options work as expected with proper debug/verbose logging setup
+  - ✅ Fix integration test framework to properly pass debug flag to agent-vm commands
+  - ✅ Add comprehensive integration test to verify options work correctly
+
 **🔄 IN PROGRESS:**
 - **Step 29**: Debug agent service status reporting in integration tests
   - ✅ **MAJOR PROGRESS**: Fixed VM building and startup with agent service
