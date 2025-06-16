@@ -67,7 +67,19 @@ def get_test_config() -> IntegrationTestConfig:
     """Get test configuration, creating default if not set."""
     global test_config
     if test_config is None:
-        test_config = IntegrationTestConfig()
+        # Try to read from environment variables (set by CLI when running pytest)
+        import os
+        agent_vm_cmd = os.environ.get("INTEGRATION_TEST_AGENT_VM_CMD", "agent-vm")
+        verbose = os.environ.get("INTEGRATION_TEST_VERBOSE", "False").lower() == "true"
+        debug = os.environ.get("INTEGRATION_TEST_DEBUG", "False").lower() == "true"
+        timeout = int(os.environ.get("INTEGRATION_TEST_TIMEOUT", "120"))
+
+        test_config = IntegrationTestConfig(
+            agent_vm_cmd=agent_vm_cmd,
+            verbose=verbose,
+            debug=debug,
+            timeout=timeout
+        )
     return test_config
 
 
@@ -771,6 +783,14 @@ def run(
 
         logger.info("🚀 Starting agent-vm integration tests using pytest")
         logger.info(f"Using agent-vm command: {config.agent_vm_cmd}")
+        logger.info(f"Using timeout: {config.timeout} seconds")
+
+        # Pass configuration through environment variables so pytest can access it
+        import os
+        os.environ["INTEGRATION_TEST_AGENT_VM_CMD"] = config.agent_vm_cmd
+        os.environ["INTEGRATION_TEST_VERBOSE"] = str(config.verbose)
+        os.environ["INTEGRATION_TEST_DEBUG"] = str(config.debug)
+        os.environ["INTEGRATION_TEST_TIMEOUT"] = str(config.timeout)
 
         # Build pytest arguments
         pytest_argv = [__file__]  # Run tests from this file
