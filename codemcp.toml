@@ -1,18 +1,18 @@
 # codemcp configuration file
 project_prompt = """
 # Instructions
-- MUST use the agent-vm command frequently to test your changes and fix them
+- MUST use the test command frequently to test your changes and fix them
+- MUST use the integration-test command less frequently to test your changes and fix them
 - You cannot modify anything outside ./, or  Capisce?!
 - Don't use nix-build, nix-instantiate, etc.. use the modern "nix" command.
 - Don't use "<nixpkgs>", always use the flake in this repo as the "pkgs" set
-- Before starting work, add what you're going to do to the TODO.md
-document if it is not already there.
-- Keep the AGENT_ISOLATION.md document and TODO.md up to date with
-your changes when you're done with them.
-- Use the 'branch_log' command before starting work to see where you left off.
-Ignore changes to codemcp.toml and under the ./ directory.
 - When leaving code incomplete, stubbed or mocked. Write a FIXME or TODO comment
 explaining why.
+- Before starting work, add what you're going to do to the TODO.md
+document if it is not already there.
+- Use the 'branch_log' command before starting work to see where you left off.
+Ignore changes to codemcp.toml and under the ./ directory.
+- Keep the *.md documents up to date with your changes when you're done with them.
 
 ## Final tasks
 
@@ -65,6 +65,12 @@ verbosity = "DEBUG"
 
 [commands.test]
 command = ["nix", "flake", "check"]
+
+[commands.integration-test]
+command = ["nix", "run", ".#integration-test", "--"]
+doc = """
+Runs the .#integration-test flake app with the arguments you pass"
+"""
 
 [commands.git_mv]
 command = ["git", "mv"]

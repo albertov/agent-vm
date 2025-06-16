@@ -86,18 +86,25 @@
   # Enable and configure the agent service
   services.agent-mcp = {
     enable = true;
-    user = "agent-mcp";
-    group = "agent-mcp";
+    user = "dev";
+    group = "dev";
     workspaceDir = "/workspace";
-    # Pass the development shell with all MCP tools
+    # Pass the development shell with all MCP tools using mkMCPDevServers
     shell = pkgs.mkShell {
       buildInputs = with pkgs; [
+        # Development tools
         git
         nix
         openssh
         qemu
         curl
         python3
+
+        # MCP tools (should match what's in mkMCPDevServers)
+        codemcp
+        mcp-proxy
+        mcp-language-server
+        rescript-language-server
       ];
       shellHook = ''
         echo "🚀 Agent MCP Development Environment in VM"

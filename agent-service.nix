@@ -65,9 +65,13 @@ in
   config = lib.mkIf cfg.enable {
     systemd.services.agent-mcp =
       let
+        # Create the MCP dev servers with the configured shell
         devServers = pkgs.mkMCPDevServers {
           inherit (cfg) name pkgs;
-          shell = if cfg.shell != null then cfg.shell else pkgs.mkShell { };
+          # Use the provided shell or create a minimal default
+          shell = if cfg.shell != null then cfg.shell else pkgs.mkShell {
+            buildInputs = with pkgs; [ git curl ];
+          };
         };
       in
       {
@@ -151,8 +155,8 @@ in
         };
       };
 
-    # Ensure the service user exists
-    users.users = lib.mkIf (cfg.user != "root") {
+    # Ensure the service user exists (only if not using system users)
+    users.users = lib.mkIf (cfg.user != "root" && cfg.user != "dev") {
       ${cfg.user} = {
         isSystemUser = true;
         group = cfg.group;
@@ -160,7 +164,7 @@ in
       };
     };
 
-    users.groups = lib.mkIf (cfg.group != "root") {
+    users.groups = lib.mkIf (cfg.group != "root" && cfg.group != "dev") {
       ${cfg.group} = { };
     };
   };
