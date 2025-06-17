@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Integration tests for agent-vm
 module AgentVM.IntegrationSpec (spec) where
 

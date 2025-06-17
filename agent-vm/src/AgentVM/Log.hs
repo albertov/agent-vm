@@ -3,7 +3,7 @@
 -- | Logging infrastructure for agent-vm
 module AgentVM.Log
   ( AgentVmTrace(..)
-  , LogAction
+  , LogAction(..)
   , Severity(..)
   , traceToMessage
   , traceSeverity
@@ -15,7 +15,17 @@ import AgentVM.Types
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
-import Colog.Core (LogAction(..), Severity(..))
+
+-- | LogAction type for plow-log compatibility
+newtype LogAction m a = LogAction { unLogAction :: a -> m () }
+
+-- | Severity levels for logging
+data Severity
+  = Debug
+  | Info
+  | Warning
+  | Error
+  deriving (Show, Eq, Ord, Generic)
 
 -- | All possible log events in the system
 data AgentVmTrace
