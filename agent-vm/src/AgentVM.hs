@@ -1,4 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | Main entry point for the agent-vm library
 module AgentVM
@@ -83,7 +85,9 @@ import AgentVM.Process
 import AgentVM.SSH
 import AgentVM.State
 import AgentVM.Types
-import Plow.Logging (traceWith)
+import Data.Generics.Product (HasType, the)
+import Lens.Micro (view)
+import Plow.Logging (LogContext, traceWith)
 import Protolude
 
 -- | Create a new VM with the given configuration

@@ -33,6 +33,7 @@ library
                     , AgentVM.Nix
                     , AgentVM.Log
                     , AgentVM.Config
+                    , AgentVM.Env
     build-depends:    base
                     , protolude
                     , unliftio
