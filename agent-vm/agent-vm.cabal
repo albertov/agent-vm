@@ -35,6 +35,7 @@ library
                     , AgentVM.Log
                     , AgentVM.Config
     build-depends:    base
+                    , protolude
                     , stm
                     , containers
                     , text
@@ -47,15 +48,18 @@ library
                     , filepath
     hs-source-dirs:   src
     default-language: Haskell2010
+    default-extensions: NoImplicitPrelude
 
 executable agent-vm
     import:           warnings
     main-is:          Main.hs
     build-depends:    base
+                    , protolude
                     , agent-vm
                     , optparse-applicative
     hs-source-dirs:   app
     default-language: Haskell2010
+    default-extensions: NoImplicitPrelude
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
 test-suite spec
@@ -65,10 +69,12 @@ test-suite spec
     other-modules:    AgentVM.StateSpec
                     , AgentVM.ProcessSpec
     build-depends:    base
+                    , protolude
                     , agent-vm
                     , hspec
     hs-source-dirs:   test
     default-language: Haskell2010
+    default-extensions: NoImplicitPrelude
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-tool-depends: hspec-discover:hspec-discover
 
@@ -77,9 +83,11 @@ executable agent-vm-test
     import:           warnings
     main-is:          Main.hs
     build-depends:    base
+                    , protolude
                     , agent-vm
                     , hspec
                     , temporary
     hs-source-dirs:   integration-test
     default-language: Haskell2010
+    default-extensions: NoImplicitPrelude
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N

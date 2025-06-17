@@ -2,6 +2,8 @@
 -- | Main entry point for agent-vm CLI
 module Main (main) where
 
+import Protolude
+
 import Options.Applicative
   ( Parser, execParser, info, progDesc, fullDesc, header, helper
   , (<**>), strOption, long, metavar, help, optional, switch, short

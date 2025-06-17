@@ -6,6 +6,8 @@ module AgentVM.Nix
   , runVMScript
   ) where
 
+import Protolude
+
 import AgentVM.Types
 import AgentVM.Log
 import System.Process.Typed

@@ -6,6 +6,8 @@ module AgentVM.Process
   , waitForProcess
   ) where
 
+import Protolude
+
 import AgentVM.Log
 import System.Process.Typed
 
