@@ -18,7 +18,7 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] All integration-tests should use a temporary directory and these
+- [ ] All integration-tests should use an temporary directory as state_dir and these
   directories should be removed when the integration-tests finish regardless of
   exceptions. Only keep the if the --keep flag is passed to integration tests
   (add it)
