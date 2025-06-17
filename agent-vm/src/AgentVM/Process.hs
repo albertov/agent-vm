@@ -5,11 +5,11 @@ module AgentVM.Process
     checkVMProcess,
     waitForProcess,
     ProcessState (..),
+    startLoggedProcess
   )
 where
 
 import AgentVM.Log (AgentVmTrace (ProcessSpawned), (<&))
-import qualified Data.Text as T
 import Plow.Logging (IOTracer (IOTracer))
 import Protolude
 import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
@@ -20,24 +20,30 @@ data ProcessState
   | ProcessExited ExitCode
   deriving (Eq, Show)
 
--- | Start a VM process
+newtype VMProcess = VMProcess { unVMProcess :: Process () () () }
+
 -- TODO: This should be capturing stderr and stdout of the process and tracing
 -- them with the logger line by line for better debugging
-startVMProcess :: IOTracer AgentVmTrace -> FilePath -> IO (Process () () ())
-startVMProcess (IOTracer logger) scriptPath = do
-  logger <& ProcessSpawned (T.pack scriptPath) []
-  startProcess (proc scriptPath [])
+startLoggedProcess :: IOTracer AgentVmTrace -> FilePath -> [Text] -> IO (Process () () ())
+startLoggedProcess (IOTracer logger) scriptPath args = do
+  logger <& ProcessSpawned (toS scriptPath) args
+  startProcess (proc scriptPath (map toS args))
+
+-- | Start a VM process
+startVMProcess :: IOTracer AgentVmTrace -> FilePath -> IO VMProcess
+startVMProcess logger scriptPath = 
+  VMProcess <$> startLoggedProcess logger scriptPath []
 
 -- | Stop a VM process gracefully
-stopVMProcess :: IOTracer AgentVmTrace -> Process () () () -> IO ()
+stopVMProcess :: IOTracer AgentVmTrace -> VMProcess -> IO ()
 stopVMProcess = notImplemented
 
 -- | Check if VM process is still running
-checkVMProcess :: Process () () () -> IO ProcessState
+checkVMProcess :: VMProcess -> IO ProcessState
 checkVMProcess process = do
-  exitCode <- getExitCode process
+  exitCode <- getExitCode (unVMProcess process)
   return $ maybe ProcessRunning ProcessExited exitCode
 
 -- | Wait for a process with timeout
-waitForProcess :: Int -> Process () () () -> IO (Maybe ExitCode)
+waitForProcess :: Int -> Process a b c -> IO (Maybe ExitCode)
 waitForProcess = notImplemented
