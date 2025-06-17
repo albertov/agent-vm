@@ -248,9 +248,6 @@
           # Ensure agent-vm-py builds correctly
           agent-vm-py-build = pkgs.agent-vm-py;
 
-          # Ensure agent-vm Haskell builds correctly
-          agent-vm-build = pkgs.agent-vm.agent-vm.components.exes.agent-vm;
-
           # Ensure all MCP packages build
           mcp-packages-build = pkgs.symlinkJoin {
             name = "mcp-packages";
