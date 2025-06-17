@@ -12,6 +12,9 @@ Read README.md for specs
 
 ### URGENT
 
+- [ ] The --timeout parameter to integration-tests is NOT being honored. Deeply
+  analyse why it is broken and fix it BEFORE running them (else they won't timeout!)
+
 - [ ] Address the TODO in the utils.py module. It will help you with your future
   endeavours
 
