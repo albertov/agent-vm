@@ -3,7 +3,8 @@
 -- | Main entry point for agent-vm CLI
 module Main (main) where
 
-import AgentVM.Log (LogLevel, contramapIOTracer, renderLogLevel, renderTrace, traceLevel, vmLogger)
+import Data.Functor.Contravariant (contramap)
+import AgentVM.Log (LogLevel, renderLogLevel, renderTrace, traceLevel, vmLogger)
 import Options.Applicative
   ( Parser,
     auto,
@@ -99,7 +100,7 @@ main = do
   -- Set up async logging with a buffer of 1000 messages
   withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
     -- Create the final tracer that converts AgentVmTrace to Text
-    let finalTracer = contramapIOTracer (renderLogLevel renderTrace . traceLevel) asyncTracer
+    let finalTracer = contramap (renderLogLevel renderTrace . traceLevel) asyncTracer
 
     -- For now, just demonstrate logging is working
     putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
