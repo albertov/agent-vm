@@ -69,10 +69,16 @@ test-suite spec
     main-is:          Spec.hs
     other-modules:    AgentVM.StateSpec
                     , AgentVM.ProcessSpec
+                    , AgentVM.NixSpec
     build-depends:    base
                     , protolude
                     , agent-vm
                     , hspec
+                    , unliftio
+                    , typed-process
+                    , temporary
+                    , stm
+                    , containers
     hs-source-dirs:   test
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
