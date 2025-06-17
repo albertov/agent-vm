@@ -60,7 +60,11 @@
             # Haskell.nix overlay
             haskellNix.overlay
             (final: _prev: {
+              projectStatic = final.hixProject.projectCross.musl64;
               inherit hoogle;
+              # statically-linked exes
+              agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
+              agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
               hixProject = final.haskell-nix.hix.project {
                 src = builtins.path {
                   path = ./agent-vm;
@@ -105,7 +109,7 @@
 
           # Haskell agent-vm app (new implementation)
           agent-vm = flake-utils.lib.mkApp {
-            drv = pkgs.hixProject.hsPkgs.agent-vm.components.exes.agent-vm;
+            drv = pkgs.agent-vm;
           };
 
           # Python integration test executable for comprehensive testing
@@ -123,13 +127,7 @@
 
           # Haskell integration test stub (to be implemented)
           integration-test = flake-utils.lib.mkApp {
-            drv = pkgs.writeShellApplication {
-              name = "integration-test";
-              text = ''
-                echo "Haskell integration tests not yet implemented"
-                exit 1
-              '';
-            };
+            drv = pkgs.agent-vm-test;
           };
 
           # Default app is the agent-vm-py tool (for now)
@@ -247,6 +245,8 @@
         checks = {
           # Ensure agent-vm-py builds correctly
           agent-vm-py-build = pkgs.agent-vm-py;
+
+          agent-vm-package-tests = pkgs.hixProject.getComponent "agent-vm:test:spec";
 
           # Ensure all MCP packages build
           mcp-packages-build = pkgs.symlinkJoin {
