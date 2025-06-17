@@ -102,14 +102,26 @@
 
         # Apps for running the agent
         apps = rec {
-          # Main agent VM app (Python version) - for backward compatibility
-          agent-vm-py = flake-utils.lib.mkApp {
-            drv = pkgs.agent-vm-py;
-          };
-
           # Haskell agent-vm app (new implementation)
           agent-vm = flake-utils.lib.mkApp {
-            drv = pkgs.agent-vm;
+            drv = pkgs.writeShellApplication {
+              name = "agent-vm";
+              runtimeInputs = [ pkgs.agent-vm ];
+              text = ''
+                exec agent-vm-test "$@"
+              '';
+            };
+          };
+
+          # Haskell integration test stub (to be implemented)
+          integration-test = flake-utils.lib.mkApp {
+            drv = pkgs.writeShellApplication {
+              name = "integration-test";
+              runtimeInputs = [ pkgs.agent-vm-test ];
+              text = ''
+                exec agent-vm-test "$@"
+              '';
+            };
           };
 
           # Python integration test executable for comprehensive testing
@@ -125,20 +137,14 @@
             };
           };
 
-          # Haskell integration test stub (to be implemented)
-          integration-test = flake-utils.lib.mkApp {
-            drv = pkgs.agent-vm-test;
-          };
-
-          # Default app is the agent-vm-py tool (for now)
           default = agent-vm;
 
           # Convenience aliases for VM management
           create-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "create-vm";
-              runtimeInputs = [ pkgs.agent-vm-py ];
-              text = "exec agent-vm-py create \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm ];
+              text = "exec agent-vm create \"$@\"";
             };
           };
           update-materialization = flake-utils.lib.mkApp {
@@ -219,24 +225,24 @@
           start-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "start-vm";
-              runtimeInputs = [ pkgs.agent-vm-py ];
-              text = "exec agent-vm-py start \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm ];
+              text = "exec agent-vm start \"$@\"";
             };
           };
 
           stop-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "stop-vm";
-              runtimeInputs = [ pkgs.agent-vm-py ];
-              text = "exec agent-vm-py stop \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm ];
+              text = "exec agent-vm stop \"$@\"";
             };
           };
 
           shell-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "shell-vm";
-              runtimeInputs = [ pkgs.agent-vm-py ];
-              text = "exec agent-vm-py shell \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm ];
+              text = "exec agent-vm shell \"$@\"";
             };
           };
         };

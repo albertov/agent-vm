@@ -10,14 +10,16 @@ module AgentVM.Config
     saveVMConfig,
     vmConfigFromJson,
     vmConfigToJson,
+    initConfig,
   )
 where
 
 import AgentVM.Types (BranchName, VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace), unBranchName)
-import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), camelTo2, defaultOptions, eitherDecodeFileStrict', encodeFile, fieldLabelModifier, genericParseJSON, genericToJSON)
+import Data.Aeson (FromJSON, ToJSON, eitherDecodeFileStrict', encodeFile)
 import qualified Data.Text as T
 import Data.Time (UTCTime)
-import Protolude (Bool (True), Either (Left, Right), Eq, FilePath, Generic, IO, Int, Maybe, Show, Text, pure, ($))
+import Data.Time.Clock (getCurrentTime)
+import Protolude (Bool (True), Either (Left, Right), Eq, FilePath, Generic, IO, Int, Maybe (Nothing), Show, Text, pure, ($))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 
@@ -83,3 +85,22 @@ saveVMConfig stateDir branch config = do
       configPath = branchDir </> "config.json"
   createDirectoryIfMissing True branchDir
   encodeFile configPath config
+
+-- | Initialize a test VM configuration for integration testing
+initConfig :: FilePath -> Text -> IO VMConfigJson
+initConfig configPath branchName = do
+  currentTime <- getCurrentTime
+  pure $
+    VMConfigJson
+      { vm_name = branchName,
+        host = "localhost",
+        port = 8080,
+        ssh_port = 2222,
+        ssh_key_path = configPath </> "ssh_key",
+        workspace_path = configPath </> "workspace",
+        nix_config_path = configPath </> "vm-config.nix",
+        created_at = currentTime,
+        upstream_repo = Nothing,
+        host_uid = 1000,
+        host_gid = 1000
+      }

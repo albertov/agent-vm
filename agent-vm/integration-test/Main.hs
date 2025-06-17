@@ -3,14 +3,35 @@
 
 module Main (main, withTempStateDir, testVMConfig) where
 
+import AgentVM (createVM, destroyVM)
+import AgentVM.Config (initConfig)
+import AgentVM.Log (createLogContext)
 import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace))
-import Protolude (FilePath, IO, ($))
+import Protolude (FilePath, IO, ($), (.), (<>))
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Hspec (Spec, describe, hspec, it, pending)
+import Test.Hspec (Spec, describe, hspec, it, pending, shouldBe)
+import UnliftIO (bracket)
 
 spec :: Spec
 spec = describe "Agent VM Integration Tests" $ do
   describe "VM Lifecycle" $ do
+    it "can create and destroy a VM" $ do
+      withTempStateDir $ \stateDir -> do
+        -- Initialize configuration with test state directory
+        config <- initConfig (stateDir <> "/config.json") "test-branch"
+
+        -- Create log context for testing
+        logCtx <- createLogContext
+
+        -- Define test VM configuration
+        let vmConfig = testVMConfig (stateDir <> "/workspace")
+
+        -- Create VM and verify it exists
+        bracket
+          (createVM logCtx config vmConfig)
+          (\_ -> destroyVM logCtx config)
+          (`shouldBe` ())
+
     it "completes full create-start-stop-destroy cycle" $ do
       pending -- TODO: Implement
     it "handles VM restart correctly" $ do
