@@ -1,7 +1,7 @@
-{ lib
-, python3
-, fetchPypi
-, inputs
+{
+  lib,
+  python3,
+  inputs,
 }:
 python3.pkgs.buildPythonApplication rec {
   pname = "mcp-proxy";

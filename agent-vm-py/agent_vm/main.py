@@ -6,7 +6,6 @@ The core VM management functionality is in vm_controller.py.
 """
 
 import subprocess
-import sys
 from typing import Optional
 
 import typer
@@ -44,7 +43,6 @@ def _setup_global_options(
     timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Set up global options that apply to all commands."""
-    from agent_vm.vm_controller import _global_debug
 
     _global_state["state_dir"] = state_dir
     _global_state["verbose"] = verbose

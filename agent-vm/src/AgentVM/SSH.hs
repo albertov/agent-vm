@@ -1,14 +1,14 @@
 -- | SSH management for VMs
 module AgentVM.SSH
-  ( generateSSHKey
-  , waitForSSH
-  , sshExec
-  , trySSHConnect
-  ) where
-
-import Protolude (IO, FilePath, Text, Int, Bool, Either, notImplemented)
+  ( generateSSHKey,
+    waitForSSH,
+    sshExec,
+    trySSHConnect,
+  )
+where
 
 import AgentVM.Log (AgentVmTrace, LogAction)
+import Protolude (Bool, Either, FilePath, IO, Int, Text, notImplemented)
 
 -- | Generate SSH keypair
 generateSSHKey :: FilePath -> IO ()

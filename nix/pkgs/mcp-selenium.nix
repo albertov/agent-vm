@@ -1,11 +1,11 @@
-{ lib
-, stdenv
-, inputs
-, buildNpmPackage
-, makeWrapper
-, chromium
-, chromedriver
-, nodejs
+{
+  lib,
+  inputs,
+  buildNpmPackage,
+  makeWrapper,
+  chromium,
+  chromedriver,
+  nodejs,
 }:
 
 buildNpmPackage rec {
@@ -35,7 +35,12 @@ buildNpmPackage rec {
       --add-flags "$out/lib/node_modules/@angiejones/mcp-selenium/src/lib/server.js" \
       --set CHROME_BIN ${chromium}/bin/chromium \
       --set CHROME_PATH ${chromium}/lib/chromium \
-      --prefix PATH : ${lib.makeBinPath [ chromium chromedriver ]} \
+      --prefix PATH : ${
+        lib.makeBinPath [
+          chromium
+          chromedriver
+        ]
+      } \
       --set PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
   '';
 
@@ -50,7 +55,7 @@ buildNpmPackage rec {
     longDescription = ''
       MCP Selenium provides browser automation capabilities through the Model Context Protocol,
       enabling AI agents and other MCP clients to control web browsers using Selenium WebDriver.
-      
+
       Features include:
       - Start browser sessions with customizable options
       - Navigate to URLs and interact with web elements

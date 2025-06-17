@@ -1,17 +1,20 @@
-inputs: final: prev:
-{
+inputs: final: prev: {
 
-  mkMCPDevServers = { name ? "start-agent", shell, pkgs ? final }:
+  mkMCPDevServers =
+    {
+      name ? "start-agent",
+      shell,
+      pkgs ? final,
+    }:
     let
       hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-      shellInputs =
-        shell.buildInputs or [ ]
-        ++ shell.nativeBuildInputs or [ ];
+      shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
 
     in
     pkgs.writeShellApplication {
       inherit name;
-      runtimeInputs = with pkgs;
+      runtimeInputs =
+        with pkgs;
         [
           git
           nix
@@ -21,7 +24,8 @@ inputs: final: prev:
           rescript-language-server
           inputs.mcp-selenium.packages.${system}.default
           inputs.mcp-nixos.packages.${system}.default
-        ] ++ shellInputs;
+        ]
+        ++ shellInputs;
       excludeShellChecks = [
         "SC1091" # So we can 'source' the shellHook
       ];
@@ -30,7 +34,6 @@ inputs: final: prev:
         ${builtins.readFile ../start.sh}
       '';
     };
-
 
   python3 = final.lib.recursiveUpdate prev.python3 {
     pkgs.agno = final.callPackage ./pkgs/agno.nix { };
@@ -48,8 +51,7 @@ inputs: final: prev:
     inherit inputs;
   };
 
-  mcp-selenium =
-    inputs.mcp-selenium.packages.${final.system}.mcp-selenium-hs;
+  mcp-selenium = inputs.mcp-selenium.packages.${final.system}.mcp-selenium-hs;
 
   # ReScript language server from rescript-lsp input
   rescript-language-server = inputs.rescript-lsp.packages.${final.system}.default;
@@ -62,17 +64,20 @@ inputs: final: prev:
     format = "pyproject";
 
     # Runtime dependencies
-    propagatedBuildInputs = with final; with final.python3.pkgs; [
-      git
-      openssh
-      qemu
-      curl
-      typer
-      # For agent-vm-tests
-      pytest
-      pytest-timeout
-      pytest-cov
-    ];
+    propagatedBuildInputs =
+      with final;
+      with final.python3.pkgs;
+      [
+        git
+        openssh
+        qemu
+        curl
+        typer
+        # For agent-vm-tests
+        pytest
+        pytest-timeout
+        pytest-cov
+      ];
 
     # Test dependencies for build-time testing
     nativeBuildInputs = [
@@ -103,7 +108,10 @@ inputs: final: prev:
     '';
 
     # Type checking during build
-    pythonImportsCheck = [ "agent_vm.main" "agent_vm.vm_controller" ];
+    pythonImportsCheck = [
+      "agent_vm.main"
+      "agent_vm.vm_controller"
+    ];
 
     meta = with final.lib; {
       description = "VM control tool for managing development VMs";

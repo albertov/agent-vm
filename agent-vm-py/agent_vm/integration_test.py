@@ -37,7 +37,6 @@ All arguments after -- are passed directly to pytest.
 import logging
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time

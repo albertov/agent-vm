@@ -2,13 +2,11 @@
 Test configuration and shared fixtures for agent-vm tests.
 """
 
-import os
 import tempfile
-import shutil
 from pathlib import Path
-from typing import Dict, Generator, Optional
+from typing import Dict, Generator
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import json
 
 # Import the module under test

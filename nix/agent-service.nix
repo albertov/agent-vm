@@ -1,5 +1,10 @@
 # agent-service.nix
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.agent-mcp;
@@ -69,14 +74,24 @@ in
         devServers = pkgs.mkMCPDevServers {
           inherit (cfg) name pkgs;
           # Use the provided shell or create a minimal default
-          shell = if cfg.shell != null then cfg.shell else pkgs.mkShell {
-            buildInputs = with pkgs; [ git curl ];
-          };
+          shell =
+            if cfg.shell != null then
+              cfg.shell
+            else
+              pkgs.mkShell {
+                buildInputs = with pkgs; [
+                  git
+                  curl
+                ];
+              };
         };
       in
       {
         description = "Agent MCP Service";
-        after = [ "network.target" "multi-user.target" ];
+        after = [
+          "network.target"
+          "multi-user.target"
+        ];
         wantedBy = [ "multi-user.target" ];
 
         serviceConfig = {

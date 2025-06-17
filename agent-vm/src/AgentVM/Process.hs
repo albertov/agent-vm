@@ -1,15 +1,15 @@
 -- | Process management for VMs
 module AgentVM.Process
-  ( startVMProcess
-  , stopVMProcess
-  , checkVMProcess
-  , waitForProcess
-  ) where
-
-import Protolude (IO, FilePath, Int, Bool, Maybe, notImplemented)
+  ( startVMProcess,
+    stopVMProcess,
+    checkVMProcess,
+    waitForProcess,
+  )
+where
 
 import AgentVM.Log (AgentVmTrace, LogAction)
-import System.Process.Typed (Process, ExitCode)
+import Protolude (Bool, FilePath, IO, Int, Maybe, notImplemented)
+import System.Process.Typed (ExitCode, Process)
 
 -- | Start a VM process
 startVMProcess :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())

@@ -5,11 +5,8 @@ These tests focus on individual methods and their behavior in isolation.
 """
 
 import json
-import os
-import tempfile
-import time
 from pathlib import Path
-from unittest.mock import Mock, patch, call, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 from agent_vm.vm_controller import VMController
 

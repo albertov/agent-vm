@@ -1,7 +1,8 @@
-{ inputs
-, lib
-, buildGoModule
-, fetchFromGitHub
+{
+  inputs,
+  lib,
+  buildGoModule,
+  fetchFromGitHub,
 }:
 
 buildGoModule rec {
