@@ -21,12 +21,12 @@ buildVMConfig :: LogAction IO AgentVmTrace -> BranchName -> FilePath -> IO (Eith
 buildVMConfig logger branch workspace = do
   logger <& NixBuildStarted flakeRef
 
-  let proc = setStdin closed
-           $ setStdout byteStringOutput
-           $ setStderr byteStringOutput
-           $ proc "nix" ["build", T.unpack flakeRef, "--no-link", "--print-out-paths"]
+  let procConfig = setStdin closed
+                 $ setStdout byteStringOutput
+                 $ setStderr byteStringOutput
+                 $ proc "nix" ["build", T.unpack flakeRef, "--no-link", "--print-out-paths"]
 
-  withProcessWait proc $ \p -> do
+  withProcessWait procConfig $ \p -> do
     exitCode <- waitExitCode p
     stdout <- atomically $ getStdout p
     stderr <- atomically $ getStderr p
@@ -46,10 +46,10 @@ buildVMConfig logger branch workspace = do
 -- | Run Nix-generated VM script
 runVMScript :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
 runVMScript logger scriptPath = do
-  let proc = setStdin closed
-           $ setStdout createPipe
-           $ setStderr createPipe
-           $ proc scriptPath []
+  let procConfig = setStdin closed
+                 $ setStdout createPipe
+                 $ setStderr createPipe
+                 $ proc scriptPath []
 
   logger <& ProcessSpawned (T.pack scriptPath) []
-  startProcess proc
+  startProcess procConfig
