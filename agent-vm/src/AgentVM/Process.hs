@@ -14,6 +14,8 @@ import Protolude
 import System.Process.Typed (ExitCode, Process, getExitCode, proc, startProcess)
 
 -- | Start a VM process
+-- TODO: This should be capturing stderr and stdout of the process and tracing
+-- them with the logger line by line for better debugging
 startVMProcess :: IOTracer AgentVmTrace -> FilePath -> IO (Process () () ())
 startVMProcess (IOTracer logger) scriptPath = do
   logger <& ProcessSpawned (T.pack scriptPath) []
@@ -24,6 +26,7 @@ stopVMProcess :: IOTracer AgentVmTrace -> Process () () () -> IO ()
 stopVMProcess = notImplemented
 
 -- | Check if VM process is still running
+-- FIXME: This should return a ProcessState sum type to avoid boolean blindness
 checkVMProcess :: Process () () () -> IO Bool
 checkVMProcess process = do
   exitCode <- getExitCode process

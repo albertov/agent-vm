@@ -74,6 +74,8 @@ unregisterVM registry branch =
   modifyTVar' (vmMap registry) (Map.delete branch)
 
 -- | Allocate a free port
+-- FIXME: This function should also be probing that the port is
+-- actually free
 allocatePort :: VMRegistry -> Int -> STM (Either VMError Int)
 allocatePort registry startPort = do
   ports <- readTVar (vmPorts registry)

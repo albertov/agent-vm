@@ -52,6 +52,8 @@ data Severity
   deriving (Show, Eq, Ord, Generic)
 
 -- | All possible log events in the system
+-- FIXME: I want much more context in the constructors
+-- here so we can debug better
 data AgentVmTrace
   = -- VM Lifecycle
     VMCreated BranchName VMConfig
