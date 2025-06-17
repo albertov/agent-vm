@@ -88,9 +88,7 @@ createVM registry branch config = do
       return $ Right ()
 ```
 
-### 3. Contravariant Logging with co-log
-
-Note: The requirement mentions "plow-log" but this appears to be either an internal library or a typo. The standard contravariant logging library in Haskell is co-log, which provides the same functionality.
+### 3. Contravariant Logging with plow-log
 
 ```haskell
 -- Sum type for all possible log events
@@ -116,7 +114,7 @@ showTrace level trace = case (level, trace) of
   (Error, SSHConnectionFailed b e) -> "❌ SSH failed for " <> b <> ": " <> e
   -- ... etc
 
--- Using co-log's contravariant interface
+-- Using plow-log's contravariant interface
 vmLogger :: LogAction IO AgentVmTrace
 vmLogger = contramap (showTrace Info) logTextStdout
 ```
