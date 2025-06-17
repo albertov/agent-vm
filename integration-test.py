@@ -18,6 +18,9 @@ Usage:
     # Run with debug output
     integration-test --debug -s
 
+    # Keep test VMs and state directories
+    integration-test --keep
+
     # Pass pytest options after -- separator
     integration-test --debug -- -k test_vm_creation -v
 
@@ -26,24 +29,21 @@ Options:
     --timeout SECONDS    Timeout for VM operations (default: 120)
     --debug             Enable debug mode with full output capture
     --verbose           Enable verbose logging
+    --keep              Keep test VMs and state directories after tests complete
 
 All arguments after -- are passed directly to pytest.
 """
 
-import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
-from typing import Dict, Optional, List, Tuple
-from unittest.mock import Mock
+from typing import Optional, List
 
 import pytest
-import typer
-from typer import Context
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -67,11 +67,14 @@ def setup_logging(verbose: bool = False):
 class IntegrationTestConfig:
     """Configuration for integration tests."""
     def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False,
-                 debug: bool = False, timeout: int = 120):
+                 debug: bool = False, timeout: int = 120, keep: bool = False,
+                 state_dir: Optional[str] = None):
         self.agent_vm_cmd = agent_vm_cmd
         self.verbose = verbose
         self.debug = debug
         self.timeout = timeout
+        self.keep = keep
+        self.state_dir = state_dir
 
 
 # Global test configuration
@@ -82,12 +85,33 @@ def get_test_config() -> IntegrationTestConfig:
     """Get the current test configuration."""
     global test_config
     if test_config is None:
-        # Default configuration if not set
-        test_config = IntegrationTestConfig()
+        # Load configuration from environment variables set by main()
+        test_config = IntegrationTestConfig(
+            agent_vm_cmd=os.environ.get("INTEGRATION_TEST_AGENT_VM_CMD", "agent-vm"),
+            verbose=os.environ.get("INTEGRATION_TEST_VERBOSE", "False").lower() == "true",
+            debug=os.environ.get("INTEGRATION_TEST_DEBUG", "False").lower() == "true",
+            timeout=int(os.environ.get("INTEGRATION_TEST_TIMEOUT", "120")),
+            keep=os.environ.get("INTEGRATION_TEST_KEEP", "False").lower() == "true",
+            state_dir=os.environ.get("INTEGRATION_TEST_STATE_DIR")
+        )
     return test_config
 
 
 # --- Pytest Test Cases ---
+
+def build_agent_vm_cmd(base_cmd: List[str], config: IntegrationTestConfig) -> List[str]:
+    """Build agent-vm command with state directory option if configured."""
+    cmd = [config.agent_vm_cmd]
+
+    # First, add state-dir option if configured
+    if config.state_dir:
+        cmd.extend(["--state-dir", config.state_dir])
+
+    # Then add all the other arguments
+    cmd.extend(base_cmd)
+
+    return cmd
+
 
 def test_vm_creation():
     """Test VM creation workflow."""
@@ -97,8 +121,9 @@ def test_vm_creation():
     try:
         # Create VM using the correct option syntax
         logger.info(f"Creating VM: {vm_name}")
+        cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
         result = subprocess.run(
-            [config.agent_vm_cmd, "create", "--host", "localhost", "--port", "8000", "--branch", vm_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
@@ -112,8 +137,9 @@ def test_vm_creation():
     finally:
         # Cleanup
         logger.info(f"Cleaning up VM: {vm_name}")
+        cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "destroy", vm_name],
+            cleanup_cmd,
             capture_output=True,
             timeout=30
         )
@@ -123,19 +149,21 @@ def test_debug_and_verbose_options():
     """Test that debug and verbose options work correctly."""
     config = get_test_config()
 
-    # Test help with debug flag
+    # Test list with debug flag
+    cmd = build_agent_vm_cmd(["--debug", "list"], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "--debug", "help"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=10
     )
 
-    assert result.returncode == 0, f"Debug help command failed: {result.stderr}"
+    assert result.returncode == 0, f"Debug list command failed: {result.stderr}"
 
     # Test verbose flag
+    cmd = build_agent_vm_cmd(["--verbose", "list"], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "--verbose", "list"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=10
@@ -150,8 +178,9 @@ def test_timeout_parameter_handling():
     config = get_test_config()
 
     # Check help output includes --timeout
+    cmd = build_agent_vm_cmd(["--help"], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "--help"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=10
@@ -161,8 +190,9 @@ def test_timeout_parameter_handling():
     assert "--timeout" in result.stdout, "--timeout option not found in help output"
 
     # Test that timeout parameter is accepted
+    cmd = build_agent_vm_cmd(["--timeout", "60", "list"], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "--timeout", "60", "list"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=10
@@ -176,8 +206,12 @@ def test_vm_listing():
     """Test VM listing functionality."""
     config = get_test_config()
 
+    if config.state_dir:
+        logger.info(f"Using state directory: {config.state_dir}")
+
+    cmd = build_agent_vm_cmd(["list"], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "list"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=config.timeout
@@ -194,15 +228,17 @@ def test_vm_status():
 
     try:
         # Create VM first
+        cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "create", "--host", "localhost", "--port", "8000", "--branch", vm_name],
+            cmd,
             capture_output=True,
             timeout=config.timeout
         )
 
         # Check status
+        cmd = build_agent_vm_cmd(["status", vm_name], config)
         result = subprocess.run(
-            [config.agent_vm_cmd, "status", vm_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
@@ -214,8 +250,9 @@ def test_vm_status():
 
     finally:
         # Cleanup
+        cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "destroy", vm_name],
+            cleanup_cmd,
             capture_output=True,
             timeout=30
         )
@@ -228,15 +265,17 @@ def test_vm_start_stop_cycle():
 
     try:
         # Create VM
+        cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "create", "--host", "localhost", "--port", "8000", "--branch", vm_name],
+            cmd,
             capture_output=True,
             timeout=config.timeout
         )
 
         # Start VM
+        cmd = build_agent_vm_cmd(["start", vm_name], config)
         result = subprocess.run(
-            [config.agent_vm_cmd, "start", vm_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
@@ -250,11 +289,16 @@ def test_vm_start_stop_cycle():
             if "SSH connectivity" in result.stderr or "VM ready" in result.stderr:
                 logger.info("✓ VM start attempted (SSH not available in test mode)")
             else:
-                assert False, f"VM start failed unexpectedly: {result.stderr}"
+                # Log more details about the failure
+                logger.error(f"VM start failed with return code: {result.returncode}")
+                logger.error(f"stdout: {result.stdout}")
+                logger.error(f"stderr: {result.stderr}")
+                assert False, f"VM start failed unexpectedly: return_code={result.returncode}, stderr='{result.stderr}', stdout='{result.stdout}'"
 
         # Stop VM
+        cmd = build_agent_vm_cmd(["stop", vm_name], config)
         result = subprocess.run(
-            [config.agent_vm_cmd, "stop", vm_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
@@ -266,8 +310,9 @@ def test_vm_start_stop_cycle():
 
     finally:
         # Cleanup
+        cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "destroy", vm_name],
+            cleanup_cmd,
             capture_output=True,
             timeout=30
         )
@@ -280,22 +325,25 @@ def test_agent_service_startup():
 
     try:
         # Create and start VM
+        cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "create", "--host", "localhost", "--port", "8000", "--branch", vm_name],
+            cmd,
             capture_output=True,
             timeout=config.timeout
         )
 
-        result = subprocess.run(
-            [config.agent_vm_cmd, "start", vm_name],
+        cmd = build_agent_vm_cmd(["start", vm_name], config)
+        subprocess.run(
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
         )
 
         # Check if service status can be queried
+        cmd = build_agent_vm_cmd(["status", vm_name], config)
         status_result = subprocess.run(
-            [config.agent_vm_cmd, "status", vm_name],
+            cmd,
             capture_output=True,
             text=True,
             timeout=config.timeout
@@ -310,13 +358,15 @@ def test_agent_service_startup():
 
     finally:
         # Cleanup
+        stop_cmd = build_agent_vm_cmd(["stop", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "stop", vm_name],
+            stop_cmd,
             capture_output=True,
             timeout=30
         )
+        destroy_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
         subprocess.run(
-            [config.agent_vm_cmd, "destroy", vm_name],
+            destroy_cmd,
             capture_output=True,
             timeout=30
         )
@@ -328,15 +378,17 @@ def test_vm_destruction():
     vm_name = f"test-vm-{int(time.time())}"
 
     # Create VM
+    cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
     subprocess.run(
-        [config.agent_vm_cmd, "create", "--host", "localhost", "--port", "8000", "--branch", vm_name],
+        cmd,
         capture_output=True,
         timeout=config.timeout
     )
 
     # Destroy VM
+    cmd = build_agent_vm_cmd(["destroy", vm_name], config)
     result = subprocess.run(
-        [config.agent_vm_cmd, "destroy", vm_name],
+        cmd,
         capture_output=True,
         text=True,
         timeout=config.timeout
@@ -345,8 +397,9 @@ def test_vm_destruction():
     assert result.returncode == 0, f"VM destruction failed: {result.stderr}"
 
     # Verify VM is gone
+    cmd = build_agent_vm_cmd(["list"], config)
     list_result = subprocess.run(
-        [config.agent_vm_cmd, "list"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=config.timeout
@@ -393,6 +446,8 @@ Note: Arguments after -- are passed directly to pytest.
                         help='Enable debug mode with full output')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Enable verbose logging')
+    parser.add_argument('--keep', action='store_true',
+                        help='Keep test VMs and state directories after tests complete')
 
     # Common pytest shortcuts (before --)
     parser.add_argument('-k', dest='pytest_k', metavar='EXPRESSION',
@@ -409,17 +464,25 @@ Note: Arguments after -- are passed directly to pytest.
     # Parse arguments
     args = parser.parse_args()
 
+    # Set up logging early so we can see temp directory creation
+    setup_logging(verbose=args.verbose or args.debug)
+
+    # Create temporary state directory for tests
+    temp_state_dir = None
+    if not args.keep:
+        temp_state_dir = tempfile.mkdtemp(prefix="agent-vm-test-", suffix="-state")
+        logger.info(f"Created temporary state directory: {temp_state_dir}")
+
     # Set up global configuration
     global test_config
     test_config = IntegrationTestConfig(
         agent_vm_cmd=args.agent_vm,
         verbose=args.verbose or args.debug,
         debug=args.debug,
-        timeout=args.timeout
+        timeout=args.timeout,
+        keep=args.keep,
+        state_dir=temp_state_dir
     )
-
-    # Set up logging
-    setup_logging(verbose=test_config.verbose)
 
     logger.info("🚀 Starting agent-vm integration tests using pytest")
     logger.info(f"Using agent-vm command: {test_config.agent_vm_cmd}")
@@ -430,6 +493,9 @@ Note: Arguments after -- are passed directly to pytest.
     os.environ["INTEGRATION_TEST_VERBOSE"] = str(test_config.verbose)
     os.environ["INTEGRATION_TEST_DEBUG"] = str(test_config.debug)
     os.environ["INTEGRATION_TEST_TIMEOUT"] = str(test_config.timeout)
+    os.environ["INTEGRATION_TEST_KEEP"] = str(test_config.keep)
+    if test_config.state_dir:
+        os.environ["INTEGRATION_TEST_STATE_DIR"] = test_config.state_dir
 
     # Build pytest arguments
     pytest_argv = [__file__]  # Run tests from this file
@@ -472,14 +538,25 @@ Note: Arguments after -- are passed directly to pytest.
         else:
             logger.error("❌ Integration tests FAILED")
 
-        sys.exit(exit_code)
-
     except KeyboardInterrupt:
         logger.info("Integration tests cancelled by user")
-        sys.exit(130)
+        exit_code = 130
     except Exception as e:
         logger.error(f"Unexpected error during integration tests: {e}")
-        sys.exit(1)
+        exit_code = 1
+
+    finally:
+        # Clean up temporary state directory if not keeping
+        if temp_state_dir and not args.keep:
+            try:
+                shutil.rmtree(temp_state_dir)
+                logger.info(f"Cleaned up temporary state directory: {temp_state_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary state directory: {e}")
+        elif args.keep and temp_state_dir:
+            logger.info(f"Keeping temporary state directory: {temp_state_dir}")
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -18,10 +18,14 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] All integration-tests should use an temporary directory as state_dir and these
+- [x] All integration-tests should use a temporary directory as state_dir and these
   directories should be removed when the integration-tests finish regardless of
-  exceptions. Only keep the if the --keep flag is passed to integration tests
+  exceptions. Only keep them if the --keep flag is passed to integration tests
   (add it)
+  - Added --keep flag to integration-test.py
+  - Integration tests now create temporary state directory by default
+  - Directory is automatically cleaned up on test completion (unless --keep is used)
+  - All test commands now use --state-dir option to isolate test VMs
 - [ ] disk images should not live in the workspace/git-clone got in the VM's
   state directory
   - Modified VM startup to run from vm-state subdirectory in the state directory
