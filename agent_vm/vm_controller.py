@@ -593,6 +593,10 @@ class VMController:
         host_uid = config_data.get("host_uid", os.getuid())
         host_gid = config_data.get("host_gid", os.getgid())
 
+        # Avoid GID conflicts with system groups (100 is commonly used by 'users' group)
+        # If host GID is less than 1000 (system range), use a safe user-range GID
+        agent_gid = host_gid if host_gid >= 1000 else 10000 + host_gid
+
         return f'''
 let
   flake = builtins.getFlake "{workspace_dir}";
@@ -616,11 +620,15 @@ in
         virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = pkgs.lib.mkForce "{workspace_dir}";
 
         # Set agent user's uid and gid to match host user for permission compatibility
-        users.users.agent = {{
+        users.users.agent = pkgs.lib.mkForce {{
           uid = {host_uid};
           home = "/workspace";
+          isNormalUser = true;
+          group = "agent";
+          createHome = false;
+          shell = pkgs.bash;
         }};
-        users.groups.agent.gid = {host_gid};
+        users.groups.agent.gid = {agent_gid};
       }}
     ];
   }}).config.system.build.vm
@@ -1041,7 +1049,7 @@ in
             logger.error("  • Ensure sufficient memory and disk space")
             logger.error("  • Try: agent-vm destroy && agent-vm create")
             logger.error(f"  • View verbose logs with: agent-vm --debug start {branch}")
-            logger.error(f"  • Check VM console output manually")
+            logger.error("  • Check VM console output manually")
             sys.exit(1)
 
     def stop_vm(self, branch: Optional[str] = None) -> None:
@@ -1650,7 +1658,7 @@ in
         """Check SSH connectivity with detailed diagnostics."""
         ssh_status = {'connected': False}
 
-        logger.debug(f"🔍 === SSH CONNECTIVITY DIAGNOSTICS ===")
+        logger.debug("🔍 === SSH CONNECTIVITY DIAGNOSTICS ===")
         logger.debug(f"🔍 SSH Key Path: {ssh_key_path}")
         logger.debug(f"🔍 SSH Key Exists: {ssh_key_path.exists()}")
         logger.debug(f"🔍 SSH Port: {ssh_port}")
@@ -1755,7 +1763,7 @@ in
             ssh_status['error'] = f"Unexpected SSH error: {e}"
             logger.debug(f"❌ SSH connectivity failed: unexpected error {e}")
 
-        logger.debug(f"🔍 === SSH DIAGNOSTICS COMPLETE ===")
+        logger.debug("🔍 === SSH DIAGNOSTICS COMPLETE ===")
         return ssh_status
 
     def _check_agent_service_detailed(self, ssh_key_path: Path, ssh_port: int = 2222) -> Dict[str, any]:
