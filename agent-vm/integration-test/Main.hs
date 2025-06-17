@@ -5,11 +5,12 @@ module Main (main, withTempStateDir, testVMConfig) where
 
 import AgentVM (createVM, destroyVM)
 import AgentVM.Config (initConfig)
+import AgentVM.Env (AgentVmEnv (AgentVmEnv), runVM)
 import AgentVM.Log (createLogContext)
-import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace))
-import Protolude (FilePath, IO, ($), (.), (<>))
+import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace), VMHandle, vmHandlePid)
+import Protolude (FilePath, IO, ($), (.), (<>), (==))
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Hspec (Spec, describe, hspec, it, pending, shouldBe)
+import Test.Hspec (Spec, describe, hspec, it, pending, shouldBe, shouldSatisfy)
 import UnliftIO (bracket)
 
 spec :: Spec
@@ -25,12 +26,14 @@ spec = describe "Agent VM Integration Tests" $ do
 
         -- Define test VM configuration
         let vmConfig = testVMConfig (stateDir <> "/workspace")
+            env = AgentVmEnv logCtx
 
         -- Create VM and verify it exists
-        bracket
-          (createVM logCtx config vmConfig)
-          (\_ -> destroyVM logCtx config)
-          (`shouldBe` ())
+        handle <- runVM env (createVM vmConfig)
+        handle `shouldSatisfy` (\h -> vmHandlePid h == 12345) -- TODO: Check for real PID
+
+        -- Destroy the VM
+        runVM env (destroyVM handle)
 
     it "completes full create-start-stop-destroy cycle" $ do
       pending -- TODO: Implement

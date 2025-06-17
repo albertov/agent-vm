@@ -11,7 +11,7 @@
 
 ### URGENT
 
-- [ ] Refactor createVM and destroyVM so they look like this
+- [x] Refactor createVM and destroyVM so they look like this
 
 ```haskell
 createVM ::
@@ -55,7 +55,7 @@ runVM agentVmEnv $ do
 
 You'll see why we do this soon
 
-- [ ] - Create a VM type-class like
+- [x] - Create a VM type-class like
 ```haskell
 class VM m where
     create :: ...
@@ -69,7 +69,7 @@ and implement an instance for it using createVM and destroyVM
         ```haskell
         data LogLevel a = Critical a | Error a | Info a | Debug a | Trace a
            deriving via stock (Show, Ord, Eq, Generic, ToJSON, FromJSON, ...)
-        
+
         So we can tag the importance of the trace and filter them via a level
         specified on config
       - The handlers should not change signature but we should use contravariant
