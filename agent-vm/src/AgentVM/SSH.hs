@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+
 -- | SSH management for VMs
 module AgentVM.SSH
   ( generateSSHKey,
@@ -8,15 +11,26 @@ module AgentVM.SSH
 where
 
 import AgentVM.Log (AgentVmTrace)
-import Plow.Logging (IOTracer)
-import Protolude (Bool, Either, FilePath, IO, Int, Text, notImplemented)
+import Data.Generics.Product (HasType, the)
+import Lens.Micro.Mtl (view)
+import Plow.Logging (IOTracer, traceWith)
+import Protolude
 
 -- | Generate SSH keypair
 generateSSHKey :: FilePath -> IO ()
 generateSSHKey = notImplemented
 
 -- | Wait for SSH to become available
-waitForSSH :: IOTracer AgentVmTrace -> Text -> Int -> FilePath -> Int -> IO Bool
+waitForSSH ::
+  ( MonadReader env m,
+    HasType (IOTracer AgentVmTrace) env,
+    MonadIO m
+  ) =>
+  Text ->
+  Int ->
+  FilePath ->
+  Int ->
+  m Bool
 waitForSSH = notImplemented
 
 -- | Execute command over SSH
