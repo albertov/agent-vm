@@ -205,6 +205,7 @@ def _get_last_lines(file_path: str, num_lines: int = 20) -> List[str]:
         return []
 
 
+# FIXME: Reuse ProcessWithOutput to implement this
 def run_subprocess(cmd: List[str], state_dir: Optional[Path] = None, vm_name: Optional[str] = None, debug: bool = False, **kwargs) -> subprocess.CompletedProcess:
     """
     Run subprocess with stdout/stderr captured to tempfiles in state directory.

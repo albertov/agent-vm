@@ -12,8 +12,13 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] All python code should be under agent-vm. Run integration tests an help me
-  out finish the refactor I started
+- [ ] Move logging and other utility functions from integration_tests.py and vm_controller.py into
+  a common utils module making sure there is no duplicated functionality.
+  vm_controller.py should only contain VMController and other very closely
+  coupled functions.
+- [ ] Need to reduce code duplication in agent-vm. Scan for the FIXME and TODO I
+  left you.
+- [ ] Integration tests are not passing
 
 
 - [x] **CLI Code Refactor** ✅
