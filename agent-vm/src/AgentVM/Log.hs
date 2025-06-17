@@ -41,47 +41,47 @@ data Severity
 -- | All possible log events in the system
 data AgentVmTrace
   = -- VM Lifecycle
-    VMCreated { branch :: BranchName, config :: VMConfig }
-  | VMStarting { branch :: BranchName }
-  | VMStarted { branch :: BranchName, pid :: Int }
-  | VMStopping { branch :: BranchName }
-  | VMStopped { branch :: BranchName }
-  | VMDestroyed { branch :: BranchName }
-  | VMFailed { branch :: BranchName, reason :: Text }
+    VMCreated BranchName VMConfig
+  | VMStarting BranchName
+  | VMStarted BranchName Int
+  | VMStopping BranchName
+  | VMStopped BranchName
+  | VMDestroyed BranchName
+  | VMFailed BranchName Text
   -- Process Management
-  | ProcessSpawned { cmd :: Text, args :: [Text] }
-  | ProcessExited { cmd :: Text, exitCode :: Int }
-  | ProcessOutput { cmd :: Text, output :: Text }
-  | ProcessError { cmd :: Text, errorMsg :: Text }
+  | ProcessSpawned Text [Text]
+  | ProcessExited Text Int
+  | ProcessOutput Text Text
+  | ProcessError Text Text
   -- SSH Operations
-  | SSHKeyGenerated { keyPath :: FilePath }
-  | SSHConnecting { host :: Text, port :: Int }
-  | SSHConnected { host :: Text, port :: Int }
-  | SSHCommandExecuted { cmd :: Text }
-  | SSHFailed { reason :: Text }
+  | SSHKeyGenerated FilePath
+  | SSHConnecting Text Int
+  | SSHConnected Text Int
+  | SSHCommandExecuted Text
+  | SSHFailed Text
   -- Nix Operations
-  | NixBuildStarted { flakeRef :: Text }
-  | NixBuildProgress { message :: Text }
-  | NixBuildCompleted { storePath :: FilePath }
-  | NixBuildFailed { errorMsg :: Text }
+  | NixBuildStarted Text
+  | NixBuildProgress Text
+  | NixBuildCompleted FilePath
+  | NixBuildFailed Text
   -- Network Operations
-  | PortScanning { startPort :: Int }
-  | PortAllocated { port :: Int }
-  | PortReleased { port :: Int }
+  | PortScanning Int
+  | PortAllocated Int
+  | PortReleased Int
   -- Workspace Operations
-  | WorkspaceCreated { path :: FilePath }
-  | WorkspaceCloned { origin :: Text, destination :: FilePath }
-  | WorkspaceSynced { path :: FilePath }
-  | WorkspaceRemoved { path :: FilePath }
+  | WorkspaceCreated FilePath
+  | WorkspaceCloned Text FilePath
+  | WorkspaceSynced FilePath
+  | WorkspaceRemoved FilePath
   -- Agent Service
-  | AgentServiceStarting { branch :: BranchName }
-  | AgentServiceHealthy { branch :: BranchName, uptime :: Text }
-  | AgentServiceFailed { branch :: BranchName, errorMsg :: Text }
+  | AgentServiceStarting BranchName
+  | AgentServiceHealthy BranchName Text
+  | AgentServiceFailed BranchName Text
   deriving (Show, Eq, Generic)
 
 -- | Convert trace to message (full implementation)
 traceToMessage :: AgentVmTrace -> Text
-traceToMessage trace = renderTrace trace
+traceToMessage = renderTrace
 
 -- | Determine severity from trace type
 traceSeverity :: AgentVmTrace -> Severity
@@ -156,8 +156,8 @@ setSeverityColor severity =
 vmLogger :: LogAction IO AgentVmTrace
 vmLogger = LogAction $ \trace -> do
   let severity = traceSeverity trace
-      message = renderTrace trace
+      traceMessage = renderTrace trace
   setSeverityColor severity
   T.hPutStr stderr $ "[" <> T.pack (show severity) <> "] "
   setSGR [Reset]
-  T.hPutStrLn stderr message
+  T.hPutStrLn stderr traceMessage

@@ -6,10 +6,8 @@ module AgentVM.SSH
   , trySSHConnect
   ) where
 
-import AgentVM.Types
 import AgentVM.Log
 import Data.Text (Text)
-import System.Exit (ExitCode(..))
 
 -- | Generate SSH keypair
 generateSSHKey :: FilePath -> IO ()
