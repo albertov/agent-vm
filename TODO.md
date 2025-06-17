@@ -109,3 +109,90 @@ Read README.md for specs
   - Automatic VM cleanup on idle
   - Resource usage monitoring
   - Performance profiling and optimization
+
+## 📋 Code Review Findings - Practical Improvements
+
+### Quality of Life Improvements
+
+- [ ] **Better Error Messages**
+  - Add more helpful error messages when VM fails to start
+  - Include common fixes in error output (e.g., "enable virtualization in BIOS")
+  - Better feedback when SSH connection fails
+
+- [ ] **VM State Management**
+  - Add `agent-vm clean` command to remove orphaned VMs/processes
+  - Detect and handle stale PID files automatically
+  - Add `agent-vm list --all` to show VMs across all branches
+
+- [ ] **Faster VM Operations**
+  - Cache built VM images to speed up subsequent starts
+  - Add `--no-build` flag to skip Nix rebuilds when unchanged
+  - Parallel VM operations when managing multiple VMs
+
+### Developer Experience
+
+- [ ] **Better Integration Testing**
+  - Fix flaky integration tests that randomly fail
+  - Add `--keep-vm` flag to integration tests for debugging failures
+  - Make integration tests work reliably in CI environments
+
+- [ ] **Improved Debugging**
+  - Add `agent-vm debug` command to collect diagnostic info
+  - Better QEMU error output when VM fails to start
+  - Add `--trace` flag for detailed operation logging
+
+- [ ] **Documentation**
+  - Add common troubleshooting section to README
+  - Document how to increase VM resources (RAM/CPU)
+  - Add examples of using agent-vm in development workflows
+
+### Practical Features
+
+- [ ] **Resource Management**
+  - Add `agent-vm resize` to change VM resources without recreating
+  - Warn when host system is low on resources
+  - Add memory/CPU usage to `agent-vm status` output
+
+- [ ] **Workspace Improvements**
+  - Add `agent-vm sync` to manually sync workspace changes
+  - Better handling of large files in workspace
+  - Option to exclude directories from workspace sharing
+
+- [ ] **VM Templates**
+  - Support for `.agent-vm.json` config file in repos
+  - Ability to save/restore VM configurations
+  - Share VM setups between team members
+
+### Reliability
+
+- [ ] **Process Management**
+  - Better cleanup of zombie QEMU processes
+  - Handle SIGTERM/SIGINT gracefully during operations
+  - Prevent multiple VMs from using same ports
+
+- [ ] **Network Stability**
+  - Retry SSH connections with backoff
+  - Better detection of port conflicts
+  - Handle network interruptions gracefully
+
+- [ ] **State Consistency**
+  - Validate VM state before operations
+  - Atomic state updates to prevent corruption
+  - Recovery mode for broken VM configurations
+
+### Minor Enhancements
+
+- [ ] **CLI Improvements**
+  - Add shell completion for bash/zsh
+  - Colorize output for better readability
+  - Add `--json` output format for scripting
+
+- [ ] **Performance Tweaks**
+  - Optimize VirtioFS mount options for better I/O
+  - Tune QEMU settings for development workloads
+  - Profile and optimize slow operations
+
+- [ ] **macOS Support** (stretch goal)
+  - Document workarounds for macOS users
+  - Consider supporting alternative hypervisors
+  - Provide Docker-based fallback option
