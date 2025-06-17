@@ -18,19 +18,23 @@ Read README.md for specs
 
 ### URGENT
 
-- [x] **Completed**: Home directory of agent user in VM should be /workspace and have the same
-  uid and gid as the user who created the script so we don't have permission
-  problems when the host user touches that directory when collaborating
-  - Added agent user configuration with home=/workspace
-  - VM generation now sets agent uid/gid to match host user
-  - Agent service configured to run as agent user (not dev)
-- [ ] **IN PROGRESS**: disk images should not live in the workspace/git-clone got in the VM's
+- [ ] All integration-tests should use a temporary directory and these
+  directories should be removed when the integration-tests finish regardless of
+  exceptions. Only keep the if the --keep flag is passed to integration tests
+  (add it)
+- [ ] disk images should not live in the workspace/git-clone got in the VM's
   state directory
   - Modified VM startup to run from vm-state subdirectory in the state directory
   - This ensures QEMU disk images are created in ~/.local/share/agent-vms/{branch}/vm-state/
   - Prevents disk images from polluting the git workspace
 - [ ] Make sure the agent integration tests pass without disabling the agent
   service. WE NEED THIS SERVICE!
+- [x] **Completed**: Home directory of agent user in VM should be /workspace and have the same
+  uid and gid as the user who created the script so we don't have permission
+  problems when the host user touches that directory when collaborating
+  - Added agent user configuration with home=/workspace
+  - VM generation now sets agent uid/gid to match host user
+  - Agent service configured to run as agent user (not dev)
 - [x] **Fixed**: SSH connectivity issue in integration tests
   - **Issue**: SSH connections were succeeding but echo command output wasn't being captured properly
   - **Fix**: Modified `_check_ssh_connectivity` and `_wait_for_vm_ready` to accept successful SSH connections (exit code 0) even without expected echo output
@@ -112,6 +116,8 @@ Read README.md for specs
 
 ## 📋 Code Review Findings - Practical Improvements
 
+TO BE SCHEDULED
+
 ### Quality of Life Improvements
 
 - [ ] **Better Error Messages**
@@ -152,16 +158,14 @@ Read README.md for specs
   - Add `agent-vm resize` to change VM resources without recreating
   - Warn when host system is low on resources
   - Add memory/CPU usage to `agent-vm status` output
+  - Show a table with the status of all VMs
 
 - [ ] **Workspace Improvements**
-  - Add `agent-vm sync` to manually sync workspace changes
-  - Better handling of large files in workspace
-  - Option to exclude directories from workspace sharing
+  - Add `agent-vm pull` and `agent-vm push` to manually sync workspace changes
+    with origin repo.
 
 - [ ] **VM Templates**
-  - Support for `.agent-vm.json` config file in repos
-  - Ability to save/restore VM configurations
-  - Share VM setups between team members
+  - Support for `.agent-vm.yml` config file in repos
 
 ### Reliability
 
