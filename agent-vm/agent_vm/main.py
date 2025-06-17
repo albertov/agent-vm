@@ -77,6 +77,18 @@ def main_callback(
     """Main callback to handle global options."""
     _setup_global_options(state_dir, verbose, debug, timeout)
 
+def call_controller(fun):
+    try:
+        fun()
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
 
 @app.command()
 def create(
@@ -87,19 +99,7 @@ def create(
 ) -> None:
     """Create a new VM configuration."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.create_vm(host, port, branch, config)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.create_vm(host, port, branch, config))
 
 @app.command()
 def start(
@@ -107,19 +107,7 @@ def start(
 ) -> None:
     """Start VM for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.start_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.start_vm(branch))
 
 @app.command()
 def stop(
@@ -127,19 +115,7 @@ def stop(
 ) -> None:
     """Stop VM for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.stop_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.stop_vm(branch))
 
 @app.command()
 def restart(
@@ -147,19 +123,7 @@ def restart(
 ) -> None:
     """Restart VM for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.restart_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.restart_vm(branch))
 
 @app.command()
 def status(
@@ -167,19 +131,7 @@ def status(
 ) -> None:
     """Show VM status for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.vm_status(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.vm_status(branch))
 
 @app.command()
 def shell(
@@ -187,19 +139,7 @@ def shell(
 ) -> None:
     """Open SSH shell in VM for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.vm_shell(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.vm_shell(branch))
 
 @app.command()
 def logs(
@@ -207,36 +147,13 @@ def logs(
 ) -> None:
     """Show VM logs for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.vm_logs(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.vm_logs(branch))
 
 @app.command("list")
 def list_vms() -> None:
     """List all VM configurations."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.list_vms()
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
+    call_controller(lambda: controller.list_vms())
 
 
 @app.command()
@@ -245,24 +162,11 @@ def destroy(
 ) -> None:
     """Destroy VM configuration for branch."""
     controller = VMController(state_dir=_global_state["state_dir"], timeout=_global_state["timeout"])
-
-    try:
-        controller.destroy_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
+    call_controller(lambda: controller.destroy_vm(branch))
 
 def main() -> None:
     """Main entry point for agent-vm command."""
     app()
-
 
 if __name__ == "__main__":
     main()

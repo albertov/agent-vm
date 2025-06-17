@@ -42,26 +42,15 @@ import sys
 import tempfile
 import time
 from typing import Optional, List
+from pathlib import Path
 
 import pytest
 
+# Import common utilities
+from .utils import setup_logging, run_subprocess
+
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
-def setup_logging(verbose: bool = False):
-    """Configure logging based on verbosity settings."""
-    level = logging.DEBUG if verbose else logging.INFO
-
-    # Use custom time format matching agent-vm
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
-                                  datefmt='%H:%M:%S')
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-
-    logger.setLevel(level)
-    logger.handlers = [handler]
 
 
 class IntegrationTestConfig:
@@ -122,11 +111,14 @@ def test_vm_creation():
         # Create VM using the correct option syntax
         logger.info(f"Creating VM: {vm_name}")
         cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
-        result = subprocess.run(
+        state_dir = Path(config.state_dir) if config.state_dir else None
+        result = run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # In integration test mode, VMs don't actually start
@@ -138,35 +130,42 @@ def test_vm_creation():
         # Cleanup
         logger.info(f"Cleaning up VM: {vm_name}")
         cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cleanup_cmd,
             capture_output=True,
-            timeout=30
+            timeout=30,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
 
 def test_debug_and_verbose_options():
     """Test that debug and verbose options work correctly."""
     config = get_test_config()
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     # Test list with debug flag
     cmd = build_agent_vm_cmd(["--debug", "list"], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"Debug list command failed: {result.stderr}"
 
     # Test verbose flag
     cmd = build_agent_vm_cmd(["--verbose", "list"], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"Verbose list command failed: {result.stderr}"
@@ -176,14 +175,17 @@ def test_debug_and_verbose_options():
 def test_timeout_parameter_handling():
     """Test that --timeout parameter is properly handled."""
     config = get_test_config()
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     # Check help output includes --timeout
     cmd = build_agent_vm_cmd(["--help"], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"Help command failed: {result.stderr}"
@@ -191,11 +193,13 @@ def test_timeout_parameter_handling():
 
     # Test that timeout parameter is accepted
     cmd = build_agent_vm_cmd(["--timeout", "60", "list"], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=10
+        timeout=10,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"List with timeout failed: {result.stderr}"
@@ -205,16 +209,19 @@ def test_timeout_parameter_handling():
 def test_vm_listing():
     """Test VM listing functionality."""
     config = get_test_config()
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     if config.state_dir:
         logger.info(f"Using state directory: {config.state_dir}")
 
     cmd = build_agent_vm_cmd(["list"], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=config.timeout
+        timeout=config.timeout,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"VM listing failed: {result.stderr}"
@@ -225,23 +232,28 @@ def test_vm_status():
     """Test VM status command."""
     config = get_test_config()
     vm_name = f"test-vm-{int(time.time())}"
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     try:
         # Create VM first
         cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cmd,
             capture_output=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # Check status
         cmd = build_agent_vm_cmd(["status", vm_name], config)
-        result = subprocess.run(
+        result = run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         assert result.returncode == 0, f"VM status failed: {result.stderr}"
@@ -251,10 +263,12 @@ def test_vm_status():
     finally:
         # Cleanup
         cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cleanup_cmd,
             capture_output=True,
-            timeout=30
+            timeout=30,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
 
@@ -262,23 +276,28 @@ def test_vm_start_stop_cycle():
     """Test VM start and stop operations."""
     config = get_test_config()
     vm_name = f"test-vm-{int(time.time())}"
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     try:
         # Create VM
         cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cmd,
             capture_output=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # Start VM
         cmd = build_agent_vm_cmd(["start", vm_name], config)
-        result = subprocess.run(
+        result = run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # In integration test mode, start succeeds but SSH might not be available
@@ -297,11 +316,13 @@ def test_vm_start_stop_cycle():
 
         # Stop VM
         cmd = build_agent_vm_cmd(["stop", vm_name], config)
-        result = subprocess.run(
+        result = run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # Stop should work even if VM wasn't fully started
@@ -311,10 +332,12 @@ def test_vm_start_stop_cycle():
     finally:
         # Cleanup
         cleanup_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cleanup_cmd,
             capture_output=True,
-            timeout=30
+            timeout=30,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
 
@@ -322,31 +345,38 @@ def test_agent_service_startup():
     """Test that agent service starts properly."""
     config = get_test_config()
     vm_name = f"test-vm-{int(time.time())}"
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     try:
         # Create and start VM
         cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cmd,
             capture_output=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         cmd = build_agent_vm_cmd(["start", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # Check if service status can be queried
         cmd = build_agent_vm_cmd(["status", vm_name], config)
-        status_result = subprocess.run(
+        status_result = run_subprocess(
             cmd,
             capture_output=True,
             text=True,
-            timeout=config.timeout
+            timeout=config.timeout,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
         # In integration test mode, we just verify commands execute
@@ -359,16 +389,20 @@ def test_agent_service_startup():
     finally:
         # Cleanup
         stop_cmd = build_agent_vm_cmd(["stop", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             stop_cmd,
             capture_output=True,
-            timeout=30
+            timeout=30,
+            state_dir=state_dir,
+            debug=config.debug
         )
         destroy_cmd = build_agent_vm_cmd(["destroy", vm_name], config)
-        subprocess.run(
+        run_subprocess(
             destroy_cmd,
             capture_output=True,
-            timeout=30
+            timeout=30,
+            state_dir=state_dir,
+            debug=config.debug
         )
 
 
@@ -376,33 +410,40 @@ def test_vm_destruction():
     """Test VM destruction and cleanup."""
     config = get_test_config()
     vm_name = f"test-vm-{int(time.time())}"
+    state_dir = Path(config.state_dir) if config.state_dir else None
 
     # Create VM
     cmd = build_agent_vm_cmd(["create", "--host", "localhost", "--port", "8000", "--branch", vm_name], config)
-    subprocess.run(
+    run_subprocess(
         cmd,
         capture_output=True,
-        timeout=config.timeout
+        timeout=config.timeout,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     # Destroy VM
     cmd = build_agent_vm_cmd(["destroy", vm_name], config)
-    result = subprocess.run(
+    result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=config.timeout
+        timeout=config.timeout,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert result.returncode == 0, f"VM destruction failed: {result.stderr}"
 
     # Verify VM is gone
     cmd = build_agent_vm_cmd(["list"], config)
-    list_result = subprocess.run(
+    list_result = run_subprocess(
         cmd,
         capture_output=True,
         text=True,
-        timeout=config.timeout
+        timeout=config.timeout,
+        state_dir=state_dir,
+        debug=config.debug
     )
 
     assert vm_name not in list_result.stdout, f"VM {vm_name} still exists after destruction"
