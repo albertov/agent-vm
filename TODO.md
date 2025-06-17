@@ -10,9 +10,11 @@ Read README.md for specs
 
 ## Implementation Steps
 
-### URGENT - ALL COMPLETED ✅
+### URGENT
 
-All urgent tasks have been successfully completed:
+- [ ] All python code should be under agent-vm. Run integration tests an help me
+  out finish the refactor I started
+
 
 - [x] **CLI Code Refactor** ✅
   - Moved all typer CLI commands from vm_controller.py to main.py

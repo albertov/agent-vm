@@ -43,6 +43,7 @@ test = [
 
 [project.scripts]
 agent-vm = "agent_vm.main:main"
+agent-vm-tests = "integration-tests:main"
 
 [project.urls]
 Homepage = "https://github.com/example/agent-vm"
