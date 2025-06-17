@@ -596,6 +596,8 @@ class VMController:
         # Avoid GID conflicts with system groups (100 is commonly used by 'users' group)
         # If host GID is less than 1000 (system range), use a safe user-range GID
         agent_gid = host_gid if host_gid >= 1000 else 10000 + host_gid
+        logger.warning(f"Could not assign the same gid ({host_gid}) as the host
+                       user")
 
         return f'''
 let

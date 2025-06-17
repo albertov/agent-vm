@@ -20,6 +20,8 @@ Read README.md for specs
 
 All urgent tasks have been successfully completed:
 
+- [ ] All integration-tests MUST pass
+
 - [x] All integration-tests should use a temporary directory as state_dir and these
   directories should be removed when the integration-tests finish regardless of
   exceptions. Only keep them if the --keep flag is passed to integration tests
