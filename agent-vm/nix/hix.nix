@@ -17,7 +17,7 @@ rec {
   shell.nativeBuildInputs =
     with pkgs.buildPackages;
     [
-      # hoogle # This one has our local packages!
+      hoogle # This one has our local packages!
       gh # GitHub CLI for PR automation
     ];
 }
