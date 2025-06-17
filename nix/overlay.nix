@@ -120,29 +120,6 @@ inputs: final: prev:
     };
   };
 
-  # VM management tool for agent isolation (Haskell version)
-  agent-vm = final.haskell-nix.project' {
-    src = ./agent-vm;
-    compiler-nix-name = "ghc966";
-
-    # Configure the project
-    modules = [{
-      # Package configuration
-      packages.agent-vm = {
-        # Disable haddock for faster builds during development
-        doHaddock = false;
-      };
-    }];
-
-    # Shell configuration for development
-    shell.tools = {
-      cabal = {};
-      haskell-language-server = {};
-      hlint = {};
-      hoogle = {};
-    };
-  };
-
   py-integration-test = final.writeShellApplication {
     name = "py-integration-test";
     runtimeInputs = with final; [

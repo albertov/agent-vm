@@ -411,7 +411,6 @@
       },
       "locked": {
         "lastModified": 1750121527,
-        "narHash": "sha256-uH0AACy3uBgbOXuvSjHETBXwu2YMwxBRksEuVulXD+c=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
         "rev": "921b6503a1eb48bced46d359d3a51c86fffa7bcb",
@@ -989,10 +988,10 @@
         "pyproject-nix": "pyproject-nix"
       },
       "locked": {
-        "lastModified": 1749407536,
+        "lastModified": 1750143255,
         "owner": "utensils",
         "repo": "mcp-nixos",
-        "rev": "bc28db075244b97bd14c72e49b35fb4aef502c94",
+        "rev": "91dc3c584023cbe9726baf0e74e8ab8be1165819",
         "type": "github"
       },
       "original": {

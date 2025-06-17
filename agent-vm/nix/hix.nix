@@ -5,7 +5,7 @@ rec {
   index-state = "2025-06-16T20:56:04Z";
   checkMaterialization = false;
   # TODO: At some point...
-  #materialized = ./materialized;
+  # materialized = ../../nix/materialized;
 
   shell.withHoogle = false;
   # Tools to include in the development shell

@@ -8,3 +8,4 @@ __pycache__
 run_hoogle.sh
 
 cabal.project.local
+nix/materialized/
