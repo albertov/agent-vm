@@ -58,7 +58,7 @@ inputs: final: prev:
   agent-vm = final.python3.pkgs.buildPythonApplication {
     pname = "agent-vm";
     version = "1.0.0";
-    src = ./agent_vm;
+    src = ./.;
     format = "pyproject";
 
     # Runtime dependencies
@@ -90,7 +90,7 @@ inputs: final: prev:
       # Run pytest with coverage and timeouts
       python -m pytest tests/ -v \
         --timeout=300 \
-        --cov=vm_controller \
+        --cov=agent_vm \
         --cov-report=term-missing \
         -m "not integration" \
         || echo "Tests failed but continuing build for now"
@@ -99,7 +99,7 @@ inputs: final: prev:
     '';
 
     # Type checking during build
-    pythonImportsCheck = [ "vm_controller" ];
+    pythonImportsCheck = [ "agent_vm.main" "agent_vm.vm_controller" ];
 
     meta = with final.lib; {
       description = "VM control tool for managing development VMs";
