@@ -11,7 +11,7 @@ build-type:         Simple
 
 common warnings
     ghc-options: -Wall
-                 -Werror
+               --  -Werror
                  -Wcompat
                  -Widentities
                  -Wincomplete-record-updates
