@@ -11,14 +11,12 @@ module AgentVM.Config
   , vmConfigToJson
   ) where
 
-import Protolude
+import Protolude (Text, Generic, IO, FilePath, Int, pure, Maybe, Show, Eq, Either(..), Bool, True, ($), (<>))
 
-import AgentVM.Types
-import Data.Aeson
-import Data.Text (Text)
+import AgentVM.Types (BranchName, unBranchName, VMConfig(..))
+import Data.Aeson (ToJSON(..), FromJSON(..), genericToJSON, genericParseJSON, defaultOptions, fieldLabelModifier, camelTo2, eitherDecodeFileStrict', encodeFile)
 import qualified Data.Text as T
 import Data.Time (UTCTime)
-import GHC.Generics
 import System.FilePath ((</>))
 import System.Directory (createDirectoryIfMissing)
 
@@ -72,10 +70,13 @@ vmConfigToJson branch config createdAt sshKeyPath upstreamRepo (uid, gid) = VMCo
   }
 
 -- | Load VM configuration from state directory
-loadVMConfig :: FilePath -> BranchName -> IO (Either String VMConfigJson)
+loadVMConfig :: FilePath -> BranchName -> IO (Either Text VMConfigJson)
 loadVMConfig stateDir branch = do
   let configPath = stateDir </> T.unpack (unBranchName branch) </> "config.json"
-  eitherDecodeFileStrict' configPath
+  result <- eitherDecodeFileStrict' configPath
+  case result of
+    Left err -> pure $ Left (T.pack err)
+    Right config -> pure $ Right config
 
 -- | Save VM configuration to state directory
 saveVMConfig :: FilePath -> BranchName -> VMConfigJson -> IO ()

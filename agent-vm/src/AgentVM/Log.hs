@@ -14,14 +14,12 @@ module AgentVM.Log
   , (<&)
   ) where
 
-import Protolude
+import Protolude (Text, Generic, IO, show, FilePath, Show, Eq, Ord, ($), (<>), Int)
 
-import AgentVM.Types
-import Data.Text (Text)
+import AgentVM.Types (BranchName, unBranchName, VMConfig)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import GHC.Generics (Generic)
-import System.Console.ANSI
+import System.Console.ANSI (Color(Red, Green, Yellow, Cyan), ColorIntensity(Dull, Vivid), ConsoleLayer(Foreground), SGR(SetColor, Reset), setSGR)
 import System.IO (stderr)
 
 -- | LogAction type for plow-log compatibility
@@ -156,9 +154,9 @@ setSeverityColor severity =
 
 -- | Create a logger that outputs to stdout with colors
 vmLogger :: LogAction IO AgentVmTrace
-vmLogger = LogAction $ \trace -> do
-  let severity = traceSeverity trace
-      traceMessage = renderTrace trace
+vmLogger = LogAction $ \traceEvent -> do
+  let severity = traceSeverity traceEvent
+      traceMessage = renderTrace traceEvent
   setSeverityColor severity
   T.hPutStr stderr $ "[" <> T.pack (show severity) <> "] "
   setSGR [Reset]

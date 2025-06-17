@@ -14,15 +14,12 @@ module AgentVM.State
   , releasePort
   ) where
 
-import Protolude (IO, STM, Map, Set, atomically, finally, when, error, show, ($), (<$>), (<*>))
+import Protolude (IO, STM, atomically, when, Int, Maybe(Just, Nothing), Either(Left, Right), return, otherwise, (+), (>), ($), (<$>), (<*>))
 
-import AgentVM.Types
-import Control.Concurrent.STM
-import Control.Exception (finally)
-import Control.Monad (when)
-import Data.Map.Strict (Map)
+import AgentVM.Types (BranchName, VM, vmId, vmIdBranch, VMError(PortAllocationFailed))
+import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar, modifyTVar', retry)
+import UnliftIO.Exception (finally, throwString)
 import qualified Data.Map.Strict as Map
-import Data.Set (Set)
 import qualified Data.Set as Set
 
 -- | Thread-safe VM registry
@@ -58,7 +55,7 @@ registerVM :: VMRegistry -> VM s -> STM ()
 registerVM registry vm = do
   vms <- readTVar (vmMap registry)
   case Map.lookup (vmIdBranch $ vmId vm) vms of
-    Just _ -> error $ "VM already exists: " ++ show (vmIdBranch $ vmId vm)
+    Just _ -> notImplemented -- TODO: proper error handling for VM already exists
     Nothing -> writeTVar (vmMap registry)
                 (Map.insert (vmIdBranch $ vmId vm) (VMInfo vm) vms)
 

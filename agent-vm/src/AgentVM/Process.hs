@@ -6,23 +6,23 @@ module AgentVM.Process
   , waitForProcess
   ) where
 
-import Protolude
+import Protolude (IO, FilePath, Int, Bool, Maybe, notImplemented)
 
-import AgentVM.Log
-import System.Process.Typed
+import AgentVM.Log (AgentVmTrace, LogAction)
+import System.Process.Typed (Process, ExitCode)
 
 -- | Start a VM process
 startVMProcess :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
-startVMProcess = error "startVMProcess has not been implemented yet"
+startVMProcess = notImplemented
 
 -- | Stop a VM process gracefully
 stopVMProcess :: LogAction IO AgentVmTrace -> Process () () () -> IO ()
-stopVMProcess = error "stopVMProcess has not been implemented yet"
+stopVMProcess = notImplemented
 
 -- | Check if VM process is still running
 checkVMProcess :: Process () () () -> IO Bool
-checkVMProcess = error "checkVMProcess has not been implemented yet"
+checkVMProcess = notImplemented
 
 -- | Wait for a process with timeout
 waitForProcess :: Int -> Process () () () -> IO (Maybe ExitCode)
-waitForProcess = error "waitForProcess has not been implemented yet"
+waitForProcess = notImplemented

@@ -36,6 +36,7 @@ library
                     , AgentVM.Config
     build-depends:    base
                     , protolude
+                    , unliftio
                     , stm
                     , containers
                     , text
