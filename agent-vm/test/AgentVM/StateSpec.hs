@@ -44,7 +44,7 @@ spec = describe "AgentVM.State" $ do
       result <- atomically $ allocatePort registry 8000
 
       case result of
-        Right port -> port `shouldSatisfy` (>=8000)
+        Right port -> port `shouldSatisfy` (>= 8000)
         Left err -> expectationFailure $ "Port allocation failed: " <> show err
 
     it "prevents port conflicts" $ do
