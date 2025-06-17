@@ -36,7 +36,13 @@ doc = """
 Show the log messages of the changes done in this branch
 
 Accepts an optional path list to restrict query to a specific set of files or
-directories
+directories:
+
+Examples:
+```console
+branch_log *.py
+branch_log agent-vm
+branch_log pkgs flake.nix *.md
 """
 
 [commands.branch_changed_files]
