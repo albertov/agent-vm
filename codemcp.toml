@@ -33,16 +33,10 @@ doc = "Accepts the name of the files that need formatting as arguments"
 [commands.branch_log]
 command = ["./run_branch_log.sh"]
 doc = """
-Show the log messages of the changes done in this branch
+Show the log messages of the changes done in this branch with git log
 
 Accepts an optional path list to restrict query to a specific set of files or
-directories:
-
-Examples:
-```console
-branch_log *.py
-branch_log agent-vm
-branch_log pkgs flake.nix *.md
+directories and rguments to limit the numer of commits or commit ranges
 """
 
 [commands.branch_changed_files]
