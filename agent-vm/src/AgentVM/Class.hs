@@ -10,8 +10,9 @@ where
 import AgentVM.Types (VMConfig, VMError, VMHandle, VMState)
 import Protolude
 
+
 -- | Typeclass for VM operations
-class (MonadIO m) => MonadVM m where
+class Monad m => MonadVM m where
   -- | Create a new VM with the given configuration
   create :: VMConfig -> m (Either VMError VMHandle)
 

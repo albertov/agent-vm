@@ -1,3 +1,6 @@
+{- This executable is for tests that need to be able to create
+ - VMs
+ -}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
