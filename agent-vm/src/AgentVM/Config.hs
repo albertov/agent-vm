@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -34,13 +35,7 @@ data VMConfigJson = VMConfigJson
     host_uid :: Int,
     host_gid :: Int
   }
-  deriving (Generic, Show, Eq)
-
-instance FromJSON VMConfigJson where
-  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = camelTo2 '_'}
-
-instance ToJSON VMConfigJson where
-  toJSON = genericToJSON defaultOptions {fieldLabelModifier = camelTo2 '_'}
+  deriving (Generic, Show, Eq, ToJSON, FromJSON)
 
 -- | Convert from JSON config to VM config
 vmConfigFromJson :: VMConfigJson -> BranchName -> VMConfig

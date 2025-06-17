@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
@@ -20,6 +21,7 @@ module AgentVM.Log
 where
 
 import AgentVM.Types (BranchName, VMConfig, unBranchName)
+import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
@@ -61,6 +63,7 @@ data LogLevel a
   | Debug a
   | Trace a
   deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Extract the wrapped value from LogLevel
 unLogLevel :: LogLevel a -> a
@@ -165,7 +168,8 @@ data AgentVmTrace
     AgentServiceStarting BranchName
   | AgentServiceHealthy BranchName Text
   | AgentServiceFailed BranchName Text
-  deriving (Show, Eq, Generic)
+  deriving stock (Show, Eq, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Convert trace to message (full implementation)
 traceToMessage :: AgentVmTrace -> Text

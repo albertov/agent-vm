@@ -1,12 +1,14 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Tests for process management
 module AgentVM.ProcessSpec (spec) where
 
 import AgentVM.Log (AgentVmTrace)
-import AgentVM.Process (checkVMProcess, startVMProcess)
+import AgentVM.Process (ProcessState (..), checkVMProcess, startVMProcess)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
-import System.Process.Typed (proc, startProcess, stopProcess)
-import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldReturn)
+import System.Process.Typed (ExitCode (..), proc, startProcess, stopProcess)
+import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldReturn, shouldSatisfy)
 import UnliftIO.Exception (finally)
 
 -- | Test tracer that discards all logs
@@ -24,8 +26,8 @@ spec = describe "AgentVM.Process" $ do
       process <- startVMProcess testTracer testScript
 
       -- Check that it's running
-      isRunning <- checkVMProcess process
-      isRunning `shouldBe` True
+      state <- checkVMProcess process
+      state `shouldBe` ProcessRunning
 
       -- Clean up
       stopProcess process
@@ -38,10 +40,39 @@ spec = describe "AgentVM.Process" $ do
       process <- startProcess (proc "sleep" ["1"])
 
       -- Check it's running
-      checkVMProcess process `shouldReturn` True
+      checkVMProcess process `shouldReturn` ProcessRunning
 
       -- Clean up
       stopProcess process
+
+    it "detects when process has exited" $ do
+      -- Start a process that exits immediately
+      process <- startProcess (proc "true" [])
+
+      -- Wait a bit for it to exit
+      threadDelay 100000 -- 100ms
+
+      -- Check it has exited
+      state <- checkVMProcess process
+      case state of
+        ProcessExited ExitSuccess -> return () -- Expected
+        ProcessExited (ExitFailure _) -> panic "Process exited with failure"
+        ProcessRunning -> panic "Process should have exited"
+
+    it "detects when process has exited with failure" $ do
+      -- Start a process that exits with error code
+      process <- startProcess (proc "false" [])
+
+      -- Wait a bit for it to exit
+      threadDelay 100000 -- 100ms
+
+      -- Check it has exited with failure
+      state <- checkVMProcess process
+      case state of
+        ProcessExited (ExitFailure 1) -> return () -- Expected
+        ProcessExited ExitSuccess -> panic "Process should have failed"
+        ProcessExited (ExitFailure n) -> panic $ "Unexpected exit code: " <> toS (show n :: [Char])
+        ProcessRunning -> panic "Process should have exited"
 
     it "waits for process with timeout" $ do
       pending

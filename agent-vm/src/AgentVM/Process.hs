@@ -4,6 +4,7 @@ module AgentVM.Process
     stopVMProcess,
     checkVMProcess,
     waitForProcess,
+    ProcessState (..),
   )
 where
 
@@ -11,7 +12,13 @@ import AgentVM.Log (AgentVmTrace (ProcessSpawned), (<&))
 import qualified Data.Text as T
 import Plow.Logging (IOTracer (IOTracer))
 import Protolude
-import System.Process.Typed (ExitCode, Process, getExitCode, proc, startProcess)
+import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
+
+-- | State of a VM process
+data ProcessState
+  = ProcessRunning
+  | ProcessExited ExitCode
+  deriving (Eq, Show)
 
 -- | Start a VM process
 -- TODO: This should be capturing stderr and stdout of the process and tracing
@@ -26,11 +33,10 @@ stopVMProcess :: IOTracer AgentVmTrace -> Process () () () -> IO ()
 stopVMProcess = notImplemented
 
 -- | Check if VM process is still running
--- FIXME: This should return a ProcessState sum type to avoid boolean blindness
-checkVMProcess :: Process () () () -> IO Bool
+checkVMProcess :: Process () () () -> IO ProcessState
 checkVMProcess process = do
   exitCode <- getExitCode process
-  return $ isNothing exitCode
+  return $ maybe ProcessRunning ProcessExited exitCode
 
 -- | Wait for a process with timeout
 waitForProcess :: Int -> Process () () () -> IO (Maybe ExitCode)

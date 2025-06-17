@@ -98,10 +98,8 @@ main = do
   (_globalOpts, cmd) <- execParser opts
   -- Set up async logging with a buffer of 1000 messages
   withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    -- Transform the async tracer to work with LogLevel
-    let levelAwareTracer = contramapIOTracer renderLogLevel asyncTracer
-        -- Create the final tracer that tags traces with their level
-        finalTracer = contramapIOTracer traceLevel levelAwareTracer
+    -- Create the final tracer that converts AgentVmTrace to Text
+    let finalTracer = contramapIOTracer (renderLogLevel renderTrace . traceLevel) asyncTracer
 
     -- For now, just demonstrate logging is working
     putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
