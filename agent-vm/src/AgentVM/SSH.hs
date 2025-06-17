@@ -7,7 +7,8 @@ module AgentVM.SSH
   )
 where
 
-import AgentVM.Log (AgentVmTrace, LogAction)
+import AgentVM.Log (AgentVmTrace)
+import Plow.Logging (IOTracer)
 import Protolude (Bool, Either, FilePath, IO, Int, Text, notImplemented)
 
 -- | Generate SSH keypair
@@ -15,7 +16,7 @@ generateSSHKey :: FilePath -> IO ()
 generateSSHKey = notImplemented
 
 -- | Wait for SSH to become available
-waitForSSH :: LogAction IO AgentVmTrace -> Text -> Int -> FilePath -> Int -> IO Bool
+waitForSSH :: IOTracer AgentVmTrace -> Text -> Int -> FilePath -> Int -> IO Bool
 waitForSSH = notImplemented
 
 -- | Execute command over SSH

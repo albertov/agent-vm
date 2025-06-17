@@ -1,11 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- | Logging infrastructure for agent-vm
 module AgentVM.Log
   ( AgentVmTrace (..),
-    LogAction (..),
     Severity (..),
     traceToMessage,
     traceSeverity,
@@ -17,17 +17,29 @@ where
 
 import AgentVM.Types (BranchName, VMConfig, unBranchName)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import Protolude (Eq, FilePath, Generic, IO, Int, Ord, Show, Text, show, ($), (<>))
-import System.Console.ANSI (Color (Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleLayer (Foreground), SGR (Reset, SetColor), setSGR)
-import System.IO (stderr)
+import qualified Data.Text.IO as TIO
+import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
+import Protolude (Eq, FilePath, Generic, Int, MonadIO, Ord, Show, Text, show, ($), (.), (<>))
+import System.Console.ANSI (Color (Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleLayer (Foreground), SGR (Reset, SetColor))
+import qualified System.Console.ANSI as ANSI
+import System.IO (Handle, stderr)
+import UnliftIO (liftIO)
 
--- | LogAction type for plow-log compatibility
-newtype LogAction m a = LogAction {unLogAction :: a -> m ()}
+-- | MonadIO version of setSGR
+setSGR :: (MonadIO m) => [SGR] -> m ()
+setSGR = liftIO . ANSI.setSGR
 
--- | Convenience operator for logging
-(<&) :: LogAction m a -> a -> m ()
-(<&) = unLogAction
+-- | MonadIO version of Text.IO.hPutStr
+hPutStr :: (MonadIO m) => Handle -> Text -> m ()
+hPutStr h = liftIO . TIO.hPutStr h
+
+-- | MonadIO version of Text.IO.hPutStrLn
+hPutStrLn :: (MonadIO m) => Handle -> Text -> m ()
+hPutStrLn h = liftIO . TIO.hPutStrLn h
+
+-- | Convenience operator for logging using traceWith
+(<&) :: Tracer m a -> a -> m ()
+(<&) = traceWith
 
 infixr 1 <&
 
@@ -137,7 +149,7 @@ renderTrace = \case
   AgentServiceFailed b e -> "❌ Agent failed on " <> unBranchName b <> ": " <> e
 
 -- | Set color based on severity
-setSeverityColor :: Severity -> IO ()
+setSeverityColor :: (MonadIO m) => Severity -> m ()
 setSeverityColor severity =
   setSGR $ case severity of
     Debug -> [SetColor Foreground Dull Cyan]
@@ -145,12 +157,12 @@ setSeverityColor severity =
     Warning -> [SetColor Foreground Vivid Yellow]
     Error -> [SetColor Foreground Vivid Red]
 
--- | Create a logger that outputs to stdout with colors
-vmLogger :: LogAction IO AgentVmTrace
-vmLogger = LogAction $ \traceEvent -> do
+-- | Create a logger that outputs to stderr with colors
+vmLogger :: IOTracer AgentVmTrace
+vmLogger = IOTracer $ Tracer $ \traceEvent -> do
   let severity = traceSeverity traceEvent
       traceMessage = renderTrace traceEvent
   setSeverityColor severity
-  T.hPutStr stderr $ "[" <> T.pack (show severity) <> "] "
+  hPutStr stderr $ "[" <> T.pack (show severity) <> "] "
   setSGR [Reset]
-  T.hPutStrLn stderr traceMessage
+  hPutStrLn stderr traceMessage

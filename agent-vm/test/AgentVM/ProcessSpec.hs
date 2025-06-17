@@ -1,12 +1,17 @@
 -- | Tests for process management
 module AgentVM.ProcessSpec (spec) where
 
-import AgentVM.Log (LogAction (LogAction))
+import AgentVM.Log (AgentVmTrace)
 import AgentVM.Process (checkVMProcess, startVMProcess)
+import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
 import System.Process.Typed (proc, startProcess, stopProcess)
 import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldReturn)
 import UnliftIO.Exception (finally)
+
+-- | Test tracer that discards all logs
+testTracer :: IOTracer AgentVmTrace
+testTracer = IOTracer $ Tracer $ \_ -> return ()
 
 spec :: Spec
 spec = describe "AgentVM.Process" $ do
@@ -14,10 +19,9 @@ spec = describe "AgentVM.Process" $ do
     it "starts VM process" $ do
       -- Create a simple test script that runs
       let testScript = "/bin/sh"
-      let mockLogger = LogAction $ \_ -> return ()
 
       -- Start the process
-      process <- startVMProcess mockLogger testScript
+      process <- startVMProcess testTracer testScript
 
       -- Check that it's running
       isRunning <- checkVMProcess process

@@ -7,19 +7,20 @@ module AgentVM.Process
   )
 where
 
-import AgentVM.Log (AgentVmTrace (ProcessSpawned), LogAction, (<&))
+import AgentVM.Log (AgentVmTrace (ProcessSpawned), (<&))
 import qualified Data.Text as T
+import Plow.Logging (IOTracer (IOTracer))
 import Protolude
 import System.Process.Typed (ExitCode, Process, getExitCode, proc, startProcess)
 
 -- | Start a VM process
-startVMProcess :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
-startVMProcess logger scriptPath = do
+startVMProcess :: IOTracer AgentVmTrace -> FilePath -> IO (Process () () ())
+startVMProcess (IOTracer logger) scriptPath = do
   logger <& ProcessSpawned (T.pack scriptPath) []
   startProcess (proc scriptPath [])
 
 -- | Stop a VM process gracefully
-stopVMProcess :: LogAction IO AgentVmTrace -> Process () () () -> IO ()
+stopVMProcess :: IOTracer AgentVmTrace -> Process () () () -> IO ()
 stopVMProcess = notImplemented
 
 -- | Check if VM process is still running

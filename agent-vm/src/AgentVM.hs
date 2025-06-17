@@ -61,7 +61,6 @@ module AgentVM
         NixBuildProgress,
         NixBuildCompleted
       ),
-    LogAction (..),
     Severity (..),
     traceToMessage,
     traceSeverity,
