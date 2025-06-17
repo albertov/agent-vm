@@ -3,8 +3,8 @@
 -- | Main entry point for agent-vm CLI
 module Main (main) where
 
-import Data.Functor.Contravariant (contramap)
 import AgentVM.Log (LogLevel, renderLogLevel, renderTrace, traceLevel, vmLogger)
+import Data.Functor.Contravariant (contramap)
 import Options.Applicative
   ( Parser,
     auto,

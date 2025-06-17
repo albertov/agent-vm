@@ -12,10 +12,7 @@ module AgentVM.Process
   )
 where
 
-import AgentVM.Log (AgentVmTrace (ProcessSpawned), (<&))
-import Data.Generics.Product (HasType, the)
-import Lens.Micro.Mtl (view)
-import Plow.Logging (IOTracer (IOTracer), traceWith)
+import AgentVM.Log (AgentVmTrace (ProcessSpawned), MonadTrace)
 import Protolude
 import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
 
@@ -30,8 +27,7 @@ newtype VMProcess = VMProcess {unVMProcess :: Process () () ()}
 -- TODO: This should be capturing stderr and stdout of the process and tracing
 -- them with the logger line by line for better debugging
 startLoggedProcess ::
-  ( MonadReader env m,
-    HasType (IOTracer AgentVmTrace) env,
+  ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
   FilePath ->
@@ -41,8 +37,7 @@ startLoggedProcess scriptPath args = notImplemented
 
 -- | Start a VM process
 startVMProcess ::
-  ( MonadReader env m,
-    HasType (IOTracer AgentVmTrace) env,
+  ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
   FilePath ->
@@ -51,8 +46,7 @@ startVMProcess scriptPath = notImplemented
 
 -- | Stop a VM process gracefully
 stopVMProcess ::
-  ( MonadReader env m,
-    HasType (IOTracer AgentVmTrace) env,
+  ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
   VMProcess ->
