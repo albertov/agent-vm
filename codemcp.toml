@@ -8,6 +8,15 @@ Use protolude and use unliftio when possible instead of base, specially for
 exception handling. Never catch SomeExeption explicitly, use the `*Any`
 functions from UnliftIO instead.
 
+Never use String unless mandated by an external library, always Text or
+ByteString instead
+
+When implementing new functions, first get the type signatures right leaving the
+body as `notImplemented`. Always write a unit test or integration test for new
+functionality or when there are new cases to test.
+
+Check with the `test` command that everything compiles after every edit.
+
 When told to "continue", or "continue where you left off",... use the
 'branch_log' command to inspect the last commit you made and continue. I may
 have left a commit after yours to help you out, inspect it and take it into
@@ -22,10 +31,6 @@ When editing cabal files, do not add version bounds to packages.
 You MUST always run the 'cabal_test' command on every package you modify and fix any
 errors. Do this after every edit that affects haskell code and fix errors before
 proceeding.
-
-When implementing new functions, first get the type signatures right leaving the
-body as `error "function foo has not been implemented yet"`. Check with the
-`test` command that everything compiles after every edit.
 
 You MUST always run the 'hlint' command on every Haskell file after every testing
 your edits and fix ALL the warnings and errors it reports.
