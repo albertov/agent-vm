@@ -3,13 +3,11 @@ name:               agent-vm
 version:            0.1.0.0
 synopsis:           Type-safe VM lifecycle management with Nix integration
 description:        QEMU VM management system with compile-time state guarantees
-license:            MIT
-author:             Agent VM Team
-maintainer:         dev@agent-vm.org
+license:            BSD-3-Clause
+author:             Alberto Valverde
+maintainer:         alberto@toscat.net
 category:           System
 build-type:         Simple
-extra-doc-files:    README.md
-                    CHANGELOG.md
 
 common warnings
     ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
@@ -29,13 +27,14 @@ library
     build-depends:    base
                     , typed-process
                     , async
+                    , unliftio
                     , stm
-                    , containers
+                    , unordered-containers
                     , text
                     , bytestring
                     , aeson
                     , yaml
-                    , co-log-core
+                    , plow-log
                     , microlens
                     , generic-lens
                     , optparse-applicative
@@ -49,16 +48,6 @@ library
                     , exceptions
     hs-source-dirs:   src
     default-language: Haskell2010
-    default-extensions: OverloadedStrings
-                      , DeriveGeneric
-                      , DeriveAnyClass
-                      , DerivingStrategies
-                      , GeneralizedNewtypeDeriving
-                      , LambdaCase
-                      , RecordWildCards
-                      , TupleSections
-                      , TypeApplications
-                      , NamedFieldPuns
 
 executable agent-vm
     import:           warnings
@@ -70,7 +59,7 @@ executable agent-vm
     default-language: Haskell2010
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
-test-suite agent-vm-test
+test-suite spec
     import:           warnings
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
@@ -84,6 +73,22 @@ test-suite agent-vm-test
                     , QuickCheck
                     , temporary
     hs-source-dirs:   test
+    default-language: Haskell2010
+    ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+    build-tool-depends: hspec-discover:hspec-discover
+
+-- This one does not run as part of the hermetic test suite
+executable agent-vm-test
+    import:           warnings
+    type:             exitcode-stdio-1.0
+    main-is:          Main.hs
+    build-depends:    base
+                    , hspec
+                    , hspec-discover
+                    , QuickCheck
+                    , temporary
+                    , typed-process
+    hs-source-dirs:   integration-test
     default-language: Haskell2010
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     build-tool-depends: hspec-discover:hspec-discover

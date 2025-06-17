@@ -77,7 +77,7 @@ verbosity = "DEBUG"
 command = ["nix", "flake", "check"]
 
 [commands.haskell_test]
-command = ["cabal", "test"]
+command = ["env", "-C", "./agent-vm", "cabal", "test"]
 doc = "Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.lynx]
@@ -88,7 +88,7 @@ Use Lynx to view documentation links that hoogle shows
 
 
 [commands.hoogle]
-command = ["./run_hoogle.sh"]
+command = ["hoogle"]
 doc = """
 Use Hoogle to search for symbols in available dependencies.
 
@@ -118,7 +118,7 @@ set of packages.
 """
 
 [commands.lint]
-command = ["hlint"]
+command = ["env", "-C", "./agent-vm", "hlint"]
 doc = """
 Run hlint on the file or directory passed as argument to report errors
 
@@ -126,19 +126,9 @@ When asked to lint every haskell file just call it like "lint ."
 """
 
 [commands.integration-test]
-command = ["nix", "run", ".#integration-test", "--"]
+command = ["timeout", "90s", "nix", "run", ".#integration-test", "--"]
 doc = """
 Runs the .#integration-test flake app with the arguments you pass"
 
 Arguments are passed to the python script. Make sure you quote them properly!
-
-Max --timeout you can add is 30s. This machine is fast
-"""
-
-[commands.git-mv]
-command = ["git", "mv"]
-doc = """
-git mv
-
-Use it to move files around efficiently
 """

@@ -6,3 +6,5 @@ result*
 __pycache__
 *.py?
 run_hoogle.sh
+
+cabal.project.local

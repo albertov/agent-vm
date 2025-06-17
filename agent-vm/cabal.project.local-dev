@@ -1,0 +1,9 @@
+-- Move this file to cabal.project.local to enable these options
+ignore-project: False
+tests: True
+benchmarks: True
+optimization: False
+
+program-options
+  ghc-options: -optl-fuse-ld=gold
+  ld-options: -fuse-ld=gold
