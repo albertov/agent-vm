@@ -1,22 +1,36 @@
 # codemcp configuration file
 project_prompt = """
-# Instructions
-- MUST write typed python code
-- MUST use the test command frequently to test your changes and fix them
-- MUST use the integration-test command less frequently to test your changes and fix them
-- NEVER use a --timeout higher than 90s to run integration-tests, NEVER
-- MUST write end-to-end tests in integration-tests.py to test new features.
-- Don't use nix-build, nix-instantiate, etc.. use the modern "nix" command.
-- Don't use "<nixpkgs>", always use the flake in this repo as the "pkgs" set
-- When leaving code incomplete, stubbed or mocked. Write a FIXME or TODO comment
-explaining why.
-- Before starting work, add what you're going to do to the TODO.md
-document if it is not already there.
-- If the use says "continue where you left off".
-Use the 'branch_log' command before starting work to inspect the last commits.
-Don't request all commits, just the 5 mostb revent ones
-Ignore changes to codemcp.toml and under the ./ directory.
-- Keep the *.md documents up to date with your changes when you're done with them.
+You MUST always obey the following rules:
+
+Read the README.md and TODO.md documents to see what's going on
+
+When told to "continue", or "continue where you left off",... use the
+'branch_log' command to inspect the last commit you made and continue. I may
+have left a commit after yours to help you out, inspect it and take it into
+account.
+
+You can use the 'hoogle' command to search for documentation about symbols in
+any external dependency we have available. You should implement functionality
+using existing dependencies when possible.
+
+When editing cabal files, do not add version bounds to packages.
+
+You MUST always run the 'haskell_test' command on every package you modify and fix any
+errors. Do this after every edit that affects haskell code and fix errors before
+proceeding.
+
+When implementing new functions, first get the type signatures right leaving the
+body as `error "function foo has not been implemented yet"`. Check with the
+`test` command that everything compiles after every edit.
+
+You MUST always run the 'hlint' command on every Haskell file after every testing
+your edits and fix ALL the warnings and errors it reports.
+
+You MUST always use Generic deriving mechanisms for JSON/YAML
+serialization, never hand-code it.  Use DeriveAnyClass and
+DuplicateRecordFields for nice field names. Use OverloadedRecordDot extension to disambiguate types on record access
+
+You MUST always use explicit import and export lists.
 
 ## Final tasks
 
@@ -61,6 +75,55 @@ verbosity = "DEBUG"
 
 [commands.test]
 command = ["nix", "flake", "check"]
+
+[commands.haskell_test]
+command = ["cabal", "test"]
+doc = "Accepts the name of a single package as an argument to run their specific tests"
+
+[commands.lynx]
+command = ["lynx", "-dump"]
+doc = """
+Use Lynx to view documentation links that hoogle shows
+"""
+
+
+[commands.hoogle]
+command = ["./run_hoogle.sh"]
+doc = """
+Use Hoogle to search for symbols in available dependencies.
+
+Before explaining the syntax of searches, we first give a list of example
+searches with their meaning:
+
+"map" Search for the text "map"
+"con map" Search for the text "map" and the text "con"
+"a -> a" Search for the type "a -> a"
+":: a -> a" Search for the type "a -> a"
+"a" Search for the text "a"
+":: a" Search for the type "a"
+"id :: a -> a" Search for the text "id" and the type "a -> a"
+Searches can be either textual (a list of words), or by type (a type signature)
+or both. A type search may optionally start with a "::" symbol. A search is
+considered a text search unless it contains a combination of text and symbols,
+or if it starts with (::). To search for both a type and a name, place a ::
+between them, for example "undefined :: a"
+
+Modules: Searches can be restricted to a particular module with +Module.Name, or
+to avoid a module with -Module.Name. The command Module.Name.Foo is treated as
++Module.Name Foo.
+
+Packages: Searches can be restricted to a particular package with +packagename,
+or to avoid a package with -package. By default Hoogle will search a standard
+set of packages.
+"""
+
+[commands.lint]
+command = ["hlint"]
+doc = """
+Run hlint on the file or directory passed as argument to report errors
+
+When asked to lint every haskell file just call it like "lint ."
+"""
 
 [commands.integration-test]
 command = ["nix", "run", ".#integration-test", "--"]

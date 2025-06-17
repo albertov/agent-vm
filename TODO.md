@@ -35,7 +35,7 @@ library
                     , AgentVM.Process
                     , AgentVM.SSH
                     , AgentVM.Nix
-                    , AgentVM.Logging
+                    , AgentVM.Log
                     , AgentVM.Config
     other-modules:    AgentVM.Internal
     build-depends:    base ^>=4.17.0.0
@@ -48,6 +48,8 @@ library
                     , aeson
                     , yaml
                     , plow-log
+                    , microlens
+                    , generic-lens
                     , optparse-applicative
                     , ansi-terminal
                     , directory
