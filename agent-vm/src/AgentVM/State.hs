@@ -24,9 +24,9 @@ import qualified Data.Set as Set
 
 -- | Thread-safe VM registry
 data VMRegistry = VMRegistry
-  { vmMap :: TVar (Map BranchName VMInfo)
-  , vmLocks :: TVar (Set BranchName)
-  , vmPorts :: TVar (Set Int)
+  { vmMap :: TVar (Map.Map BranchName VMInfo)
+  , vmLocks :: TVar (Set.Set BranchName)
+  , vmPorts :: TVar (Set.Set Int)
   }
 
 -- | Runtime VM information
@@ -55,7 +55,7 @@ registerVM :: VMRegistry -> VM s -> STM ()
 registerVM registry vm = do
   vms <- readTVar (vmMap registry)
   case Map.lookup (vmIdBranch $ vmId vm) vms of
-    Just _ -> notImplemented -- TODO: proper error handling for VM already exists
+    Just _ -> retry -- TODO: proper error handling for VM already exists
     Nothing -> writeTVar (vmMap registry)
                 (Map.insert (vmIdBranch $ vmId vm) (VMInfo vm) vms)
 

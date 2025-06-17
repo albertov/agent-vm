@@ -11,10 +11,10 @@ module AgentVM.Config
   , vmConfigToJson
   ) where
 
-import Protolude (Text, Generic, IO, FilePath, Int, pure, Maybe, Show, Eq, Either(..), Bool, True, ($), (<>))
+import Protolude (Text, Generic, IO, FilePath, Int, pure, Maybe, Show, Eq, Either(Left, Right), Bool(True), ($))
 
-import AgentVM.Types (BranchName, unBranchName, VMConfig(..))
-import Data.Aeson (ToJSON(..), FromJSON(..), genericToJSON, genericParseJSON, defaultOptions, fieldLabelModifier, camelTo2, eitherDecodeFileStrict', encodeFile)
+import AgentVM.Types (BranchName, unBranchName, VMConfig(VMConfig, vmConfigHost, vmConfigPort, vmConfigSshPort, vmConfigMemory, vmConfigCores, vmConfigWorkspace, vmConfigNixPath))
+import Data.Aeson (ToJSON(toJSON), FromJSON(parseJSON), genericToJSON, genericParseJSON, defaultOptions, fieldLabelModifier, camelTo2, eitherDecodeFileStrict', encodeFile)
 import qualified Data.Text as T
 import Data.Time (UTCTime)
 import System.FilePath ((</>))
