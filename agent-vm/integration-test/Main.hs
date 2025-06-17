@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# OPTIONS_GHC -Wno-unused-packages #-}
 
-module Main where
+module Main (main, withTempStateDir, testVMConfig) where
 
-import Test.Hspec
-import System.IO.Temp
-import Control.Exception (bracket)
-import AgentVM
-import AgentVM.Types
+import Test.Hspec (Spec, describe, it, pending, hspec)
+import System.IO.Temp (withSystemTempDirectory)
+import AgentVM.Types (VMConfig(VMConfig, vmConfigHost, vmConfigPort, vmConfigSshPort, vmConfigMemory, vmConfigCores, vmConfigNixPath, vmConfigWorkspace))
 
 spec :: Spec
 spec = describe "Agent VM Integration Tests" $ do
@@ -49,8 +49,8 @@ withTempStateDir = withSystemTempDirectory "agent-vm-test"
 
 -- | Test helper: Create test VM configuration
 -- Pass it the path of the direcotry that withSytemTempDir returns
-testVMConfig :: FilePath -> BranchName -> VMConfig
-testVMConfig vmConfigWorkspace branch = VMConfig
+testVMConfig :: FilePath -> VMConfig
+testVMConfig vmConfigWorkspace = VMConfig
   { vmConfigHost = "localhost"
   , vmConfigPort = 8000
   , vmConfigSshPort = 2222
@@ -59,3 +59,6 @@ testVMConfig vmConfigWorkspace branch = VMConfig
   , vmConfigNixPath = "vm-config.nix"
   , vmConfigWorkspace
   }
+
+main :: IO ()
+main = hspec spec

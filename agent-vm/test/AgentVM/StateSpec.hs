@@ -1,9 +1,9 @@
+{-# OPTIONS_GHC -Wno-unused-packages #-}
+
 -- | Tests for VM state management
 module AgentVM.StateSpec (spec) where
 
-import Test.Hspec
-import AgentVM.State
-import AgentVM.Types
+import Test.Hspec (Spec, describe, it, pending)
 
 spec :: Spec
 spec = describe "AgentVM.State" $ do
