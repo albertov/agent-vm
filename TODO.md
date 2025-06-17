@@ -11,7 +11,7 @@
 
 ### URGENT
 
-- [ ] Run the fix build issues
+- [x] Run the fix build issues
 - [ ] Add NoImplicitPrelude extension to cabal file
       and use protolude instead
 
