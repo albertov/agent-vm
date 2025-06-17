@@ -20,6 +20,7 @@ data Command
   | Logs
   | List
   | Destroy
+  deriving Show
 
 -- | Parse command line arguments
 parseArgs :: Parser (GlobalOpts, Command)
