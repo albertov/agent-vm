@@ -15,7 +15,7 @@ using existing dependencies when possible.
 
 When editing cabal files, do not add version bounds to packages.
 
-You MUST always run the 'haskell_test' command on every package you modify and fix any
+You MUST always run the 'cabal_test' command on every package you modify and fix any
 errors. Do this after every edit that affects haskell code and fix errors before
 proceeding.
 
@@ -76,9 +76,13 @@ verbosity = "DEBUG"
 [commands.test]
 command = ["nix", "flake", "check"]
 
-[commands.haskell_test]
+[commands.cabal_build]
+command = ["env", "-C", "./agent-vm", "cabal", "build"]
+doc = "Runs cabal build. Accepts the name of a single package as an argument to run their specific tests"
+
+[commands.cabal_test]
 command = ["env", "-C", "./agent-vm", "cabal", "test"]
-doc = "Accepts the name of a single package as an argument to run their specific tests"
+doc = "Runs cabal test. Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.lynx]
 command = ["lynx", "-dump"]
