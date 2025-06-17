@@ -12,15 +12,18 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] Address the TODO in the utils.py module. It will help you with your future
+- [x] Address the TODO in the utils.py module. It will help you with your future
   endeavours
+  - Added comprehensive type annotations to ProcessWithOutput class
+  - Added member variable type hints
+  - Added return type annotations to all methods
+  - Added missing Any type import
+
 - [ ] Integration tests are not passing. They should ALL pass, no excuses!!!
-  - Fixed utils module issues with ProcessWithOutput/run_subprocess
-  - Updated all integration tests to use run_subprocess for better debugging output
-  - When tests fail, we now see:
-    - The exact command being executed
-    - The location of stdout/stderr log files
-    - The last 20 lines of output from failed commands
+  - Fixed vm-config.nix path resolution to use git root instead of origin URL
+  - Fixed issue where remote URLs were being used for cloning in tests
+  - Added fallback to local repository when origin is a remote URL
+  - Still working on remaining test failures
 
 - [x] Move logging and other utility functions from integration_tests.py and vm_controller.py into
   a common utils module making sure there is no duplicated functionality.

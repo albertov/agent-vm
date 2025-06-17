@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 
 # Color codes for terminal output
@@ -232,9 +232,16 @@ class ProcessWithOutput:
     their output to temporary files for debugging and logging purposes.
     """
 
-    #TODO: I want types!!! ffs!
+    cmd: List[str]
+    debug: bool
+    process: subprocess.Popen
+    pid: int
+    stdout_temp: tempfile._TemporaryFileWrapper
+    stderr_temp: tempfile._TemporaryFileWrapper
+    check: bool
+
     def __init__(self, cmd: List[str], state_dir: Optional[Path] = None,
-                 vm_name: Optional[str] = None, debug: bool = False, **kwargs):
+                 vm_name: Optional[str] = None, debug: bool = False, **kwargs) -> None:
         """
         Initialize Popen with tempfile capture.
 
@@ -295,7 +302,7 @@ class ProcessWithOutput:
         self.process = subprocess.Popen(cmd, **kwargs_copy)
         self.pid = self.process.pid
 
-    def wait(self, timeout=None):
+    def wait(self, timeout: Optional[float] = None) -> int:
         """Wait for process to complete."""
         logger = logging.getLogger(__name__)
 
@@ -337,15 +344,23 @@ class ProcessWithOutput:
             self.terminate()
             raise
 
-    def terminate(self):
+    def poll(self) -> Optional[int]:
+        """Check if process has terminated.
+
+        Returns:
+            None if the process is still running, otherwise the return code.
+        """
+        return self.process.poll()
+
+    def terminate(self) -> None:
         """Terminate the process."""
         self.process.terminate()
 
-    def kill(self):
+    def kill(self) -> None:
         """Kill the process."""
         self.process.kill()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up temporary files."""
         try:
             self.stdout_temp.close()
@@ -359,11 +374,11 @@ class ProcessWithOutput:
         except OSError:
             pass
 
-    def __enter__(self):
+    def __enter__(self) -> 'ProcessWithOutput':
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit - ensure cleanup."""
         if self.process.poll() is None:
             self.terminate()
