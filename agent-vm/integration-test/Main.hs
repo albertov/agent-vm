@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wno-unused-packages #-}
 
 module Main (main, withTempStateDir, testVMConfig) where
 

@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-packages #-}
-
 -- | Tests for VM state management
 module AgentVM.StateSpec (spec) where
 
