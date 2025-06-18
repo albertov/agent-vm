@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-x-partial #-}
 
@@ -5,9 +6,10 @@
 module AgentVM.ProcessSpec (spec) where
 
 import AgentVM.Env (AgentVmEnv (..))
-import AgentVM.Log (AgentVmTrace (..), LogLevel (..), MonadTrace, trace, vmLogger)
+import AgentVM.Log hiding (ProcessExited)
 import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startLoggedProcess, startVMProcess)
+import qualified AgentVM.Process as P
 import Control.Concurrent.Thread.Delay (delay)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
@@ -19,9 +21,7 @@ import UnliftIO.Exception (finally)
 
 -- | Test environment with custom tracer that captures traces
 testEnvWithCapture :: IORef [AgentVmTrace] -> AgentVmEnv
-testEnvWithCapture traceRef = AgentVmEnv {tracer = IOTracer captureTracer}
-  where
-    captureTracer = Tracer $ \trace -> modifyIORef' traceRef (trace :)
+testEnvWithCapture traceRef = AgentVmEnv {tracer = IOTracer $ Tracer $ \trace -> modifyIORef' traceRef (trace :)}
 
 -- | Test environment with tracer
 testEnv :: AgentVmEnv
@@ -260,8 +260,8 @@ spec = describe "AgentVM.Process" $ do
 
       -- Verify we captured all lines
       [1 .. 10] `forM_` \i -> do
-        let expectedOut = "stdout line " <> show i
-        let expectedErr = "stderr line " <> show i
+        let expectedOut = "stdout line " <> show i :: Text
+        let expectedErr = "stderr line " <> show i :: Text
         outputTraces `shouldSatisfy` any (\case ProcessOutput _ line -> expectedOut == toS line; _ -> False)
         errorTraces `shouldSatisfy` any (\case ProcessError _ line -> expectedErr == toS line; _ -> False)
 
@@ -305,11 +305,11 @@ spec = describe "AgentVM.Process" $ do
       let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
 
       length spawnTraces `shouldBe` 1
-      case head spawnTraces of
-        ProcessSpawned path args -> do
-          path `shouldContain` "echo_stdout.sh"
+      case spawnTraces of
+        [ProcessSpawned path args] -> do
+          toS path `shouldContain` "echo_stdout.sh"
           args `shouldBe` ["arg1", "arg2"]
-        _ -> panic "Expected ProcessSpawned trace"
+        _ -> panic "Expected exactly one ProcessSpawned trace"
 
   describe "Process error handling" $ do
     it "handles startup failures" $ do
