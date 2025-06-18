@@ -11,6 +11,9 @@
 
 ### URGENT
 
+- [ ] Add MonadTrans instance to VMT so we can lift outer monad actions into
+  bigger VMT blocks
+
 - [ ] Extensive tests in AgentVM.ProcessSpec for the stderr/stdout capture
   functionality.
   Methodology: Write test, run cabal_test, fix, rinse and repeat.
