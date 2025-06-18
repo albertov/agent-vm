@@ -8,7 +8,7 @@ project_prompt = """
 exception handling. Never catch SomeExeption explicitly, use the `*Any`
 functions from UnliftIO instead.
 
-## Always use Protolude.toS for string conversions!
+## NEVER, EVER, EVER use 'unsafePerformIO' or 'unsafeCoerce'.
 
 ## Never use String unless mandated by an external library, always Text or
 ByteString instead
