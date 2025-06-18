@@ -19,4 +19,4 @@ mcp-proxy \
     codemcp \
   --named-server selenium \
     "${REPO_ROOT}/mcp_selenium.sh" \
-  --named-server hls haskell-language-server
+  --named-server hls ./mcp_language_haskell.sh

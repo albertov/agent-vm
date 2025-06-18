@@ -38,3 +38,4 @@ hie.yaml
 
 # Nix stuff
 nix/materialized/
+*.bak
