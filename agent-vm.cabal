@@ -39,6 +39,7 @@ library
     build-depends:    base
                     , protolude
                     , unliftio
+                    , unbounded-delays
                     , stm
                     , containers
                     , text
