@@ -19,10 +19,11 @@ import Control.Monad.Reader (ReaderT (..))
 import Data.Generics.Product (HasType)
 import Plow.Logging (IOTracer, traceWith)
 import Protolude
+import UnliftIO (MonadUnliftIO)
 
 -- | VM monad transformer
 newtype VMT m a = VMT {unVMT :: ReaderT AgentVmEnv m a}
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader AgentVmEnv)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader AgentVmEnv, MonadUnliftIO)
 
 -- | MonadTrace instance for VMT
 instance (MonadIO m) => MonadTrace AgentVmTrace (VMT m) where
