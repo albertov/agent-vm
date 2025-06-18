@@ -19,5 +19,4 @@ mcp-proxy \
     codemcp \
   --named-server selenium \
     "${REPO_ROOT}/mcp_selenium.sh" \
-  --named-server rescript-lsp \
-    "${REPO_ROOT}/mcp_rescript_lsp.sh"
+  --named-server hls haskell-language-server
