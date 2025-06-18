@@ -4,8 +4,7 @@ rec {
   compiler-nix-name = "ghc910"; # Version of GHC to use
   index-state = "2025-06-16T20:56:04Z";
   checkMaterialization = false;
-  # TODO: At some point...
-  # materialized = ../../nix/materialized;
+  materialized = ./materialized;
 
   shell.withHoogle = false;
   # Tools to include in the development shell
