@@ -102,11 +102,11 @@ verbosity = "DEBUG"
 command = ["nix", "flake", "check"]
 
 [commands.cabal_build]
-command = ["env", "-C", "./agent-vm", "cabal", "build"]
+command = ["cabal", "build"]
 doc = "Runs cabal build. Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.cabal_test]
-command = ["env", "-C", "./agent-vm", "cabal", "test"]
+command = ["cabal", "test"]
 doc = "Runs cabal test. Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.lynx]
