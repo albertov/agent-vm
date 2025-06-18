@@ -145,9 +145,12 @@
           integration-test = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "integration-test";
-              runtimeInputs = [ pkgs.agent-vm-test ];
+              runtimeInputs = [ pkgs.nix pkgs.agent-vm-test ];
+              # I've modified this un purpose so you can see the
+              # error I wan't you to fix, don't change it Claude
               text = ''
-                exec agent-vm-test "$@"
+                exec nix develop -c true
+                # exec agent-vm-test "$@"
               '';
             };
           };
@@ -189,19 +192,18 @@
                 echo "🔄 Updating Nix materialization..."
 
                 PLAN_RESULT="$(mktemp -d)/plan"
-                HIX="$(pwd)/nix/hix.nix"
 
                 # Backup the original hix.nix
-                cp "$HIX" "$HIX".backup
-                trap 'mv $HIX.backup $HIX; rm $PLAN_RESULT' EXIT
+                cp nix/hix.nix nix/hix.nix.backup
+                trap 'mv nix/hix.nix.backup nix/hix.nix; rm $PLAN_RESULT' EXIT
 
                 # Step 1: Temporarily disable materialization by commenting out the line
                 echo "📝 Temporarily disabling materialization..."
-                sed -i 's/materialized = /# materialized = # Temporarily disabled/' "$HIX"
+                sed -i 's/materialized = \.\/materialized;/# materialized = \.\/materialized; # Temporarily disabled/' nix/hix.nix
 
                 # Step 2: Try to build the plan-nix (this will use IFD but generate what we need)
                 echo "🏗️ Building project plan..."
-                nix "$@" build .#hixProject.plan-nix -o "$PLAN_RESULT"
+                nix build .#hixProject.plan-nix -o "$PLAN_RESULT"
 
                 # Step 3: Remove old materialized files and copy new ones
                 echo "📁 Updating materialized files..."
@@ -210,15 +212,15 @@
                 rsync -a "$PLAN_RESULT"/ nix/materialized/
                 chmod -R u+w nix/materialized
 
-                # Step 4: Restore the original $HIX (re-enable materialization)
+                # Step 4: Restore the original hix.nix (re-enable materialization)
                 echo "🔧 Re-enabling materialization..."
-                mv "$HIX".backup "$HIX"
+                mv nix/hix.nix.backup nix/hix.nix
                 trap - EXIT
 
                 # Step 5: Test that it works
                 echo "🧪 Testing materialization..."
                 git add -f nix/materialized
-                if nix "$@" flake check; then
+                if nix flake check; then
                   echo "✅ Flake check passed"
                   # Step 6: Commit the materialized files
                   echo "📝 Committing materialized files..."
@@ -247,7 +249,6 @@
                 echo "during evaluation."
               '';
             };
-
           };
 
           start-vm = flake-utils.lib.mkApp {
