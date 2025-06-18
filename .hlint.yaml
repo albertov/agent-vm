@@ -53,8 +53,16 @@
     - package base
     rules:
 
+    # errors
+  
     - error: {name: unsafeCoerce, within: [], message: "Use Data.Coerce.coerce instead"}
     - error: {name: unsafePerformIO, within: [], message: "Just don't"}
+
+    # Style
+    - warn: {lhs: pack, rhs: toS, name: Use toS for string conversions }
+    - warn: {lhs: unpack, rhs: toS, name: Use toS for string conversions }
+    - warn: {lhs: fromStrict, rhs: toS, name: Use toS for string conversions }
+    - warn: {lhs: toStrict, rhs: toS, name: Use toS for string conversions }
 
     # Data.Bifoldable
 

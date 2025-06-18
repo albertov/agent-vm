@@ -8,8 +8,6 @@ project_prompt = """
 exception handling. Never catch SomeExeption explicitly, use the `*Any`
 functions from UnliftIO instead.
 
-## NEVER, EVER, EVER use 'unsafePerformIO' or 'unsafeCoerce'.
-
 ## Never use String unless mandated by an external library, always Text or
 ByteString instead
 
