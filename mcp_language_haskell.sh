@@ -5,4 +5,4 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 exec mcp-language-server \
   --workspace "${REPO_ROOT}" \
-  --lsp haskell-language-server -- --lsp
+  --lsp haskell-language-server
