@@ -69,6 +69,7 @@ executable agent-vm
                     , agent-vm
                     , optparse-applicative
                     , plow-log-async
+                    , plow-log
     hs-source-dirs:   app
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -92,6 +93,7 @@ test-suite spec
                     , containers
                     , plow-log
                     , network
+                    , unbounded-delays
     hs-source-dirs:   test
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude

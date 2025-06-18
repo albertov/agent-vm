@@ -30,7 +30,7 @@ using existing dependencies when possible.
 errors. Do this after every edit that affects haskell code and fix errors before
 proceeding.
 
-## You MUST always run the 'hlint' command on every Haskell file after testing
+## You MUST always run the 'format' command on every Haskell file after testing
 your edits and fix ALL the warnings and errors it reports.
 
 ## You MUST always use Generic deriving mechanisms for JSON/YAML
@@ -147,14 +147,6 @@ to avoid a module with -Module.Name. The command Module.Name.Foo is treated as
 Packages: Searches can be restricted to a particular package with +packagename,
 or to avoid a package with -package. By default Hoogle will search a standard
 set of packages.
-"""
-
-[commands.lint]
-command = ["hlint"]
-doc = """
-Run hlint on the file or directory passed as argument to report errors
-
-When asked to lint every haskell file just call it like "lint ."
 """
 
 [commands.integration-test]

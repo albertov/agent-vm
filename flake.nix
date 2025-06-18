@@ -16,8 +16,7 @@
     flake-utils.url = "github:numtide/flake-utils";
 
     # Haskell.nix infrastructure
-    haskellNix.url =
-      "github:input-output-hk/haskell.nix/07980c9354842dd3858d124ccde54bf4fa010ecf";
+    haskellNix.url = "github:input-output-hk/haskell.nix/07980c9354842dd3858d124ccde54bf4fa010ecf";
 
     treefmt-nix.url = "github:numtide/treefmt-nix";
 
