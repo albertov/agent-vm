@@ -6,9 +6,9 @@
 
 module Main (main, withTempStateDir, testVMConfig) where
 
-import AgentVM (createVM, destroyVM)
+import AgentVM (createVM, destroyVM, runVMT)
 import AgentVM.Config (initConfig)
-import AgentVM.Env (AgentVmEnv (AgentVmEnv), runVM)
+import AgentVM.Env (AgentVmEnv (AgentVmEnv))
 import AgentVM.Log (createLogContext)
 import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace), VMHandle, vmHandlePid)
 import Protolude (FilePath, IO, ($), (.), (<>), (==))
@@ -32,11 +32,11 @@ spec = describe "Agent VM Integration Tests" $ do
             env = AgentVmEnv logCtx
 
         -- Create VM and verify it exists
-        handle <- runVM env (createVM vmConfig)
+        handle <- runVMT env (createVM vmConfig)
         handle `shouldSatisfy` (\h -> vmHandlePid h == 12345) -- TODO: Check for real PID
 
         -- Destroy the VM
-        runVM env (destroyVM handle)
+        runVMT env (destroyVM handle)
 
     it "completes full create-start-stop-destroy cycle" $ do
       pending -- TODO: Implement

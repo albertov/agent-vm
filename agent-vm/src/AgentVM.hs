@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
@@ -80,20 +81,37 @@ module AgentVM
 
     -- * Environment
     AgentVmEnv (..),
-    runVM,
+    runVMT,
   )
 where
 
+import AgentVM.Class (MonadVM (..))
 import AgentVM.Config
 import AgentVM.Env
 import AgentVM.Log (AgentVmTrace, MonadTrace (..), renderTrace, traceToMessage, vmLogger)
 import qualified AgentVM.Log as Log
+import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Nix
 import AgentVM.Process
 import AgentVM.SSH
 import AgentVM.State
 import AgentVM.Types
 import Protolude
+
+-- | Instance of MonadVM for VMT IO
+instance MonadVM (VMT IO) where
+  create config = do
+    handle <- createVM config
+    return (Right handle)
+
+  destroy handle = do
+    destroyVM handle
+    return (Right ())
+
+  -- These are not implemented yet
+  start _ = return (Left (VMInvalidState "start not implemented"))
+  stop _ = return (Left (VMInvalidState "stop not implemented"))
+  status _ = return (Left (VMInvalidState "status not implemented"))
 
 -- | Create a new VM with the given configuration
 createVM ::

@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 -- | VM monad instance for running VM operations
@@ -12,7 +11,6 @@ module AgentVM.Monad
   )
 where
 
-import AgentVM (createVM, destroyVM)
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log (AgentVmTrace, MonadTrace (..), PlowLogging)
@@ -35,18 +33,3 @@ instance (MonadIO m) => MonadTrace AgentVmTrace (VMT m) where
 -- | Run a VMT computation
 runVMT :: AgentVmEnv -> VMT m a -> m a
 runVMT env (VMT m) = runReaderT m env
-
--- | Instance of MonadVM for VMT IO
-instance MonadVM (VMT IO) where
-  create config = do
-    handle <- createVM config
-    return (Right handle)
-
-  destroy handle = do
-    destroyVM handle
-    return (Right ())
-
-  -- These are not implemented yet
-  start _ = return (Left (VMInvalidState "start not implemented"))
-  stop _ = return (Left (VMInvalidState "stop not implemented"))
-  status _ = return (Left (VMInvalidState "status not implemented"))
