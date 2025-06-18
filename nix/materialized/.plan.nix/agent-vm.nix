@@ -36,6 +36,7 @@
           (hsPkgs."base" or (errorHandler.buildDepError "base"))
           (hsPkgs."protolude" or (errorHandler.buildDepError "protolude"))
           (hsPkgs."unliftio" or (errorHandler.buildDepError "unliftio"))
+          (hsPkgs."unbounded-delays" or (errorHandler.buildDepError "unbounded-delays"))
           (hsPkgs."stm" or (errorHandler.buildDepError "stm"))
           (hsPkgs."containers" or (errorHandler.buildDepError "containers"))
           (hsPkgs."text" or (errorHandler.buildDepError "text"))

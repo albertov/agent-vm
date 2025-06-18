@@ -3,7 +3,7 @@
     {
       packages = {
         conduit.revision = import ./cabal-files/conduit.nix;
-        filepath.revision = hackage.filepath."1.5.4.0".revisions.default;
+        filepath.revision = hackage.filepath."1.4.301.0".revisions.default;
         attoparsec.revision = import ./cabal-files/attoparsec.nix;
         attoparsec.flags.developer = false;
         text-iso8601.revision = import ./cabal-files/text-iso8601.nix;
@@ -26,15 +26,15 @@
         comonad.flags.indexed-traversable = true;
         comonad.flags.distributive = true;
         ghc-bignum.revision = hackage.ghc-bignum."1.3".revisions.default;
-        stm.revision = hackage.stm."2.5.3.1".revisions.default;
+        stm.revision = hackage.stm."2.5.1.0".revisions.default;
         integer-conversion.revision = import ./cabal-files/integer-conversion.nix;
         typed-process.revision = import ./cabal-files/typed-process.nix;
-        transformers.revision = hackage.transformers."0.6.1.1".revisions.default;
+        transformers.revision = hackage.transformers."0.6.1.0".revisions.default;
         microlens.revision = import ./cabal-files/microlens.nix;
         distributive.revision = import ./cabal-files/distributive.nix;
         distributive.flags.semigroups = true;
         distributive.flags.tagged = true;
-        deepseq.revision = hackage.deepseq."1.5.0.0".revisions.default;
+        deepseq.revision = hackage.deepseq."1.4.8.1".revisions.default;
         optparse-applicative.revision = import ./cabal-files/optparse-applicative.nix;
         optparse-applicative.flags.process = true;
         streaming-commons.revision = import ./cabal-files/streaming-commons.nix;
@@ -42,17 +42,18 @@
         split.revision = import ./cabal-files/split.nix;
         directory.revision = hackage.directory."1.3.8.5".revisions.default;
         stm-chans.revision = import ./cabal-files/stm-chans.nix;
-        parsec.revision = hackage.parsec."3.1.18.0".revisions.default;
+        parsec.revision = hackage.parsec."3.1.16.1".revisions.default;
         cereal-conduit.revision = import ./cabal-files/cereal-conduit.nix;
         strict.revision = import ./cabal-files/strict.nix;
         generic-lens.revision = import ./cabal-files/generic-lens.nix;
         th-abstraction.revision = import ./cabal-files/th-abstraction.nix;
+        unbounded-delays.revision = import ./cabal-files/unbounded-delays.nix;
         profunctors.revision = import ./cabal-files/profunctors.nix;
         microlens-mtl.revision = import ./cabal-files/microlens-mtl.nix;
         mtl.revision = hackage.mtl."2.3.1".revisions.default;
         ansi-terminal-types.revision = import ./cabal-files/ansi-terminal-types.nix;
-        process.revision = hackage.process."1.6.25.0".revisions.default;
-        base.revision = hackage.base."4.20.1.0".revisions.default;
+        process.revision = hackage.process."1.6.19.0".revisions.default;
+        base.revision = hackage.base."4.18.3.0".revisions.default;
         call-stack.revision = import ./cabal-files/call-stack.nix;
         base-orphans.revision = import ./cabal-files/base-orphans.nix;
         indexed-profunctors.revision = import ./cabal-files/indexed-profunctors.nix;
@@ -73,7 +74,7 @@
         mtl-compat.flags.two-point-two = false;
         bifunctors.revision = import ./cabal-files/bifunctors.nix;
         bifunctors.flags.tagged = true;
-        text.revision = hackage.text."2.1.2".revisions.default;
+        text.revision = hackage.text."2.0.2".revisions.default;
         safe-exceptions.revision = import ./cabal-files/safe-exceptions.nix;
         time.revision = hackage.time."1.12.2".revisions.default;
         array.revision = hackage.array."0.5.8.0".revisions.default;
@@ -109,17 +110,17 @@
         mono-traversable.revision = import ./cabal-files/mono-traversable.nix;
         indexed-traversable.revision = import ./cabal-files/indexed-traversable.nix;
         hashable.revision = import ./cabal-files/hashable.nix;
+        hashable.flags.integer-gmp = true;
         hashable.flags.random-initial-seed = false;
         hashable.flags.arch-native = false;
         character-ps.revision = import ./cabal-files/character-ps.nix;
         th-compat.revision = import ./cabal-files/th-compat.nix;
-        ghc-internal.revision = hackage.ghc-internal."9.1002.0".revisions.default;
         conduit-extra.revision = import ./cabal-files/conduit-extra.nix;
-        binary.revision = hackage.binary."0.8.9.3".revisions.default;
+        binary.revision = hackage.binary."0.8.9.1".revisions.default;
         monad-loops.revision = import ./cabal-files/monad-loops.nix;
         monad-loops.flags.base4 = true;
         plow-log.revision = import ./cabal-files/plow-log.nix;
-        template-haskell.revision = hackage.template-haskell."2.22.0.0".revisions.default;
+        template-haskell.revision = hackage.template-haskell."2.20.0.0".revisions.default;
         unix.revision = hackage.unix."2.8.6.0".revisions.default;
         primitive.revision = import ./cabal-files/primitive.nix;
         aeson.revision = import ./cabal-files/aeson.nix;
@@ -129,8 +130,8 @@
         hsc2hs.revision = import ./cabal-files/hsc2hs.nix;
         hsc2hs.flags.in-ghc-tree = false;
         colour.revision = import ./cabal-files/colour.nix;
-        exceptions.revision = hackage.exceptions."0.10.9".revisions.default;
-        bytestring.revision = hackage.bytestring."0.12.2.0".revisions.default;
+        exceptions.revision = hackage.exceptions."0.10.7".revisions.default;
+        bytestring.revision = hackage.bytestring."0.11.5.4".revisions.default;
         witherable.revision = import ./cabal-files/witherable.nix;
         stm-conduit.revision = import ./cabal-files/stm-conduit.nix;
         unliftio.revision = import ./cabal-files/unliftio.nix;
@@ -142,8 +143,8 @@
         tagged.revision = import ./cabal-files/tagged.nix;
         tagged.flags.transformers = true;
         tagged.flags.deepseq = true;
-        ghc-boot-th.revision = hackage.ghc-boot-th."9.10.2".revisions.default;
-        os-string.revision = hackage.os-string."2.0.4".revisions.default;
+        ghc-boot-th.revision = hackage.ghc-boot-th."9.6.7".revisions.default;
+        os-string.revision = import ./cabal-files/os-string.nix;
         transformers-compat.revision = import ./cabal-files/transformers-compat.nix;
         transformers-compat.flags.three = false;
         transformers-compat.flags.four = false;
@@ -158,7 +159,7 @@
         prettyprinter.flags.text = true;
         assoc.revision = import ./cabal-files/assoc.nix;
         assoc.flags.tagged = false;
-        ghc-prim.revision = hackage.ghc-prim."0.12.0".revisions.default;
+        ghc-prim.revision = hackage.ghc-prim."0.10.0".revisions.default;
         hspec-expectations.revision = import ./cabal-files/hspec-expectations.nix;
         pretty.revision = hackage.pretty."1.1.3.6".revisions.default;
         plow-log-async.revision = import ./cabal-files/plow-log-async.nix;
@@ -170,7 +171,7 @@
         splitmix.flags.optimised-mixer = false;
         cereal.revision = import ./cabal-files/cereal.nix;
         cereal.flags.bytestring-builder = false;
-        containers.revision = hackage.containers."0.7".revisions.default;
+        containers.revision = hackage.containers."0.6.7".revisions.default;
         prettyprinter-ansi-terminal.revision = import ./cabal-files/prettyprinter-ansi-terminal.nix;
         scientific.revision = import ./cabal-files/scientific.nix;
         scientific.flags.integer-simple = false;
@@ -183,32 +184,30 @@
         dlist.flags.werror = false;
       };
       compiler = {
-        version = "9.10.2";
-        nix-name = "ghc9102";
+        version = "9.6.7";
+        nix-name = "ghc967";
         packages = {
-          "ghc-boot-th" = "9.10.2";
-          "binary" = "0.8.9.3";
+          "ghc-boot-th" = "9.6.7";
+          "binary" = "0.8.9.1";
           "pretty" = "1.1.3.6";
           "array" = "0.5.8.0";
           "time" = "1.12.2";
-          "ghc-prim" = "0.12.0";
-          "bytestring" = "0.12.2.0";
-          "process" = "1.6.25.0";
+          "ghc-prim" = "0.10.0";
+          "bytestring" = "0.11.5.4";
+          "process" = "1.6.19.0";
           "mtl" = "2.3.1";
-          "text" = "2.1.2";
-          "template-haskell" = "2.22.0.0";
-          "parsec" = "3.1.18.0";
+          "text" = "2.0.2";
+          "template-haskell" = "2.20.0.0";
+          "parsec" = "3.1.16.1";
           "ghc-bignum" = "1.3";
-          "stm" = "2.5.3.1";
-          "filepath" = "1.5.4.0";
-          "os-string" = "2.0.4";
+          "stm" = "2.5.1.0";
+          "filepath" = "1.4.301.0";
           "unix" = "2.8.6.0";
-          "exceptions" = "0.10.9";
-          "deepseq" = "1.5.0.0";
-          "transformers" = "0.6.1.1";
-          "containers" = "0.7";
-          "ghc-internal" = "9.1002.0";
-          "base" = "4.20.1.0";
+          "exceptions" = "0.10.7";
+          "deepseq" = "1.4.8.1";
+          "transformers" = "0.6.1.0";
+          "containers" = "0.6.7";
+          "base" = "4.18.3.0";
           "directory" = "1.3.8.5";
         };
       };
@@ -231,14 +230,12 @@
         "text"
         "time"
         "array"
-        "ghc-internal"
         "binary"
         "template-haskell"
         "unix"
         "exceptions"
         "bytestring"
         "ghc-boot-th"
-        "os-string"
         "ghc-prim"
         "pretty"
         "containers"
@@ -296,6 +293,7 @@
           "vector-algorithms".components.library.planned = lib.mkOverride 900 true;
           "zlib-clib".components.library.planned = lib.mkOverride 900 true;
           "aeson".components.library.planned = lib.mkOverride 900 true;
+          "unbounded-delays".components.library.planned = lib.mkOverride 900 true;
           "prettyprinter".components.library.planned = lib.mkOverride 900 true;
           "hspec-discover".components.exes."hspec-discover".planned = lib.mkOverride 900 true;
           "transformers-compat".components.library.planned = lib.mkOverride 900 true;
@@ -328,7 +326,6 @@
           "assoc".components.library.planned = lib.mkOverride 900 true;
           "OneTuple".components.library.planned = lib.mkOverride 900 true;
           "witherable".components.library.planned = lib.mkOverride 900 true;
-          "ghc-internal".components.library.planned = lib.mkOverride 900 true;
           "time".components.library.planned = lib.mkOverride 900 true;
           "primitive".components.library.planned = lib.mkOverride 900 true;
           "ghc-bignum".components.library.planned = lib.mkOverride 900 true;
