@@ -161,11 +161,3 @@ Runs the .#integration-test flake app with the arguments you pass"
 
 Arguments are passed to the python script. Make sure you quote them properly!
 """
-
-[commands.update-materialization]
-command = ["timeout", "90s", "nix", "run", ".#update-materialization", "--"]
-doc = """
-Runs the .#integration-test flake app with the arguments you pass"
-
-Arguments are passed to the python script. Make sure you quote them properly!
-"""

@@ -53,7 +53,7 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        traceShowId = x: builtins.trace "Debug: ${toString x}" x;
+        # traceShowId = x: builtins.trace "Debug: ${toString x}" x;
         pkgs = import inputs.nixpkgs {
           inherit system;
           inherit (haskellNix) config;
@@ -67,34 +67,37 @@
               agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
               agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
               hixProject = final.haskell-nix.hix.project {
-                  # We clean the source to avoid spurious recompiles
-                  src = final.lib.sources.cleanSourceWith rec {
-                    src = builtins.path {
-                      path = ./.;
-                      name = "source";
-                    };
-                    filter = path: type:
-                      let
-                        baseName = baseNameOf path;
-                        # Get relative path from source root
-                        relativePath = final.lib.removePrefix (toString src + "/") (toString path);
-                      in
-                      (
+                # We clean the source to avoid spurious recompiles
+                src = final.lib.sources.cleanSourceWith rec {
+                  src = builtins.path {
+                    path = ./.;
+                    name = "source";
+                  };
+                  filter =
+                    path: _type:
+                    let
+                      baseName = baseNameOf path;
+                      # Get relative path from source root
+                      relativePath = final.lib.removePrefix (toString src + "/") (toString path);
+                    in
+                    (
                       # Don't traverse into excluded directories
-                      !(final.lib.hasPrefix "agent-vm-py" relativePath) &&
-                      !(final.lib.hasPrefix "cabal.project.local" relativePath) &&
-                      # no bash scripts
-                      !(final.lib.hasSuffix ".sh" baseName) &&
-                      !(final.lib.hasSuffix ".md" baseName) &&
-                      # non-haskell related files
-                      !(builtins.elem baseName [
+                      !(final.lib.hasPrefix "agent-vm-py" relativePath)
+                      && !(final.lib.hasPrefix "cabal.project.local" relativePath)
+                      &&
+                        # no bash scripts
+                        !(final.lib.hasSuffix ".sh" baseName)
+                      && !(final.lib.hasSuffix ".md" baseName)
+                      &&
+                        # non-haskell related files
+                        !(builtins.elem baseName [
                           "codemcp.toml"
                           "flake.nix"
                           "flake.lock"
                         ])
                       # && (relativePath == traceShowId relativePath)
-                      );
-                  };
+                    );
+                };
                 evalSystem = "x86_64-linux";
               };
             })
