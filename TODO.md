@@ -11,15 +11,15 @@
 
 ### URGENT
 
-- [ ] Add MonadTrans instance to VMT so we can lift outer monad actions into
-  bigger VMT blocks
-
 - [ ] Extensive tests in AgentVM.ProcessSpec for the stderr/stdout capture
   functionality.
   Methodology: Write test, run cabal_test, fix, rinse and repeat.
   You should write fixture bash scripts in test/fixtures/ProcessSpec and execute
   them to test it. These scripts should ONLY write test strings to stdout or
   stderr and exit successfully or not, do not fork any other process.
+
+- [ ] Add MonadTrans instance to VMT so we can lift outer monad actions into
+  bigger VMT blocks
 
 - [x] Refactor the functions that have a `(MonadReader r m, HasType (IOTracer AgentVmTrace) r)`
   contraint into a MonadTrace one so they can use the new `trace` method instead of `<&`
