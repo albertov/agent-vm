@@ -8,12 +8,13 @@ module AgentVM.Process
     checkVMProcess,
     waitForProcess,
     ProcessState (..),
+    VMProcess (..),
     startLoggedProcess,
   )
 where
 
-import AgentVM.Log (AgentVmTrace (ProcessSpawned), MonadTrace)
-import Protolude
+import AgentVM.Log (AgentVmTrace (ProcessSpawned), MonadTrace (..))
+import Protolude hiding (trace)
 import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
 
 -- | State of a VM process
@@ -33,7 +34,13 @@ startLoggedProcess ::
   FilePath ->
   [Text] ->
   m (Process () () ())
-startLoggedProcess scriptPath args = notImplemented
+startLoggedProcess scriptPath args = do
+  -- Trace the process spawn event
+  trace $ ProcessSpawned (toS scriptPath) args
+
+  -- Start the process
+  let processConfig = proc scriptPath (map toS args)
+  liftIO $ startProcess processConfig
 
 -- | Start a VM process
 startVMProcess ::
@@ -42,7 +49,10 @@ startVMProcess ::
   ) =>
   FilePath ->
   m VMProcess
-startVMProcess scriptPath = notImplemented
+startVMProcess scriptPath = do
+  -- Use startLoggedProcess to start the process with logging
+  process <- startLoggedProcess scriptPath []
+  return $ VMProcess process
 
 -- | Stop a VM process gracefully
 stopVMProcess ::

@@ -86,7 +86,7 @@ where
 
 import AgentVM.Config
 import AgentVM.Env
-import AgentVM.Log (AgentVmTrace, MonadTrace (..))
+import AgentVM.Log (AgentVmTrace, MonadTrace (..), renderTrace, traceToMessage, vmLogger)
 import qualified AgentVM.Log as Log
 import AgentVM.Nix
 import AgentVM.Process
