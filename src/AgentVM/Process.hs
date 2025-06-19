@@ -20,7 +20,7 @@ import qualified Data.Text.Encoding as TE
 import Protolude hiding (async, atomically, trace)
 import System.IO (Handle)
 import System.Process.Typed (ExitCode (..), Process, createPipe, getExitCode, getStderr, getStdout, proc, setStderr, setStdout, startProcess)
-import UnliftIO (MonadUnliftIO, catchAny)
+import UnliftIO (MonadUnliftIO, catchAny, tryAny)
 import UnliftIO.Async (async)
 
 -- | State of a VM process
@@ -61,12 +61,15 @@ startLoggedProcess scriptPath args = do
     traceHandleOutput :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => Text -> (Text -> Text -> AgentVmTrace) -> Handle -> m ()
     traceHandleOutput name constructor handle = do
       let loop = do
-            line <- liftIO $ BS.hGetLine handle
-            unless (BS.null line) $ do
-              let lineText = TE.decodeUtf8Lenient line
-              trace (constructor name lineText)
-            loop
-      loop `catchAny` (\_ -> return ())
+            eitherLine <- liftIO $ tryAny $ BS.hGetLine handle
+            case eitherLine of
+              Left _ -> return () -- EOF or error
+              Right line -> do
+                -- Always trace the line, even if it's empty
+                let lineText = TE.decodeUtf8Lenient line
+                trace (constructor name lineText)
+                loop
+      loop
 
 -- | Start a VM process
 startVMProcess ::
