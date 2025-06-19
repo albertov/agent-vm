@@ -13,7 +13,7 @@ where
 
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
-import AgentVM.Log (AgentVmTrace, MonadTrace (..), PlowLogging)
+import AgentVM.Log (AgentVmTrace, MonadTrace (..))
 import AgentVM.Types (VMConfig, VMError (..), VMHandle, VMState)
 import Control.Monad.Reader (ReaderT (..))
 import Data.Generics.Product (HasType)
