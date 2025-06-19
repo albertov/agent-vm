@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test script that writes to stdout
 echo "Hello from stdout"
 echo "Second line to stdout"
