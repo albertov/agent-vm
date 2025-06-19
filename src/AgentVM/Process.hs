@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -39,6 +40,8 @@ import Protolude
     Show,
     Text,
     fromIntegral,
+    fromMaybe,
+    isJust,
     liftIO,
     map,
     mapM_,
@@ -167,20 +170,17 @@ stopVMProcess ::
   m ExitCode
 stopVMProcess mTimeout vmProcess = do
   -- Stop the process
-  withAsync processKiller $ \killer -> do
-    result <- liftIO $ do
-      stopProcess process
-      waitExitCode process
-    cancel killer
-    liftIO $ waitIOThreads vmProcess
-    pure result
+  liftIO $ stopProcess process
+  loop
   where
     process = getProcess vmProcess
-    processKiller = case mTimeout of
-      Just t -> do
-        liftIO $ delay t
-        liftIO $ getPid process >>= mapM_ (signalProcess sigKILL)
-      Nothing -> pure ()
+    loop =
+      waitForProcess (fromMaybe 1000 mTimeout) vmProcess >>= \case
+        Just ecode -> pure ecode
+        Nothing | isJust mTimeout -> liftIO $ do
+          getPid process >>= mapM_ (signalProcess sigKILL)
+          waitExitCode process
+        Nothing -> loop
 
 -- | Start a VM process and ensures that it is killed when
 -- then continuation exits
@@ -205,11 +205,10 @@ checkVMProcess process = liftIO $ do
   pure $ maybe ProcessRunning ProcessExited exitCode
 
 -- | Wait for a process with timeout
-waitForProcess :: (MonadIO m) => Int -> VMProcess -> m (Maybe ExitCode)
+waitForProcess :: (MonadIO m) => Integer -> VMProcess -> m (Maybe ExitCode)
 waitForProcess timeoutMicros vmProcess = do
   -- Convert microseconds to Integer for unbounded-delays
-  let timeoutMicrosInteger = fromIntegral timeoutMicros :: Integer
-  liftIO $ timeout timeoutMicrosInteger $ do
+  liftIO $ timeout timeoutMicros $ do
     exitCode <- waitExitCode (getProcess vmProcess)
     -- IMPORTANT: Wait for IO threads to complete to ensure all output is captured
     waitIOThreads vmProcess
