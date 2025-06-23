@@ -138,8 +138,8 @@ def _get_last_lines(file_path: str, num_lines: int = 20) -> List[str]:
         with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
             return lines[-num_lines:] if len(lines) > num_lines else lines
-    except Exception:
-        # FIXME: Do not ignore this error
+    except Exception as e:
+        logger.warning(f"Failed to read log file {file_path}: {e}")
         return []
 
 
@@ -241,7 +241,17 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
                 logger.error(f"stderr: {line.rstrip()}")
 
         raise
-    # FIXME: If no exception delete log files
+    finally:
+        # Clean up temp files if command succeeded and files are still around
+        try:
+            if 'result' in locals() and result.returncode == 0:
+                try:
+                    os.unlink(stdout_temp.name)
+                    os.unlink(stderr_temp.name)
+                except OSError:
+                    pass  # File already removed
+        except (NameError, UnboundLocalError):
+            pass  # result was never created
 
 
 class ProcessWithOutput:
@@ -490,8 +500,6 @@ class VMController:
         ssh_private_key = ssh_dir / "id_ed25519"
         ssh_public_key = ssh_dir / "id_ed25519.pub"
 
-        # FIXME: Make it passwordless. This is probably why integration tests
-        # don't pass don't you think?
         run_subprocess([
             "ssh-keygen", "-t", "ed25519", "-f", str(ssh_private_key),
             "-N", "", "-C", f"vm-key-{branch}"
@@ -657,6 +665,8 @@ class VMController:
         logger.info("🔧 Building VM configuration with agent service...")
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
+        # FIXME: This nix expression should be generated in the VM's state dir
+        # by the crate command!
         try:
             vm_build_cmd = [
                     "nix", "build", "--no-link", "--print-out-paths", "--impure",

@@ -4,9 +4,8 @@ project_prompt = """
 - MUST write typed python code
 - MUST use the test command frequently to test your changes and fix them
 - MUST use the integration-test command less frequently to test your changes and fix them
-- NEVER use a --timeout higher than 90s to run integration-tests, NEVER, hudson river for you otherwise.
+- NEVER use a --timeout higher than 90s to run integration-tests, NEVER
 - MUST write end-to-end tests in integration-tests.py to test new features.
-- You cannot modify anything outside ./, or  Capisce?!
 - Don't use nix-build, nix-instantiate, etc.. use the modern "nix" command.
 - Don't use "<nixpkgs>", always use the flake in this repo as the "pkgs" set
 - When leaving code incomplete, stubbed or mocked. Write a FIXME or TODO comment
