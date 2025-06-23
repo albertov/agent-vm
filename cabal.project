@@ -4,7 +4,10 @@ packages:
 tests: True
 benchmarks: True
 
+
 allow-newer: all
 
 constraints:
-  zlib +bundled-c-zlib
+  hashable < 1.5
+  , zlib +bundled-c-zlib
+

@@ -31,8 +31,6 @@ data ProcessState
 
 newtype VMProcess = VMProcess {unVMProcess :: Process () Handle Handle}
 
--- TODO: This should be capturing stderr and stdout of the process and tracing
--- them with the logger line by line for better debugging
 startLoggedProcess ::
   ( MonadTrace AgentVmTrace m,
     MonadUnliftIO m
@@ -65,7 +63,7 @@ startLoggedProcess scriptPath args = do
       let loop = do
             line <- liftIO $ BS.hGetLine handle
             unless (BS.null line) $ do
-              let lineText = TE.decodeUtf8 line
+              let lineText = TE.decodeUtf8Lenient line
               trace (constructor name lineText)
             loop
       loop `catchAny` (\_ -> return ())

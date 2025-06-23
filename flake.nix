@@ -145,12 +145,9 @@
           integration-test = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "integration-test";
-              runtimeInputs = [ pkgs.nix pkgs.agent-vm-test ];
-              # I've modified this un purpose so you can see the
-              # error I wan't you to fix, don't change it Claude
+              runtimeInputs = [ pkgs.agent-vm-test ];
               text = ''
-                exec nix develop -c true
-                # exec agent-vm-test "$@"
+                exec agent-vm-test "$@"
               '';
             };
           };
