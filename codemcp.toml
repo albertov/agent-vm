@@ -19,16 +19,8 @@ Ignore changes to codemcp.toml and under the ./ directory.
 
 When your work is ready, you MUST:
 
-1) Run the tests again.  ALL tests MUST pass! We allow no flaky tests here. Fix
+1) Run the integration-tests.  ALL tests MUST pass! We allow no flaky tests here. Fix
 them if they don't and repeat. If you get stuck write a FIXME
-
-2) Run the 'branch_log' command to get a log and diff of all the files
-that have been modified in this branch. Then bump the version and
-update the CHANGELOG.md of their package and any other '*.md'
-documents in the repository so they reflect correct and up-to-date
-information. Don't repeat this information to the user, only edit the `*.md`
-files.
-Do not bump the version more than once per branch.
 """
 
 [commands.format]
