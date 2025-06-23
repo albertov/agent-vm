@@ -12,6 +12,7 @@ rec {
   shell.tools.cabal = "latest";
   shell.tools.hlint = "latest";
   shell.tools.ormolu = "latest";
+  shell.tools.ghcid = "latest";
   # shell.tools.haskell-language-server = "latest";
   # Non-Haskell tools to include in the development shell
   shell.nativeBuildInputs = with pkgs.buildPackages; [
