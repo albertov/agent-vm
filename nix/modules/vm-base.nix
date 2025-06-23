@@ -1,7 +1,5 @@
 {
-  self,
   config,
-  inputs,
   pkgs,
   lib,
   ...
@@ -16,7 +14,6 @@ let
 in
 {
   imports = [
-    "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
     ./mcp-proxy.nix
     ./selenium-server.nix
     ./virtiofs-qemu.nix
@@ -55,11 +52,10 @@ in
 
       workspaceSource = lib.mkOption {
         type = lib.types.str;
-        default = "/home/alberto/src/agent-vm";
         description = "Source path for workspace shared directory";
       };
 
-      hostPort = lib.mkOption {
+      port = lib.mkOption {
         type = lib.types.int;
         default = 8000;
         description = "Host port for forwarding to MCP proxy";
@@ -67,34 +63,28 @@ in
 
       systemPackages = lib.mkOption {
         type = lib.types.listOf lib.types.package;
-        default = with pkgs; [ vim git ];
+        default = with pkgs; [
+          vim
+          git
+        ];
         description = "System packages to install";
       };
 
-      mcpProxy = {
-        port = lib.mkOption {
-          type = lib.types.int;
-          default = 8000;
-          description = "MCP proxy port";
-        };
+      uid = lib.mkOption {
+        type = lib.types.int;
+        default = 1000;
+        description = "UID for MCP proxy user";
+      };
 
-        uid = lib.mkOption {
-          type = lib.types.int;
-          default = 1000;
-          description = "UID for MCP proxy user";
-        };
+      group = lib.mkOption {
+        type = lib.types.str;
+        default = "users";
+        description = "Group for MCP proxy user";
+      };
 
-        group = lib.mkOption {
-          type = lib.types.str;
-          default = "users";
-          description = "Group for MCP proxy user";
-        };
-
-        shell = lib.mkOption {
-          type = lib.types.package;
-          default = self.devShells."${pkgs.system}".default;
-          description = "Shell environment for MCP proxy";
-        };
+      shell = lib.mkOption {
+        type = lib.types.package;
+        description = "Shell environment for MCP proxy";
       };
     };
   };
@@ -112,11 +102,9 @@ in
       additionalPaths =
         let
           shell = config.services.mcp-proxy.shell;
-          systemChecks = self.checks.${pkgs.system} or { };
-          packages = self.packages.${pkgs.system} or { };
-          apps = self.apps.${pkgs.system} or { };
           allItems =
             allInputs shell
+            ++ config.agent-vm.additionalPaths
             ++ (
               if pkgs ? hixProject then
                 [
@@ -125,14 +113,11 @@ in
                 ]
               else
                 [ ]
-            )
-            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
-            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
-            ++ (map (x: x.program) (pkgs.lib.attrValues apps));
+            );
 
           closure = pkgs.closureInfo { rootPaths = allItems; };
         in
-        [ closure ] ++ config.agent-vm.additionalPaths;
+        [ closure ];
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
@@ -148,7 +133,7 @@ in
 
         {
           from = "host";
-          host.port = config.agent-vm.hostPort;
+          host.port = config.agent-vm.port;
           guest.port = config.services.mcp-proxy.port;
         } # MCP proxy
       ];
@@ -188,14 +173,10 @@ in
       enable = true;
       openFirewall = true;
       host = "0.0.0.0";
-      # TODO: Make configurable
       port = 8000;
-      # TODO: Make configurable
-      uid = 1000;
-      # TODO: Make configurable
-      group = "users";
-      # TODO: Make configurable
-      shell = lib.mkDefault self.devShells."${pkgs.system}".default;
+      uid = config.agent-vm.uid;
+      group = config.agent-vm.group;
+      shell = lib.mkDefault config.agent-vm.shell;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;
         command = lib.mkDefault "${pkgs.codemcp}/bin/codemcp";

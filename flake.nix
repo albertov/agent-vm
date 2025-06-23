@@ -114,22 +114,8 @@
     in
     {
       nixosConfigurations = {
-        agent-vm = nixpkgs.lib.nixosSystem {
-          specialArgs = {
-            inherit inputs self;
-          };
-          modules = [
-            {
-              nixpkgs = {
-                inherit overlays;
-                inherit (haskellNix) config;
-                system = "x86_64-linux";
-              };
-            }
-            ./nix/modules/vm-base.nix
-            ./nix/vm-config.nix
-          ];
-        };
+        agent-vm =
+          self.lib.x86_64-linux.mk-agent-vm ./nix/vm-config.nix;
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -149,6 +135,23 @@
       (pkgs.lib.recursiveUpdate flake {
         # Legacy packages for compatibility
         legacyPackages = pkgs;
+
+        lib = {
+          mk-agent-vm = cfg: inputs.nixpkgs.lib.nixosSystem {
+            modules = [
+              "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+              {
+                nixpkgs = {
+                  inherit overlays;
+                  inherit (haskellNix) config;
+                  inherit (pkgs) system;
+                };
+              }
+              ./nix/modules/vm-base.nix
+              cfg
+            ];
+          };
+        };
 
         # Apps for running the agent
         apps = rec {
