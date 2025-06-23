@@ -14,8 +14,8 @@
   ];
   # VM-specific configuration
   virtualisation = {
-    memorySize = 4096; # 4GB RAM for development work
-    cores = 4; # 4 CPU cores
+    memorySize = 1024*16; # 16GB RAM for development work
+    cores = 8; # 4 CPU cores
     diskSize = 4096; # 4GB disk
     graphics = false; # Headless for better performance
 
@@ -38,11 +38,6 @@
       } # MCP proxy
     ];
 
-    # Optimized QEMU options for VirtioFS performance
-    qemu.options = [
-      "-object memory-backend-memfd,id=mem,size=4G,share=on"
-      "-numa node,memdev=mem"
-    ];
   };
 
   # Firewall configuration
