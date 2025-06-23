@@ -100,6 +100,8 @@ def run_agent_vm_command(
         cmd.extend(["--state-dir", str(test_state_dir)])
     if config.verbose:
         cmd.append("--verbose")
+    # Always pass the timeout to agent-vm to ensure it honors it
+    cmd.extend(["--timeout", str(config.timeout)])
     cmd.extend(args)
 
     # Use instance timeout if none specified
@@ -247,7 +249,6 @@ def test_vm_config(test_environment):
 
 @pytest.mark.integration
 @pytest.mark.vm
-@pytest.mark.timeout(120)
 def test_vm_creation(test_vm_config):
     """Test VM creation functionality."""
     test_state_dir = test_vm_config["test_state_dir"]
@@ -573,9 +574,8 @@ def run(
             "-p", "no:cacheprovider",  # Disable cache provider to avoid read-only warnings
         ])
 
-        # Add timeout configuration if needed
-        if config.timeout != 120:  # Only if different from default
-            pytest_argv.extend([f"--timeout={config.timeout}"])
+        # Add timeout configuration to all tests as backup enforcement
+        pytest_argv.extend([f"--timeout={config.timeout + 20}"])  # Add buffer time for pytest enforcement
 
         # Add debug options if enabled
         if config.debug:

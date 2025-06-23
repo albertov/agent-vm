@@ -283,6 +283,14 @@ class VMController:
   - ✅ Replace custom assertion handling with pytest assertions
   - ✅ Maintain CLI interface but use pytest test execution internally
 
+**✅ COMPLETED:**
+- **Step 30**: Implement global timeout parameter handling
+  - ✅ Add --timeout parameter to agent-vm CLI interface
+  - ✅ Replace all hardcoded timeouts in vm_controller.py with global timeout
+  - ✅ Update integration-test.py to pass --timeout to agent-vm commands
+  - ✅ Add pytest timeout enforcement as backup mechanism
+  - ✅ Ensure timeout is honored consistently across all VM operations
+
 **🔄 IN PROGRESS:**
 - **Step 29**: Debug agent service status reporting in integration tests
   - ✅ **MAJOR PROGRESS**: Fixed VM building and startup with agent service

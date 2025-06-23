@@ -685,7 +685,7 @@ in
                 capture_output=True,
                 text=True,
                 cwd=workspace_dir,
-                timeout=300  # Increased timeout for building with agent service
+                timeout=_get_global_timeout()  # Use global timeout for VM building
             )
 
             if result.returncode != 0:
@@ -950,8 +950,15 @@ in
         except Exception:
             return False
 
-    def _wait_for_vm_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: int = 30) -> bool:
+    def _wait_for_vm_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: Optional[int] = None) -> bool:
         """Wait for VM to be ready for SSH connections."""
+        if max_attempts is None:
+            # Calculate reasonable max_attempts based on global timeout
+            # Each attempt takes ~2 seconds, so divide timeout by 2
+            max_attempts = max(1, _get_global_timeout() // 2)
+
+        timeout_per_attempt = min(10, _get_global_timeout() // max_attempts) if max_attempts > 0 else 10
+
         logger.info("🚀 Waiting for VM to be ready...")
         logger.debug(f"🔍 Using SSH key: {ssh_key_path}")
         logger.debug(f"🔍 SSH key exists: {ssh_key_path.exists()}")
@@ -965,7 +972,7 @@ in
         for attempt in range(max_attempts):
             try:
                 ssh_cmd = [
-                    "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                    "ssh", "-o", f"ConnectTimeout={timeout_per_attempt}", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                     "-p", str(ssh_port), "dev@localhost", "echo 'VM Ready'"
                 ]
@@ -973,7 +980,7 @@ in
                 if attempt == 0 or attempt % 10 == 0:  # Log command details periodically
                     logger.debug(f"🔍 SSH attempt {attempt + 1}: {' '.join(ssh_cmd)}")
 
-                result = run_subprocess(ssh_cmd, capture_output=True, timeout=10)
+                result = run_subprocess(ssh_cmd, capture_output=True, timeout=timeout_per_attempt + 5)
 
                 if attempt % 10 == 0:  # Log results periodically for debugging
                     logger.debug(f"🔍 SSH attempt {attempt + 1} exit code: {result.returncode}")
@@ -1010,12 +1017,14 @@ in
 
         # Clear progress line and show error
         print("\r" + " " * 50 + "\r", end="", flush=True)
-        logger.error(f"❌ VM failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
+        total_time = max_attempts * 2  # Approximate total time spent
+        logger.error(f"❌ VM failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {_get_global_timeout()}s)")
         logger.error("🔧 VM startup troubleshooting:")
         logger.error("  • Check if VM process is still running: ps aux | grep qemu")
         logger.error(f"  • Try connecting manually: ssh -i <key> -p {ssh_port} dev@localhost")
         logger.error("  • Check VM console output for boot errors")
         logger.error("  • Verify nested virtualization is enabled")
+        logger.error(f"  • Consider increasing timeout with: --timeout {_get_global_timeout() * 2}")
         return False
 
     def _start_agent_in_vm(self, ssh_key_path: Path, ssh_port: int = 2222) -> None:
@@ -1032,7 +1041,7 @@ in
         ]
 
         try:
-            service_result = run_subprocess(service_check_cmd, capture_output=True, text=True, timeout=15)
+            service_result = run_subprocess(service_check_cmd, capture_output=True, text=True, timeout=min(15, _get_global_timeout()))
             logger.debug(f"🔍 Service list exit code: {service_result.returncode}")
             logger.debug(f"🔍 Service list output: {service_result.stdout.strip()}")
 
@@ -1058,7 +1067,7 @@ in
         ]
 
         try:
-            status_result = run_subprocess(status_check_cmd, capture_output=True, text=True, timeout=15)
+            status_result = run_subprocess(status_check_cmd, capture_output=True, text=True, timeout=min(15, _get_global_timeout()))
             logger.debug(f"🔍 Service status check exit code: {status_result.returncode}")
             logger.debug(f"🔍 Service status output: {status_result.stdout.strip()}")
             logger.debug(f"🔍 Service status stderr: {status_result.stderr.strip()}")
@@ -1083,7 +1092,7 @@ in
         logger.debug(f"🔍 Running start command: {' '.join(ssh_cmd)}")
 
         try:
-            result = run_subprocess(ssh_cmd, capture_output=True, text=True, timeout=30, check=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, text=True, timeout=min(30, _get_global_timeout()), check=True)
             logger.debug(f"🔍 Start command exit code: {result.returncode}")
             logger.debug(f"🔍 Start command stdout: {result.stdout.strip()}")
             logger.debug(f"🔍 Start command stderr: {result.stderr.strip()}")
@@ -1115,8 +1124,15 @@ in
             logger.error("🔧 This might indicate SSH or sudo issues")
             raise
 
-    def _wait_for_agent_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: int = 20) -> bool:
+    def _wait_for_agent_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: Optional[int] = None) -> bool:
         """Wait for agent service to be ready."""
+        if max_attempts is None:
+            # Calculate reasonable max_attempts based on global timeout
+            # Each attempt takes ~2 seconds, so divide timeout by 2
+            max_attempts = max(1, _get_global_timeout() // 2)
+
+        timeout_per_attempt = min(10, _get_global_timeout() // max_attempts) if max_attempts > 0 else 10
+
         logger.info("🔧 Waiting for agent service to be ready...")
 
         # Progress indicators
@@ -1125,12 +1141,12 @@ in
         for attempt in range(max_attempts):
             try:
                 ssh_cmd = [
-                    "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                    "ssh", "-o", f"ConnectTimeout={timeout_per_attempt}", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                     "-p", str(ssh_port), "dev@localhost",
                     "curl -f http://localhost:8000/health"
                 ]
-                result = run_subprocess(ssh_cmd, capture_output=True, timeout=10)
+                result = run_subprocess(ssh_cmd, capture_output=True, timeout=timeout_per_attempt + 5)
                 if result.returncode == 0:
                     # Clear progress line
                     print("\r" + " " * 60 + "\r", end="", flush=True)
@@ -1160,7 +1176,8 @@ in
 
         # Clear progress line and show error
         print("\r" + " " * 60 + "\r", end="", flush=True)
-        logger.error(f"❌ Agent service failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
+        total_time = max_attempts * 2  # Approximate total time spent
+        logger.error(f"❌ Agent service failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {_get_global_timeout()}s)")
         return False
 
     def _stop_vm_by_pid(self, vm_config_dir: Path) -> None:
@@ -1328,13 +1345,13 @@ in
 
         try:
             ssh_cmd = [
-                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost", "echo 'SSH OK'"
             ]
 
             logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
 
             logger.debug(f"🔍 SSH command exit code: {result.returncode}")
             logger.debug(f"🔍 SSH stdout: {result.stdout.strip()}")
@@ -1364,12 +1381,12 @@ in
         try:
             # Check if service is active
             ssh_cmd = [
-                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
             if result.returncode == 0:
                 properties = {}
                 for line in result.stdout.strip().split('\n'):
@@ -1414,12 +1431,12 @@ in
             start_time = time.time()
 
             ssh_cmd = [
-                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
 
             response_time = int((time.time() - start_time) * 1000)
             mcp_status['response_time'] = response_time
@@ -1437,12 +1454,12 @@ in
         workspace_status = {'accessible': False}
         try:
             ssh_cmd = [
-                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
                 if len(lines) >= 2:
@@ -1465,7 +1482,8 @@ in
 # Global state for options
 _global_state = {
     "state_dir": None,
-    "verbose": False
+    "verbose": False,
+    "timeout": 120  # Default timeout in seconds
 }
 
 # Initialize typer app
@@ -1486,21 +1504,29 @@ Examples:
 
 def _setup_global_options(
     state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Set up global options that apply to all commands."""
     _global_state["state_dir"] = state_dir
     _global_state["verbose"] = verbose
+    _global_state["timeout"] = timeout
     setup_logging(verbose=verbose)
+
+
+def _get_global_timeout() -> int:
+    """Get the global timeout value."""
+    return _global_state["timeout"]
 
 
 @app.callback()
 def main_callback(
     state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging")
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Main callback to handle global options."""
-    _setup_global_options(state_dir, verbose)
+    _setup_global_options(state_dir, verbose, timeout)
 
 
 @app.command()
