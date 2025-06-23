@@ -114,8 +114,7 @@
     in
     {
       nixosConfigurations = {
-        agent-vm =
-          self.lib.x86_64-linux.mk-agent-vm ./nix/vm-config.nix;
+        agent-vm = self.lib.x86_64-linux.mk-agent-vm ./nix/vm-config.nix;
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -137,19 +136,21 @@
         legacyPackages = pkgs;
 
         lib = {
-          mk-agent-vm = mods: (inputs.nixpkgs.lib.nixosSystem {
-            modules = [
-              "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
-              {
-                nixpkgs = {
-                  inherit overlays;
-                  inherit (haskellNix) config;
-                  inherit (pkgs) system;
-                };
-              }
-              ./nix/modules/vm-base.nix
-            ] ++ mods;
-          }).config.system.build.vmWithVirtioFS;
+          mk-agent-vm =
+            mods:
+            (inputs.nixpkgs.lib.nixosSystem {
+              modules = [
+                "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+                {
+                  nixpkgs = {
+                    inherit overlays;
+                    inherit (haskellNix) config;
+                    inherit (pkgs) system;
+                  };
+                }
+                ./nix/modules/vm-base.nix
+              ] ++ mods;
+            }).config.system.build.vmWithVirtioFS;
         };
 
         # Apps for running the agent
@@ -158,7 +159,10 @@
           agent-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "agent-vm";
-              runtimeInputs = [ pkgs.nix pkgs.git ];
+              runtimeInputs = [
+                pkgs.nix
+                pkgs.git
+              ];
               text = ''
                 CONFIG="./nix/vm-config.nix"
                 FLAKE="''${FLAKE:-}"
