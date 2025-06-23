@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+
 -- | Process management for VMs
 module AgentVM.Process
   ( startVMProcess,
@@ -5,12 +8,14 @@ module AgentVM.Process
     checkVMProcess,
     waitForProcess,
     ProcessState (..),
-    startLoggedProcess
+    startLoggedProcess,
   )
 where
 
 import AgentVM.Log (AgentVmTrace (ProcessSpawned), (<&))
-import Plow.Logging (IOTracer (IOTracer))
+import Data.Generics.Product (HasType, the)
+import Lens.Micro.Mtl (view)
+import Plow.Logging (IOTracer (IOTracer), traceWith)
 import Protolude
 import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
 
@@ -20,22 +25,38 @@ data ProcessState
   | ProcessExited ExitCode
   deriving (Eq, Show)
 
-newtype VMProcess = VMProcess { unVMProcess :: Process () () () }
+newtype VMProcess = VMProcess {unVMProcess :: Process () () ()}
 
 -- TODO: This should be capturing stderr and stdout of the process and tracing
 -- them with the logger line by line for better debugging
-startLoggedProcess :: IOTracer AgentVmTrace -> FilePath -> [Text] -> IO (Process () () ())
-startLoggedProcess (IOTracer logger) scriptPath args = do
-  logger <& ProcessSpawned (toS scriptPath) args
-  startProcess (proc scriptPath (map toS args))
+startLoggedProcess ::
+  ( MonadReader env m,
+    HasType (IOTracer AgentVmTrace) env,
+    MonadIO m
+  ) =>
+  FilePath ->
+  [Text] ->
+  m (Process () () ())
+startLoggedProcess scriptPath args = notImplemented
 
 -- | Start a VM process
-startVMProcess :: IOTracer AgentVmTrace -> FilePath -> IO VMProcess
-startVMProcess logger scriptPath = 
-  VMProcess <$> startLoggedProcess logger scriptPath []
+startVMProcess ::
+  ( MonadReader env m,
+    HasType (IOTracer AgentVmTrace) env,
+    MonadIO m
+  ) =>
+  FilePath ->
+  m VMProcess
+startVMProcess scriptPath = notImplemented
 
 -- | Stop a VM process gracefully
-stopVMProcess :: IOTracer AgentVmTrace -> VMProcess -> IO ()
+stopVMProcess ::
+  ( MonadReader env m,
+    HasType (IOTracer AgentVmTrace) env,
+    MonadIO m
+  ) =>
+  VMProcess ->
+  m ()
 stopVMProcess = notImplemented
 
 -- | Check if VM process is still running

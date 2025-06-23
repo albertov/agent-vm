@@ -10,7 +10,7 @@
 ## Implementation Phases
 
 ### URGENT
-- [ ] Refactor the functions from Process.hs, SSH.hs, Nix.hs, etc
+- [x] Refactor the functions from Process.hs, SSH.hs, Nix.hs, etc
   that take a 'IOTracer AgentVmTrace' to use the same pattern
   as the previous step
 

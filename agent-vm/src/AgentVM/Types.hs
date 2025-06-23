@@ -26,6 +26,7 @@ import Data.Kind (Type)
 import Data.Time (UTCTime)
 import Protolude (Eq, FilePath, Generic, Int, Ord, Show, Text)
 import System.Process.Typed (Process)
+
 -- import UnliftIO (SomeException)
 
 -- | VM states as type-level values
@@ -104,5 +105,9 @@ data VMError
   | WorkspaceError Text
   -- TODO: So the runVMT version can catch
   -- unhandled exceptions with tryAny
-  -- | UnhandledException SomeException
-  deriving (Eq, Show)
+
+  deriving
+    ( -- | UnhandledException SomeException
+      Eq,
+      Show
+    )
