@@ -16,8 +16,13 @@
   virtualisation = {
     memorySize = 1024*16; # 16GB RAM for development work
     cores = 8; # 4 CPU cores
-    diskSize = 4096; # 4GB disk
+    diskSize = 1024*32; # 32GB disk
     graphics = false; # Headless for better performance
+    mountHostNixStore = true;
+    additionalPaths = [ config.system.build.toplevel ];
+    writableStore = true;
+    writableStoreUseTmpfs = false;
+    useNixStoreImage = false;
 
     # High-performance workspace sharing via VirtioFS
     sharedDirectories = {
@@ -45,6 +50,12 @@
 
   # Optimize for VM environment
   services.qemuGuest.enable = true;
+
+  environment.systemPackages = with pkgs; [
+    vim
+    git
+    codemcp
+  ];
 
   # Security hardening
   security = {

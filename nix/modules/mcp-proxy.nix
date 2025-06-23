@@ -309,7 +309,9 @@ in
               ];
             };
         hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-        shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
+        shellInputs =
+          shell.buildInputs or [ ] ++
+          shell.nativeBuildInputs or [ ];
         startService = pkgs.writeShellApplication {
           name = "start";
           runtimeInputs =
