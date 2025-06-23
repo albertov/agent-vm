@@ -354,7 +354,12 @@ class VMController:
   - ✅ Steps 4.5-10: Complete flake integration, VM management tool, and agent service implementation
 
 **🔄 IN PROGRESS:**
-- Phase 3: Robust VM Management (next phase)
+- **Step 13**: Fix Python package structure and build system
+  - Fix agent-vm Python package to use proper pyproject.toml structure
+  - Clean up duplicate agent-vm/agent_vm directories
+  - Add pytest test dependencies and enable test running
+  - Fix flake.nix package exports that are causing check failures
+  - Ensure agent-vm package builds and tests run correctly
 
 **⏳ PENDING:**
 - Phase 3-5 implementation phases
