@@ -147,7 +147,7 @@ set of packages.
 """
 
 [commands.lint]
-command = ["env", "-C", "./agent-vm", "hlint"]
+command = ["hlint"]
 doc = """
 Run hlint on the file or directory passed as argument to report errors
 
