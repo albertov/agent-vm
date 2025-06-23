@@ -114,7 +114,7 @@
       nixosConfigurations = {
         agent-vm = nixpkgs.lib.nixosSystem {
         specialArgs = {
-          inherit inputs;
+          inherit inputs self;
         };
         modules = [
           {

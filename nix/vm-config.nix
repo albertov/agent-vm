@@ -1,5 +1,5 @@
 # vm-config.nix
-{ config, inputs, pkgs, ... }:
+{ self, config, inputs, pkgs, ... }:
 {
   imports = [
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
@@ -69,6 +69,7 @@
     # which imports this base config
     port = 8000;
     host = "0.0.0.0";
+    shell = self.devShells."${pkgs.system}".default;
     namedServers.codemcp = {
       enabled = true;
       command = "${pkgs.codemcp}/bin/codemcp";
