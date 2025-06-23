@@ -11,7 +11,9 @@ project_prompt = """
 explaining why.
 - Before starting work, add what you're going to do to the TODO.md
 document if it is not already there.
-- Use the 'branch_log' command before starting work to see where you left off.
+- If the use says "continue where you left off".
+Use the 'branch_log' command before starting work to inspect the last commits.
+Don't request all commits, just the 5 mostb revent ones
 Ignore changes to codemcp.toml and under the ./ directory.
 - Keep the *.md documents up to date with your changes when you're done with them.
 
