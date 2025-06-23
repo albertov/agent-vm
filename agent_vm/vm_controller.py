@@ -589,6 +589,10 @@ class VMController:
     def _generate_vm_nix_expression(self, workspace_dir: Path, vm_config_path: str,
                                      ssh_public_key: str, config_data: dict) -> str:
         """Generate the Nix expression for building the VM."""
+        # Get host user's uid and gid for permission synchronization
+        host_uid = config_data.get("host_uid", os.getuid())
+        host_gid = config_data.get("host_gid", os.getgid())
+
         return f'''
 let
   flake = builtins.getFlake "{workspace_dir}";
@@ -610,6 +614,13 @@ in
           {{ from = "host"; host.port = {config_data.get("ssh_port", 2222)}; guest.port = 22; }}
         ];
         virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = pkgs.lib.mkForce "{workspace_dir}";
+
+        # Set agent user's uid and gid to match host user for permission compatibility
+        users.users.agent = {{
+          uid = {host_uid};
+          home = "/workspace";
+        }};
+        users.groups.agent.gid = {host_gid};
       }}
     ];
   }}).config.system.build.vm
@@ -755,7 +766,9 @@ in
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "origin_repo": self.origin_repo,
             "upstream_repo": upstream_url,
-            "vm_name": f"agent-dev-{branch}"
+            "vm_name": f"agent-dev-{branch}",
+            "host_uid": os.getuid(),  # Store host user's uid
+            "host_gid": os.getgid(),  # Store host user's gid
         }
 
         config_file = vm_config_dir / "config.json"
@@ -962,12 +975,20 @@ in
         env = os.environ.copy()
         env["QEMU_OPTS"] = f"-name {vm_name}"
 
+        # Run VM from the state directory to ensure disk images are created there
+        # instead of in the workspace/git-clone directory
+        vm_state_dir = vm_config_dir / "vm-state"
+        vm_state_dir.mkdir(exist_ok=True)
+
+        logger.debug(f"🔍 Running VM from state directory: {vm_state_dir}")
+
         vm_process = ProcessWithOutput(
             vm_cmd,
             state_dir=vm_config_dir,
             vm_name=vm_name,
             debug=_global_debug,
-            env=env
+            env=env,
+            cwd=str(vm_state_dir)  # Run from VM state directory
         )
 
         # Store PID
