@@ -12,15 +12,7 @@ build-type:         Simple
 extra-source-files:
   test/fixtures/ProcessSpec/*.sh
 data-files:
-  test/fixtures/ProcessSpec/echo_both.sh
-  test/fixtures/ProcessSpec/exit_failure.sh
-  test/fixtures/ProcessSpec/rapid_output.sh
-  test/fixtures/ProcessSpec/echo_stderr.sh
-  test/fixtures/ProcessSpec/multiline_output.sh
-  test/fixtures/ProcessSpec/unexpected_termination.sh
-  test/fixtures/ProcessSpec/echo_stdout.sh
-  test/fixtures/ProcessSpec/no_output.sh
-  test/fixtures/ProcessSpec/zombie_process.sh
+  test/fixtures/ProcessSpec/*.sh
 
 common warnings
     ghc-options: -Wall

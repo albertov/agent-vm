@@ -25,17 +25,7 @@
       detailLevel = "FullDetails";
       licenseFiles = [];
       dataDir = ".";
-      dataFiles = [
-        "test/fixtures/ProcessSpec/echo_both.sh"
-        "test/fixtures/ProcessSpec/exit_failure.sh"
-        "test/fixtures/ProcessSpec/rapid_output.sh"
-        "test/fixtures/ProcessSpec/echo_stderr.sh"
-        "test/fixtures/ProcessSpec/multiline_output.sh"
-        "test/fixtures/ProcessSpec/unexpected_termination.sh"
-        "test/fixtures/ProcessSpec/echo_stdout.sh"
-        "test/fixtures/ProcessSpec/no_output.sh"
-        "test/fixtures/ProcessSpec/zombie_process.sh"
-      ];
+      dataFiles = [ "test/fixtures/ProcessSpec/*.sh" ];
       extraSrcFiles = [ "test/fixtures/ProcessSpec/*.sh" ];
       extraTmpFiles = [];
       extraDocFiles = [];
