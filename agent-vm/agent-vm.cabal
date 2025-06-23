@@ -13,6 +13,7 @@ common warnings
     ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wmissing-export-lists
                  -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+                 -Werror
 
 library
     import:           warnings
@@ -26,6 +27,7 @@ library
                     , AgentVM.Config
     build-depends:    base
                     , typed-process
+                    , protolude
                     , async
                     , unliftio
                     , stm

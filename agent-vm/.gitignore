@@ -28,3 +28,6 @@ Thumbs.db
 # Haskell Language Server
 .hie/
 hie.yaml
+
+# Nix stuff
+nix/materialized/
