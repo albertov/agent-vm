@@ -291,11 +291,17 @@ class VMController:
     - ✅ Fixed configuration conflicts using lib.mkForce for port overrides
     - ✅ VM now builds successfully with agent service enabled
     - ✅ test_vm_start_stop_cycle now PASSES - VM starts and stops correctly
-  - 🔍 **REMAINING ISSUE**: Agent service status unclear in test output
+  - ✅ **FIXED**: Function signature mismatches in VM status reporting
+    - ✅ Fixed `_check_mcp_proxy_health` method signature to accept ssh_port parameter
+    - ✅ Fixed `_check_workspace_status` method signature to accept ssh_port parameter
+    - ✅ Fixed hardcoded SSH port "2222" to use dynamic SSH port allocation
+    - ✅ Fixed `_is_vm_running` to use subprocess.run directly and avoid error logging when no VMs exist
+  - 🔍 **REMAINING ISSUE**: Agent service status indicators not appearing in status output
     - VM starts successfully and agent service is configured
-    - test_agent_service_startup still fails due to status reporting
-    - Integration test can't determine agent service health from VM status output
-    - Next: Debug agent service status reporting in _show_vm_status method
+    - test_agent_service_startup still fails - integration test can't find expected status indicators
+    - Integration test looks for: "🟢 Agent Service: Running", "🟢 MCP Proxy: Healthy"
+    - VM status command works correctly but doesn't show expected service status strings
+    - Next: Investigate why agent service status checks aren't producing expected output format
   - Test MCP proxy endpoint accessibility and functionality
   - Ensure service restarts properly after failure
 - **Step 16**: VM security hardening
