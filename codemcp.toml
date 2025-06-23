@@ -1,15 +1,6 @@
 # codemcp configuration file
 project_prompt = """
-# You MUST always obey the following rules
-
-## Read the README.md and TODO.md documents to see what's going on
-
-## Use protolude and use unliftio when possible instead of base, specially for
-exception handling. Never catch SomeExeption explicitly, use the `*Any`
-functions from UnliftIO instead.
-
-## Never use String unless mandated by an external library, always Text or
-ByteString instead
+# Methodology
 
 ## Use a Type-Test-Driven-Approach, that is, when implementing new functions:
 
@@ -31,6 +22,19 @@ agent-vm/test, ok?
 
 Then, and only then, proceed to implement another test body
 
+# You MUST always obey the following rules
+
+## Read the README.md, TODO.md and other **.md documents to see what's going on.
+
+## Use protolude and use unliftio when possible instead of base, specially for
+exception handling. Never catch SomeExeption explicitly, use the `*Any`
+functions from UnliftIO instead.
+
+## Never use String unless mandated by an external library, always Text or
+ByteString instead
+
+## Use the newtype pattern to tag key Text, Int, etc..
+
 ## When told to "continue", or "continue where you left off",... use the
 'branch_log' command to inspect the last commit you made and continue. I may
 have left a commit after yours to help you out, inspect it and take it into
@@ -46,18 +50,18 @@ using existing dependencies when possible.
 errors. Do this after every edit that affects haskell code and fix errors before
 proceeding.
 
-You MUST always run the 'hlint' command on every Haskell file after testing
+## You MUST always run the 'hlint' command on every Haskell file after testing
 your edits and fix ALL the warnings and errors it reports.
 
-You MUST always use Generic deriving mechanisms for JSON/YAML
+## You MUST always use Generic deriving mechanisms for JSON/YAML
 serialization, never hand-code it.  Use DeriveAnyClass and
 DuplicateRecordFields for nice field names. Use OverloadedRecordDot extension to disambiguate types on record access
 
-## Final tasks
+# Final tasks
 
 When your work is ready, you MUST:
 
-1) Run the integration-tests.  ALL tests MUST pass! We allow no flaky tests here. Fix
+# Run the integration-tests.  ALL tests MUST pass! We allow no flaky tests here. Fix
 them if they don't and repeat. If you get stuck write a FIXME
 """
 
