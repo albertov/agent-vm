@@ -19,6 +19,12 @@ in
       description = "Agent exe name";
     };
 
+    openFirewall = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Open firewall port for the service";
+    };
+
     shell = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = null;
@@ -68,6 +74,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    networking.firewall.allowedTCPPorts =
+      lib.optional cfg.openFirewall [ cfg.port ];
+
     systemd.services.agent-mcp =
       let
         # Create the MCP dev servers with the configured shell
@@ -82,6 +91,7 @@ in
                 buildInputs = with pkgs; [
                   git
                   curl
+                  bash
                 ];
               };
         };
@@ -94,6 +104,8 @@ in
         ];
         wantedBy = [ "multi-user.target" ];
 
+        path = [ devServers ];
+
         serviceConfig = {
           Type = "exec";
           User = cfg.user;
@@ -103,7 +115,7 @@ in
           # Security hardening - minimal capabilities
           NoNewPrivileges = true;
           ProtectSystem = "strict";
-          ProtectHome = true;
+          #ProtectHome = true;
           ProtectKernelTunables = true;
           ProtectKernelModules = true;
           ProtectControlGroups = true;
@@ -137,17 +149,7 @@ in
           ] ++ lib.mapAttrsToList (name: value: "${name}=${value}") cfg.extraEnvironment;
 
           # Start the MCP services
-          ExecStart = "${pkgs.writeShellScript "start-agent-mcp" ''
-            set -euo pipefail
-
-            # Ensure workspace directory exists and is accessible
-            if [ ! -d "${cfg.workspaceDir}" ]; then
-              echo "Error: Workspace directory ${cfg.workspaceDir} does not exist"
-              exit 1
-            fi
-            # Start agent produced by mkMCPDevServers
-            exec ${devServers}/bin/start-agent
-          ''}";
+          ExecStart = "${devServers}/bin/${cfg.name}";
 
           # Health check - temporarily disabled for debugging
           # ExecStartPost = "${pkgs.writeShellScript "check-agent-health" ''
@@ -173,7 +175,8 @@ in
     # Ensure the service user exists (only if not using system users)
     users.users = lib.mkIf (cfg.user != "root" && cfg.user != "dev") {
       ${cfg.user} = {
-        isSystemUser = true;
+        isNormalUser = true;
+        uid =  1000; #TODO: Make configurable and inject from host
         group = cfg.group;
         description = "Agent MCP service user";
       };

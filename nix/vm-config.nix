@@ -1,108 +1,45 @@
 # vm-config.nix
-{ config, pkgs, ... }:
+{ config, inputs, pkgs, ... }:
 {
+  imports = [
+    "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+    ./modules/mcp-proxy.nix
+  ];
   # VM-specific configuration
-  virtualisation.vmVariant = {
-    virtualisation = {
-      memorySize = 4096; # 4GB RAM for development work
-      cores = 4; # 4 CPU cores
-      diskSize = 4096; # 4GB disk
-      graphics = false; # Headless for better performance
+  virtualisation = {
+    memorySize = 4096; # 4GB RAM for development work
+    cores = 4; # 4 CPU cores
+    diskSize = 4096; # 4GB disk
+    graphics = false; # Headless for better performance
 
-      # High-performance workspace sharing via VirtioFS
-      sharedDirectories = {
-        workspace = {
-          source = "/workspace";
-          target = "/workspace";
-          securityModel = "mapped-xattr";
-        };
+    # High-performance workspace sharing via VirtioFS
+    sharedDirectories = {
+      workspace = {  
+        # source gets injected by agent-vm
+        source = "/home/alberto/src/agent-vm";
+        target = "/var/lib/mcp-proxy/workspace";
+        securityModel = "mapped-xattr";
       };
-
-      # Port forwarding for MCP proxy
-      forwardPorts = [
-        {
-          from = "host";
-          host.port = 8000;
-          guest.port = 8000;
-        } # MCP proxy
-        {
-          from = "host";
-          host.port = 2222;
-          guest.port = 22;
-        } # SSH access
-      ];
-
-      # Optimized QEMU options for VirtioFS performance
-      qemu.options = [
-        "-object memory-backend-memfd,id=mem,size=4G,share=on"
-        "-numa node,memdev=mem"
-      ];
     };
-  };
 
-  # Development user configuration
-  users.users.dev = {
-    isNormalUser = true;
-    group = "dev";
-    extraGroups = [ "wheel" ];
-    home = "/workspace";
-    #TODO: The home directory should be
-    shell = pkgs.bash;
-    # SSH key will be injected dynamically during VM startup
-    openssh.authorizedKeys.keys = [
-      # Ephemeral SSH public key will be added here during VM creation
+    # Port forwarding for MCP proxy
+    forwardPorts = [
+      {
+        from = "host";
+        host.port = 8000;
+        guest.port = config.services.mcp-proxy.port;
+      } # MCP proxy
     ];
-    # Make essential development tools available to the user
-    packages = with pkgs; [
-      git
-      nix
-      openssh
-      curl
-      python3
-      # MCP tools
-      codemcp
-      mcp-proxy
-      mcp-language-server
-      rescript-language-server
+
+    # Optimized QEMU options for VirtioFS performance
+    qemu.options = [
+      "-object memory-backend-memfd,id=mem,size=4G,share=on"
+      "-numa node,memdev=mem"
     ];
-  };
-
-  # Define the dev group
-  users.groups.dev = { };
-
-  # Agent user for running MCP services
-  users.users.agent = {
-    isNormalUser = true;
-    group = "agent";
-    home = "/workspace";
-    createHome = false; # Don't create home directory since it's a shared mount
-    shell = pkgs.bash;
-    # uid will be set by the VM generation to match host user
-  };
-
-  # Define the agent group
-  users.groups.agent = { };
-  # gid will be set by the VM generation to match host user
-
-  # SSH access for development with secure key-based authentication
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = false; # Disable password auth for security
-      PubkeyAuthentication = true; # Enable key-based authentication
-      PermitRootLogin = "no";
-      AuthenticationMethods = "publickey";
-    };
   };
 
   # Firewall configuration
-  networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [
-      22
-      config.services.agent-mcp.port
-    ]; # SSH and MCP proxy
-  };
+  networking.firewall.enable = true;
 
   # Optimize for VM environment
   services.qemuGuest.enable = true;
@@ -122,40 +59,21 @@
   # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
   nix.settings.sandbox = false;
 
-  # Import the agent service module
-  imports = [ ./agent-service.nix ];
-
   # Enable and configure the agent service
-  services.agent-mcp = {
+  services.getty.autologinUser = "mcp-proxy";
+  users.users.mcp-proxy.extraGroups = [ "wheel" ];
+  services.mcp-proxy = {
     enable = true;
-    user = "agent";
-    group = "agent";
-    workspaceDir = "/workspace";
-    # Pass the development shell with all MCP tools using mkMCPDevServers
-    shell = pkgs.mkShell {
-      buildInputs = with pkgs; [
-        # Development tools
-        git
-        nix
-        openssh
-        qemu
-        curl
-        python3
-
-        # MCP tools (should match what's in mkMCPDevServers)
-        codemcp
-        mcp-proxy
-        mcp-language-server
-        rescript-language-server
-      ];
-      shellHook = ''
-        echo "🚀 Agent MCP Development Environment in VM"
-      '';
-    };
+    openFirewall = true;
     # These would be overrided in a module added by the create admin command
     # which imports this base config
     port = 8000;
-    allowOrigin = "https://claude.ai";
+    host = "0.0.0.0";
+    namedServers.codemcp = {
+      enabled = true;
+      command = "${pkgs.codemcp}/bin/codemcp";
+    };
+    allowOrigins = ["https://claude.ai"];
   };
 
   # System state version

@@ -50,74 +50,94 @@
       haskellNix,
       ...
     }@inputs:
-    flake-utils.lib.eachDefaultSystem (
+    let
+      overlays = [
+        # Haskell.nix overlay
+        haskellNix.overlay
+        (final: _prev: {
+          projectStatic = final.hixProject.projectCross.musl64;
+          hoogleEnv = final.hixProject.ghcWithHoogle (
+            _:
+            builtins.attrValues (
+              final.lib.filterAttrs (_: p: p.isLocal or false && p.components ?  library) final.hixProject.hsPkgs
+            )
+          );
+          hoogle = final.writeShellApplication {
+            name = "hoogle";
+            runtimeInputs = [ final.hoogleEnv ];
+            text = ''
+              exec hoogle "$@"
+            '';
+          };
+          # statically-linked exes
+          agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
+          agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
+          hixProject = final.haskell-nix.hix.project {
+            # We clean the source to avoid spurious recompiles
+            src = final.lib.sources.cleanSourceWith rec {
+              src = builtins.path {
+                path = ./.;
+                name = "source";
+              };
+              filter =
+                path: _type:
+                let
+                  baseName = baseNameOf path;
+                  # Get relative path from source root
+                  relativePath = final.lib.removePrefix (toString src + "/") (toString path);
+                in
+                (
+                  # Don't traverse into excluded directories
+                  !(final.lib.hasPrefix "cabal.project.local" relativePath)
+                  &&
+                    # no bash scripts except test fixtures
+                    !(final.lib.hasSuffix ".sh" baseName && !(final.lib.hasPrefix "test/fixtures/" relativePath))
+                  && !(final.lib.hasSuffix ".md" baseName)
+                  &&
+                    # non-haskell related files
+                    !(builtins.elem baseName [
+                      "codemcp.toml"
+                      "flake.nix"
+                      "flake.lock"
+                    ])
+                  # && (relativePath == traceShowId relativePath)
+                );
+            };
+            evalSystem = "x86_64-linux";
+          };
+        })
+        # Agent overlay
+        (import ./nix/overlay.nix inputs)
+      ];
+    in
+    {
+      nixosConfigurations = {
+        agent-vm = nixpkgs.lib.nixosSystem {
+        specialArgs = {
+          inherit inputs;
+        };
+        modules = [
+          {
+            nixpkgs = {
+              inherit overlays;
+              inherit (haskellNix) config;
+              system = "x86_64-linux";
+            };
+          }
+          (import ./nix/vm-config.nix)
+        ];
+      };
+      };
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         # traceShowId = x: builtins.trace "Debug: ${toString x}" x;
         pkgs = import inputs.nixpkgs {
-          inherit system;
+          inherit system overlays;
           inherit (haskellNix) config;
-          overlays = [
-            # Haskell.nix overlay
-            haskellNix.overlay
-            (final: _prev: {
-              projectStatic = final.hixProject.projectCross.musl64;
-              inherit hoogle;
-              # statically-linked exes
-              agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
-              agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
-              hixProject = final.haskell-nix.hix.project {
-                # We clean the source to avoid spurious recompiles
-                src = final.lib.sources.cleanSourceWith rec {
-                  src = builtins.path {
-                    path = ./.;
-                    name = "source";
-                  };
-                  filter =
-                    path: _type:
-                    let
-                      baseName = baseNameOf path;
-                      # Get relative path from source root
-                      relativePath = final.lib.removePrefix (toString src + "/") (toString path);
-                    in
-                    (
-                      # Don't traverse into excluded directories
-                      !(final.lib.hasPrefix "cabal.project.local" relativePath)
-                      &&
-                        # no bash scripts except test fixtures
-                        !(final.lib.hasSuffix ".sh" baseName && !(final.lib.hasPrefix "test/fixtures/" relativePath))
-                      && !(final.lib.hasSuffix ".md" baseName)
-                      &&
-                        # non-haskell related files
-                        !(builtins.elem baseName [
-                          "codemcp.toml"
-                          "flake.nix"
-                          "flake.lock"
-                        ])
-                      # && (relativePath == traceShowId relativePath)
-                    );
-                };
-                evalSystem = "x86_64-linux";
-              };
-            })
-            # Agent overlay
-            (import ./nix/overlay.nix inputs)
-          ];
         };
         flake = pkgs.hixProject.flake { };
-        hoogleEnv = pkgs.hixProject.ghcWithHoogle (
-          _:
-          builtins.attrValues (
-            pkgs.lib.filterAttrs (_: p: p.isLocal or false && p.components ? library) pkgs.hixProject.hsPkgs
-          )
-        );
-        hoogle = pkgs.writeShellApplication {
-          name = "hoogle";
-          runtimeInputs = [ hoogleEnv ];
-          text = ''
-            exec hoogle "$@"
-          '';
-        };
 
         # Default shell for development
         defaultShell = self.outputs.devShells.${system}.default;

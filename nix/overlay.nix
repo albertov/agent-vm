@@ -18,6 +18,7 @@ inputs: final: prev: {
         [
           git
           nix
+          bash
           codemcp
           mcp-proxy
           mcp-language-server
