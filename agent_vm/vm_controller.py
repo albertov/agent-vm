@@ -8,18 +8,19 @@ startup, shutdown, and workspace management for agent development environments.
 Usage: agent-vm <command> [options]
 """
 
-import argparse
+import typer
 import atexit
 import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 # Color codes for terminal output
 class Colors:
@@ -123,7 +124,7 @@ def _cleanup_tempfiles():
     for temp_file in _temp_files:
         try:
             temp_file.close()
-        except:
+        except Exception:
             pass  # Ignore errors during cleanup
 
 
@@ -320,6 +321,19 @@ class ProcessWithOutput:
     def kill(self):
         """Kill the process."""
         return self.process.kill()
+
+
+def _find_free_port(start_port: int = 2222, max_attempts: int = 100) -> int:
+    """Find a free port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind(('localhost', port))
+                return port
+        except OSError:
+            continue  # Port is already in use
+
+    raise RuntimeError(f"Could not find a free port in range {start_port}-{start_port + max_attempts}")
 
 
 class VMController:
@@ -546,12 +560,17 @@ class VMController:
         except subprocess.CalledProcessError:
             upstream_url = ""
 
+        # Find a free SSH port starting from 2222
+        ssh_port = _find_free_port(2222)
+        logger.info(f"🔌 Allocated SSH port: {ssh_port}")
+
         # Create VM config metadata
         logger.info("Creating VM configuration metadata...")
         config_data = {
             "branch": branch,
             "host": host,
             "port": port,
+            "ssh_port": ssh_port,  # Store the dynamically allocated SSH port
             "config_path": config,
             "workspace_path": str(workspace_dir),
             "ssh_key_path": str(ssh_private_key),
@@ -565,7 +584,7 @@ class VMController:
         with config_file.open('w') as f:
             json.dump(config_data, f, indent=2)
 
-        logger.info(f"✅ VM configuration created successfully!")
+        logger.info("✅ VM configuration created successfully!")
         logger.info(f"📁 Branch: {branch}")
         logger.info(f"🗂️  Config directory: {vm_config_dir}")
         logger.info(f"💾 Workspace: {workspace_dir}")
@@ -591,6 +610,7 @@ class VMController:
 
         workspace_dir = Path(config_data["workspace_path"])
         ssh_key_path = Path(config_data["ssh_key_path"])
+        ssh_port = config_data.get("ssh_port", 2222)  # Use stored SSH port or fallback to 2222
         vm_name = config_data["vm_name"]
 
         # Check if VM is already running
@@ -621,34 +641,75 @@ class VMController:
         logger.info("🔧 Building VM configuration...")
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
-        # Create a temporary VM configuration file with injected SSH key
+        # Create a simplified VM configuration that doesn't depend on overlay
         temp_config_content = f'''
-# Temporary VM config with injected SSH key (simplified for integration testing)
+# Simplified VM config for integration testing (no agent service)
 {{ config, pkgs, lib, ... }}:
 {{
-  imports = [ {original_flake_dir}/{config_data["config_path"]} ];
+  virtualisation.vmVariant = {{
+    # System configuration
+    virtualisation = {{
+      memorySize = 2048;
+      cores = 2;
+      diskSize = 8192;
+      graphics = false;
 
-  users.users.dev.openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
+      # Port forwarding
+      forwardPorts = [
+        {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
+        {{ from = "host"; host.port = {ssh_port}; guest.port = 22; }}
+      ];
 
-  virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = lib.mkForce "{workspace_dir}";
+      # Shared directories
+      sharedDirectories.workspace = {{
+        source = "{workspace_dir}";
+        target = "/workspace";
+        securityModel = "mapped-xattr";
+      }};
+    }};
+  }};
 
-  # Override port forwarding (still forward the port even though service is disabled)
-  virtualisation.vmVariant.virtualisation.forwardPorts = lib.mkForce [
-    {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
-    {{ from = "host"; host.port = 2222; guest.port = 22; }}
+  # Enable SSH
+  services.openssh = {{
+    enable = true;
+    settings = {{
+      PermitRootLogin = "no";
+      PasswordAuthentication = false;
+    }};
+  }};
+
+  # Create development user
+  users.users.dev = {{
+    isNormalUser = true;
+    extraGroups = [ "wheel" ];
+    openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
+    packages = with pkgs; [
+      git
+      openssh
+      curl
+      python3
+      nix
+    ];
+  }};
+
+  # Enable sudo without password for dev user
+  security.sudo.extraRules = [
+    {{
+      users = [ "dev" ];
+      commands = [
+        {{
+          command = "ALL";
+          options = [ "NOPASSWD" ];
+        }}
+      ];
+    }}
   ];
 
-  # Override firewall ports
-  networking.firewall.allowedTCPPorts = lib.mkForce [ 22 {config_data["port"]} ];
+  # Firewall configuration
+  networking.firewall.allowedTCPPorts = [ 22 {config_data["port"]} ];
 
-  # Override user packages to only include standard nixpkgs packages for integration testing
-  users.users.dev.packages = lib.mkForce (with pkgs; [
-    git
-    openssh
-    curl
-    python3
-    # Remove custom MCP packages for integration testing
-  ]);
+  # System state version
+  system.stateVersion = "24.11";
 }}
 '''
 
@@ -657,36 +718,18 @@ class VMController:
             f.write(temp_config_content)
 
         try:
-            # Create a simple wrapper flake that imports our config
-            vm_flake_content = f'''
-{{
-  description = "Temporary VM for {branch}";
-
-  inputs = {{
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  }};
-
-  outputs = {{ self, nixpkgs }}: {{
-    nixosConfigurations.vm = nixpkgs.lib.nixosSystem {{
-      system = builtins.currentSystem;
-      modules = [
-        {workspace_dir}/temp-vm-config.nix
-      ];
-    }};
-
-    packages.${{builtins.currentSystem}}.default = self.nixosConfigurations.vm.config.system.build.vm;
-  }};
-}}
-'''
-
-            # Write the temporary flake
-            temp_flake_path = Path("flake.nix")
-            with temp_flake_path.open('w') as f:
-                f.write(vm_flake_content)
-
-            # Build using the temporary flake
+            # Build using a simple nixos-rebuild approach
             vm_build_cmd = [
-                "nix", "build", "--no-link", "--print-out-paths", "--impure", ".#default"
+                "nix", "build", "--no-link", "--print-out-paths", "--impure",
+                "--expr", f'''
+let
+  nixpkgs = builtins.getFlake "github:NixOS/nixpkgs/nixos-unstable";
+in
+  (nixpkgs.lib.nixosSystem {{
+    system = builtins.currentSystem;
+    modules = [ {workspace_dir}/temp-vm-config.nix ];
+  }}).config.system.build.vm
+                '''
             ]
 
             logger.debug(f"Running VM build command: {' '.join(vm_build_cmd)}")
@@ -710,12 +753,8 @@ class VMController:
             logger.error(f"Failed to build VM configuration: {e}")
             sys.exit(1)
         finally:
-            # Clean up temporary config file and flake
+            # Clean up temporary config file
             temp_config_path.unlink(missing_ok=True)
-            temp_flake_path = Path("flake.nix")
-            temp_flake_path.unlink(missing_ok=True)
-            temp_lock_path = Path("flake.lock")
-            temp_lock_path.unlink(missing_ok=True)
 
         if not vm_path:
             logger.error("Failed to build VM")
@@ -736,11 +775,11 @@ class VMController:
             f.write(str(vm_process.pid))
 
         # Wait for VM to be ready
-        if self._wait_for_vm_ready(ssh_key_path):
+        if self._wait_for_vm_ready(ssh_key_path, ssh_port):
             logger.info(f"✅ VM started successfully (PID: {vm_process.pid})")
 
             # Start agent services in VM
-            self._start_agent_in_vm(ssh_key_path)
+            self._start_agent_in_vm(ssh_key_path, ssh_port)
         else:
             logger.error("❌ VM startup failed - performing cleanup...")
 
@@ -836,6 +875,7 @@ class VMController:
 
         vm_name = config_data["vm_name"]
         ssh_key_path = Path(config_data["ssh_key_path"])
+        ssh_port = config_data.get("ssh_port", 2222)  # Use stored SSH port or fallback to 2222
 
         if not self._is_vm_running(vm_name):
             logger.error("VM is not running. Start it first with: agent-vm start")
@@ -847,7 +887,7 @@ class VMController:
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-            "-p", "2222", "dev@localhost"
+            "-p", str(ssh_port), "dev@localhost"
         ]
 
         # For interactive SSH, use subprocess.run directly without capture
@@ -932,6 +972,7 @@ class VMController:
 
         vm_name = config_data["vm_name"]
         ssh_key_path = Path(config_data["ssh_key_path"])
+        ssh_port = config_data.get("ssh_port", 2222)  # Use stored SSH port or fallback to 2222
 
         logger.info(f"Showing logs for VM: {branch}")
 
@@ -942,7 +983,7 @@ class VMController:
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                    "-p", "2222", "dev@localhost",
+                    "-p", str(ssh_port), "dev@localhost",
                     "journalctl -f --no-pager -n 50 -u agent-mcp"
                 ]
                 # For interactive logs viewing, use subprocess.run directly without capture
@@ -965,7 +1006,7 @@ class VMController:
         except subprocess.CalledProcessError:
             return False
 
-    def _wait_for_vm_ready(self, ssh_key_path: Path, max_attempts: int = 30) -> bool:
+    def _wait_for_vm_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: int = 30) -> bool:
         """Wait for VM to be ready for SSH connections."""
         logger.info("🚀 Waiting for VM to be ready...")
         logger.debug(f"🔍 Using SSH key: {ssh_key_path}")
@@ -982,7 +1023,7 @@ class VMController:
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                    "-p", "2222", "dev@localhost", "echo 'VM Ready'"
+                    "-p", str(ssh_port), "dev@localhost", "echo 'VM Ready'"
                 ]
 
                 if attempt == 0 or attempt % 10 == 0:  # Log command details periodically
@@ -1028,12 +1069,12 @@ class VMController:
         logger.error(f"❌ VM failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
         logger.error("🔧 VM startup troubleshooting:")
         logger.error("  • Check if VM process is still running: ps aux | grep qemu")
-        logger.error("  • Try connecting manually: ssh -i <key> -p 2222 dev@localhost")
+        logger.error(f"  • Try connecting manually: ssh -i <key> -p {ssh_port} dev@localhost")
         logger.error("  • Check VM console output for boot errors")
         logger.error("  • Verify nested virtualization is enabled")
         return False
 
-    def _start_agent_in_vm(self, ssh_key_path: Path) -> None:
+    def _start_agent_in_vm(self, ssh_key_path: Path, ssh_port: int = 2222) -> None:
         """Start agent services in VM using systemd."""
         logger.info("🔧 Starting agent services in VM...")
 
@@ -1042,7 +1083,7 @@ class VMController:
         service_check_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-            "-p", "2222", "dev@localhost",
+            "-p", str(ssh_port), "dev@localhost",
             "systemctl list-unit-files agent-mcp.service"
         ]
 
@@ -1056,7 +1097,7 @@ class VMController:
                 logger.info("✅ VM started successfully without agent service")
                 logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
                 return
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             logger.info("ℹ️ Agent service not available (disabled for integration testing)")
             logger.info("✅ VM started successfully without agent service")
             logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
@@ -1068,7 +1109,7 @@ class VMController:
         status_check_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-            "-p", "2222", "dev@localhost",
+            "-p", str(ssh_port), "dev@localhost",
             "systemctl is-active agent-mcp"
         ]
 
@@ -1091,7 +1132,7 @@ class VMController:
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-            "-p", "2222", "dev@localhost",
+            "-p", str(ssh_port), "dev@localhost",
             "sudo systemctl start agent-mcp"
         ]
 
@@ -1106,7 +1147,7 @@ class VMController:
             logger.info("✅ Agent services started in VM")
 
             # Wait for service to be ready
-            if self._wait_for_agent_ready(ssh_key_path):
+            if self._wait_for_agent_ready(ssh_key_path, ssh_port):
                 logger.info("🎉 MCP Proxy available at: http://localhost:8000")
                 logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
             else:
@@ -1124,13 +1165,13 @@ class VMController:
             logger.error(f"  • SSH into VM: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
             logger.error("  • Check if passwordless sudo is working: sudo -n true")
             raise
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             logger.error("❌ Agent service start command timed out")
             logger.error(f"🔍 Command that timed out: {' '.join(ssh_cmd)}")
             logger.error("🔧 This might indicate SSH or sudo issues")
             raise
 
-    def _wait_for_agent_ready(self, ssh_key_path: Path, max_attempts: int = 20) -> bool:
+    def _wait_for_agent_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: int = 20) -> bool:
         """Wait for agent service to be ready."""
         logger.info("🔧 Waiting for agent service to be ready...")
 
@@ -1142,7 +1183,7 @@ class VMController:
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                    "-p", "2222", "dev@localhost",
+                    "-p", str(ssh_port), "dev@localhost",
                     "curl -f http://localhost:8000/health"
                 ]
                 result = run_subprocess(ssh_cmd, capture_output=True, timeout=10)
@@ -1408,10 +1449,9 @@ class VMController:
                 start_time = properties.get('ExecMainStartTimestamp', '')
                 if start_time and start_time != '0':
                     try:
-                        import datetime
                         # Simple uptime calculation
                         agent_status['uptime'] = 'running'
-                    except:
+                    except Exception:
                         agent_status['uptime'] = 'unknown'
                 else:
                     agent_status['uptime'] = 'not started'
@@ -1477,12 +1517,17 @@ class VMController:
         return workspace_status
 
 
-def main() -> None:
-    """Main entry point for agent-vm command."""
-    parser = argparse.ArgumentParser(
-        description="VM control command for managing development VMs",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+# Global state for options
+_global_state = {
+    "state_dir": None,
+    "verbose": False
+}
+
+# Initialize typer app
+app = typer.Typer(
+    name="agent-vm",
+    help="VM control command for managing development VMs",
+    epilog="""
 Examples:
   agent-vm create --branch=feature-x --port=8001
   agent-vm start feature-x
@@ -1490,94 +1535,213 @@ Examples:
   agent-vm shell feature-x
   agent-vm list
   agent-vm destroy feature-x
-        """
-    )
+    """
+)
 
-    # Global options
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Enable verbose logging with debug information')
-    parser.add_argument('--state-dir', type=str,
-                       help='Override default state base directory (default: ~/.local/share/agent-vms)')
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+def _setup_global_options(
+    state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging")
+) -> None:
+    """Set up global options that apply to all commands."""
+    _global_state["state_dir"] = state_dir
+    _global_state["verbose"] = verbose
+    setup_logging(verbose=verbose)
 
-    # Create command
-    create_parser = subparsers.add_parser('create', help='Create a new VM configuration')
-    create_parser.add_argument('--host', default='localhost', help='Host to bind VM ports to')
-    create_parser.add_argument('--port', type=int, default=8000, help='Port for MCP proxy forwarding')
-    create_parser.add_argument('--branch', help='Branch name for VM (default: current branch)')
-    create_parser.add_argument('--config', default='vm-config.nix', help='Path to VM NixOS config')
 
-    # Start command
-    start_parser = subparsers.add_parser('start', help='Start VM for branch')
-    start_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
+@app.callback()
+def main_callback(
+    state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging")
+) -> None:
+    """Main callback to handle global options."""
+    _setup_global_options(state_dir, verbose)
 
-    # Stop command
-    stop_parser = subparsers.add_parser('stop', help='Stop VM for branch')
-    stop_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
 
-    # Restart command
-    restart_parser = subparsers.add_parser('restart', help='Restart VM for branch')
-    restart_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
-
-    # Status command
-    status_parser = subparsers.add_parser('status', help='Show VM status for branch')
-    status_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
-
-    # Shell command
-    shell_parser = subparsers.add_parser('shell', help='Open SSH shell in VM for branch')
-    shell_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
-
-    # Logs command
-    logs_parser = subparsers.add_parser('logs', help='Show VM logs for branch')
-    logs_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
-
-    # List command
-    subparsers.add_parser('list', help='List all VM configurations')
-
-    # Destroy command
-    destroy_parser = subparsers.add_parser('destroy', help='Destroy VM configuration for branch')
-    destroy_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
-
-    args = parser.parse_args()
-
-    if not args.command:
-        parser.print_help()
-        sys.exit(1)
-
-    # Set up logging based on verbose flag
-    setup_logging(verbose=args.verbose)
-
-    controller = VMController(state_dir=args.state_dir)
+@app.command()
+def create(
+    host: str = typer.Option("localhost", help="Host to bind VM ports to"),
+    port: int = typer.Option(8000, help="Port for MCP proxy forwarding"),
+    branch: Optional[str] = typer.Option(None, help="Branch name for VM (default: current branch)"),
+    config: str = typer.Option("vm-config.nix", help="Path to VM NixOS config")
+) -> None:
+    """Create a new VM configuration."""
+    controller = VMController(state_dir=_global_state["state_dir"])
 
     try:
-        if args.command == 'create':
-            controller.create_vm(args.host, args.port, args.branch, args.config)
-        elif args.command == 'start':
-            controller.start_vm(args.branch)
-        elif args.command == 'stop':
-            controller.stop_vm(args.branch)
-        elif args.command == 'restart':
-            controller.restart_vm(args.branch)
-        elif args.command == 'status':
-            controller.vm_status(args.branch)
-        elif args.command == 'shell':
-            controller.vm_shell(args.branch)
-        elif args.command == 'logs':
-            controller.vm_logs(args.branch)
-        elif args.command == 'list':
-            controller.list_vms()
-        elif args.command == 'destroy':
-            controller.destroy_vm(args.branch)
+        controller.create_vm(host, port, branch, config)
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed with exit code {e.returncode}")
-        sys.exit(e.returncode)
+        raise typer.Exit(e.returncode)
     except KeyboardInterrupt:
         logger.info("Operation cancelled by user")
-        sys.exit(130)
+        raise typer.Exit(130)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        sys.exit(1)
+        raise typer.Exit(1)
+
+
+@app.command()
+def start(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Start VM for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.start_vm(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def stop(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Stop VM for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.stop_vm(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def restart(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Restart VM for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.restart_vm(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def status(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Show VM status for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.vm_status(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def shell(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Open SSH shell in VM for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.vm_shell(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def logs(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Show VM logs for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.vm_logs(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("list")
+def list_vms() -> None:
+    """List all VM configurations."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.list_vms()
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def destroy(
+    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
+) -> None:
+    """Destroy VM configuration for branch."""
+    controller = VMController(state_dir=_global_state["state_dir"])
+
+    try:
+        controller.destroy_vm(branch)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed with exit code {e.returncode}")
+        raise typer.Exit(e.returncode)
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        raise typer.Exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    """Main entry point for agent-vm command."""
+    app()
 
 
 if __name__ == "__main__":

@@ -61,14 +61,15 @@ inputs: final: prev:
     src = ./agent_vm;
     format = "pyproject";
 
-    # Runtime dependencies - Python stdlib only for main functionality
-    propagatedBuildInputs = [ ];
+    # Runtime dependencies
+    propagatedBuildInputs = [
+      final.python3.pkgs.typer
+    ];
 
     # Test dependencies for build-time testing
     nativeBuildInputs = [
       final.python3.pkgs.setuptools
       final.python3.pkgs.wheel
-      final.python3.pkgs.typer
       final.python3.pkgs.pytest
       final.python3.pkgs.pytest-mock
       final.python3.pkgs.pytest-timeout
