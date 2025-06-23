@@ -10,6 +10,9 @@
 ## Implementation Phases
 
 ### URGENT
+- [ ] Refactor the functions that have a `(MonadReader r m, HasType (IOTracer AgentVmTrace) r)`
+  contraint into a MonadTrace one so they can use the new `trace` method instead of `<&`
+
 - [x] Refactor the functions from Process.hs, SSH.hs, Nix.hs, etc
   that take a 'IOTracer AgentVmTrace' to use the same pattern
   as the previous step

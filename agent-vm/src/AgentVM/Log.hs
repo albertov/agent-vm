@@ -1,13 +1,22 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Logging infrastructure for agent-vm
 module AgentVM.Log
   ( AgentVmTrace (..),
+    MonadTrace (..),
     LogLevel (..),
     traceToMessage,
     renderTrace,
@@ -15,7 +24,6 @@ module AgentVM.Log
     traceLevel,
     vmLogger,
     vmLevelLogger,
-    contramapIOTracer,
     createLogContext,
     (<&),
   )
@@ -23,14 +31,54 @@ where
 
 import AgentVM.Types (BranchName, VMConfig, unBranchName)
 import Data.Aeson (FromJSON, ToJSON)
+import Data.Generics.Product (HasType, the)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Lens.Micro.Mtl (view)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
-import Protolude (Eq, FilePath, Generic, IO, Int, MonadIO, Ord, Show, Text, pure, show, ($), (.), (<>))
+import Protolude
+  ( Applicative,
+    Eq,
+    FilePath,
+    Functor,
+    Generic,
+    IO,
+    Int,
+    Monad,
+    MonadIO,
+    MonadReader,
+    Ord,
+    Show,
+    Text,
+    Type,
+    pure,
+    show,
+    ($),
+    (.),
+    (<>),
+  )
 import System.Console.ANSI (Color (Blue, Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleIntensity (BoldIntensity), ConsoleLayer (Foreground), SGR (Reset, SetColor, SetConsoleIntensity))
 import qualified System.Console.ANSI as ANSI
 import System.IO (Handle, stderr)
 import UnliftIO (liftIO)
+
+(<&) :: Tracer m a -> a -> m ()
+(<&) = traceWith
+
+class (Monad m) => MonadTrace trace m | m -> trace where
+  trace :: trace -> m ()
+
+-- | For DerivingVia
+newtype PlowLogging t m a = PlowLogging (m a)
+  deriving newtype (Functor, Applicative, Monad)
+
+instance
+  (MonadIO m, MonadReader r m, MonadTrace t m, HasType (IOTracer t) r) =>
+  MonadTrace t (PlowLogging t m)
+  where
+  trace msg = PlowLogging $ do
+    tracer <- view (the @(IOTracer t))
+    traceWith tracer msg
 
 -- | MonadIO version of setSGR
 setSGR :: (MonadIO m) => [SGR] -> m ()
@@ -43,18 +91,6 @@ hPutStr h = liftIO . TIO.hPutStr h
 -- | MonadIO version of Text.IO.hPutStrLn
 hPutStrLn :: (MonadIO m) => Handle -> Text -> m ()
 hPutStrLn h = liftIO . TIO.hPutStrLn h
-
--- | Contramap for IOTracer
-contramapIOTracer :: (a -> b) -> IOTracer b -> IOTracer a
-contramapIOTracer f (IOTracer tracerB) = IOTracer $ Tracer $ \a ->
-  let Tracer traceB = tracerB
-   in traceB (f a)
-
--- | Convenience operator for logging using traceWith
-(<&) :: Tracer m a -> a -> m ()
-(<&) = traceWith
-
-infixr 1 <&
 
 -- | Log level wrapper for filtering and importance tagging
 data LogLevel a

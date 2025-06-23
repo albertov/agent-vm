@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -23,6 +24,7 @@ import Protolude
 -- | VM monad transformer
 newtype VMT m a = VMT {unVMT :: ReaderT AgentVmEnv m a}
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader AgentVmEnv)
+  deriving (MonadTrace AgentVmTrace) via (PlowLogging AgentVmTrace)
 
 -- | Run a VMT computation
 runVMT :: AgentVmEnv -> VMT m a -> m a
