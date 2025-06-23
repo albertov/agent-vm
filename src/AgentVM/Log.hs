@@ -113,7 +113,6 @@ traceLevel traceEvent = case traceEvent of
   VMFailed {} -> Critical traceEvent
   AgentServiceFailed {} -> Critical traceEvent
   -- Error events - failures that should be investigated
-  ProcessError {} -> Error traceEvent
   ProcessTimeout {} -> Error traceEvent
   ProcessSigKilled {} -> Error traceEvent
   SSHFailed {} -> Error traceEvent
@@ -149,6 +148,7 @@ traceLevel traceEvent = case traceEvent of
   AgentServiceStarting {} -> Debug traceEvent
   -- Trace events - very detailed output
   ProcessOutput {} -> Trace traceEvent
+  ProcessError {} -> Trace traceEvent
   NixBuildProgress {} -> Trace traceEvent
 
 -- | All possible log events in the system
@@ -217,8 +217,8 @@ renderTrace = \case
   VMFailed b r -> "❌ VM failed for " <> unBranchName b <> ": " <> r
   ProcessSpawned c a -> "🔧 Spawned process: " <> c <> " " <> T.unwords a
   ProcessExited c e -> "📤 Process exited: " <> c <> " (code: " <> T.pack (show e) <> ")"
-  ProcessOutput c o -> "📝 Process output from " <> c <> ": " <> T.take 80 o
-  ProcessError c e -> "❌ Process error from " <> c <> ": " <> e
+  ProcessOutput c o -> "📝 (stdout)" <> c <> ": " <> o
+  ProcessError c e -> "📝 (stderr)" <> c <> ": " <> e
   ProcessStopped c -> "⏹️  Process stopped gracefully: " <> c
   ProcessSigKilled c sig -> "🔪 Process force killed: " <> c <> " (signal: " <> T.pack (show sig) <> ")"
   ProcessTimeout c timeout -> "⏰ Process timed out: " <> c <> " (after: " <> T.pack (show timeout) <> "μs)"
