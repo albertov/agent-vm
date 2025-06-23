@@ -68,7 +68,7 @@ them if they don't and repeat. If you get stuck write a FIXME
 """
 
 [commands.format]
-command = ["nix", "fmt"]
+command = ["nix", "--accept-flake-config", "fmt"]
 doc = "Accepts the name of the files that need formatting as arguments"
 
 [commands.branch_log]
@@ -104,7 +104,7 @@ verbosity = "DEBUG"
 command = ["bash"]
 
 [commands.test]
-command = ["nix", "flake", "check"]
+command = ["nix", "--accept-flake-config", "flake", "check"]
 
 [commands.cabal_build]
 command = ["cabal", "build"]
@@ -156,7 +156,7 @@ set of packages.
 """
 
 [commands.integration-test]
-command = ["timeout", "90s", "nix", "run", ".#integration-test", "--"]
+command = ["timeout", "90s", "nix", "--accept-flake-config", "run", ".#integration-test", "--"]
 doc = """
 Runs the .#integration-test flake app with the arguments you pass"
 

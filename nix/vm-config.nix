@@ -66,6 +66,7 @@
   # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
   nix.settings.sandbox = false;
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.trusted-users = [ "mcp-proxy" ];
 
   services.selenium-server.enable = true;
 
