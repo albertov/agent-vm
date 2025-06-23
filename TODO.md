@@ -11,14 +11,18 @@
 
 ### URGENT
 
-- [ ] Extensive tests in AgentVM.ProcessSpec for the stderr/stdout capture
+- We need a version of waitForProcess, stopProcess and withVMProcess
+  that produces (ExitCode, CapturedStdout, CapturedStderr)
+  where it now produces ExitCode. With integration-tests
+
+- [x] Extensive tests in AgentVM.ProcessSpec for the stderr/stdout capture
   functionality.
   Methodology: Write test, run cabal_test, fix, rinse and repeat.
   You should write fixture bash scripts in test/fixtures/ProcessSpec and execute
   them to test it. These scripts should ONLY write test strings to stdout or
   stderr and exit successfully or not, do not fork any other process.
 
-- [ ] Add MonadTrans instance to VMT so we can lift outer monad actions into
+- [x] Add MonadTrans instance to VMT so we can lift outer monad actions into
   bigger VMT blocks
 
 - [x] Refactor the functions that have a `(MonadReader r m, HasType (IOTracer AgentVmTrace) r)`
