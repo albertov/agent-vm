@@ -2,6 +2,9 @@
 
 Agent VM is a comprehensive system for running MCP (Model Context Protocol) agents in secure, isolated QEMU virtual machines. It provides enhanced security through hardware virtualization while maintaining full development workflow compatibility.
 
+All VMs state is located in an user configurable `--state-dir` directory
+(defaults to `~/.local/share/agent-vms/<vm_name>`)
+
 ## Project Structure Overview
 
 Here's what each file in this project does:
@@ -128,9 +131,8 @@ agent-vm status --verbose
 
 **Systemd Integration**: Agents run as hardened systemd services with:
 - Minimal required capabilities and permissions
-- Automatic restart on failure with exponential backoff
 - Comprehensive resource limits and security features
-- Health monitoring and status reporting
+- Health and status reporting
 
 **MCP Tools Integration**: Full MCP ecosystem available in VMs:
 - `codemcp` - Core MCP functionality for code development

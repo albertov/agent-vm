@@ -143,35 +143,34 @@ runNixVM script = do
 ## Migration Strategy
 
 ### Phase 1: Core Infrastructure (Week 1-2)
-1. Set up Haskell project structure with Cabal/Stack
+1. Set up Haskell project structure with Cabal and Haskell.nix
 2. Implement basic types and data models
 3. Create typed-process wrappers for Nix commands
 4. Port configuration parsing (JSON/YAML)
 5. Set up plow-log logging infrastructure
 
 ### Phase 2: VM Lifecycle Management (Week 3-4)
+0. Comprehensive integration testing with "pending" method bodies
 1. Implement VM state machine with phantom types
-2. Create STM-based VM registry
+2. Create STM-based VM registry that parses current config format
 3. Port VM creation, start, stop, destroy operations
 4. Add SSH connection management
 
 ### Phase 3: CLI Interface (Week 5)
+0. Comprehensive integration testing with "pending" method bodies
 1. Implement optparse-applicative CLI parser
 2. Port all CLI commands with same interface
 3. Add colored output and progress indicators
 4. Ensure library/CLI separation for future daemon use
 
-### Phase 4: Advanced Features (Week 6-7)
+### Phase 4: Advanced Features (agent-vmd systemd service for host machine) (Week 6-7)
+0. Comprehensive integration testing with "pending" method bodies
 1. Implement supervisor trees for monitoring
 2. Add concurrent VM operations
-3. Port integration tests using hspec
 4. Performance optimization
 
 ### Phase 5: Integration & Testing (Week 8)
-1. Comprehensive integration testing
-2. Migration tools for existing Python state
-3. Documentation updates
-4. Gradual rollout strategy
+1. Documentation updates
 
 ## Key Libraries
 
@@ -203,7 +202,7 @@ dependencies:
   - network             # Network utilities
 
   # Logging and debugging
-  - co-log              # Contravariant logging with sum types
+  - plow-log            # Contravariant logging with sum types
   - pretty-simple       # Debug output
 
   # Testing
