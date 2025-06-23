@@ -75,6 +75,11 @@
     allowUserNamespaces = false;
     lockKernelModules = true;
     protectKernelImage = true;
+    # Configure passwordless sudo for dev user for systemctl commands
+    sudo = {
+      enable = true;
+      wheelNeedsPassword = false;
+    };
   };
 
   # Disable sandbox to avoid conflict with security.allowUserNamespaces = false

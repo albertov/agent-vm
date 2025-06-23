@@ -358,6 +358,13 @@ class VMController:
     - ✅ Completed MCP server configuration in start.sh (enabled rescript-lsp)
     - ✅ Fixed user group creation logic to avoid conflicts with existing dev user
 
+- [ ] **Issue 3**: Fix SSH connectivity and sudo issues in integration tests
+  - **Root cause**: Integration tests fail because:
+    - SSH connectivity check lacks detailed logging
+    - Agent service startup uses sudo without passwordless configuration
+    - Service should auto-start but manual start attempted anyway
+  - **Solution**: Add detailed SSH logging, check service status before starting, configure passwordless sudo
+
 ## Current Implementation Status
 
 **✅ COMPLETED:**

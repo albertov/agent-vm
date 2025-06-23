@@ -651,6 +651,11 @@ class VMController:
     def _wait_for_vm_ready(self, ssh_key_path: Path, max_attempts: int = 30) -> bool:
         """Wait for VM to be ready for SSH connections."""
         logger.info("🚀 Waiting for VM to be ready...")
+        logger.debug(f"🔍 Using SSH key: {ssh_key_path}")
+        logger.debug(f"🔍 SSH key exists: {ssh_key_path.exists()}")
+
+        if ssh_key_path.exists():
+            logger.debug(f"🔍 SSH key permissions: {oct(ssh_key_path.stat().st_mode)[-3:]}")
 
         # Progress indicators
         progress_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -662,14 +667,25 @@ class VMController:
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                     "-p", "2222", "dev@localhost", "echo 'VM Ready'"
                 ]
+
+                if attempt == 0 or attempt % 10 == 0:  # Log command details periodically
+                    logger.debug(f"🔍 SSH attempt {attempt + 1}: {' '.join(ssh_cmd)}")
+
                 result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
+
+                if attempt % 10 == 0:  # Log results periodically for debugging
+                    logger.debug(f"🔍 SSH attempt {attempt + 1} exit code: {result.returncode}")
+                    logger.debug(f"🔍 SSH attempt {attempt + 1} stdout: {result.stdout}")
+                    logger.debug(f"🔍 SSH attempt {attempt + 1} stderr: {result.stderr}")
+
                 if result.returncode == 0:
                     # Clear progress line
                     print("\r" + " " * 50 + "\r", end="", flush=True)
                     logger.info("✅ VM is ready for connections")
                     return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                pass
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                if attempt % 10 == 0:  # Log errors periodically for debugging
+                    logger.debug(f"🔍 SSH attempt {attempt + 1} failed: {e}")
 
             # Show progress with spinning indicator
             progress_char = progress_chars[attempt % len(progress_chars)]
@@ -693,12 +709,42 @@ class VMController:
         # Clear progress line and show error
         print("\r" + " " * 50 + "\r", end="", flush=True)
         logger.error(f"❌ VM failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
+        logger.error("🔧 VM startup troubleshooting:")
+        logger.error("  • Check if VM process is still running: ps aux | grep qemu")
+        logger.error("  • Try connecting manually: ssh -i <key> -p 2222 dev@localhost")
+        logger.error("  • Check VM console output for boot errors")
+        logger.error("  • Verify nested virtualization is enabled")
         return False
 
     def _start_agent_in_vm(self, ssh_key_path: Path) -> None:
         """Start agent services in VM using systemd."""
         logger.info("🔧 Starting agent services in VM...")
 
+        # First check if service is already running
+        logger.debug("🔍 Checking if agent-mcp service is already running...")
+        status_check_cmd = [
+            "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
+            "-p", "2222", "dev@localhost",
+            "systemctl is-active agent-mcp"
+        ]
+
+        try:
+            status_result = subprocess.run(status_check_cmd, capture_output=True, text=True, timeout=15)
+            logger.debug(f"🔍 Service status check exit code: {status_result.returncode}")
+            logger.debug(f"🔍 Service status output: {status_result.stdout.strip()}")
+            logger.debug(f"🔍 Service status stderr: {status_result.stderr.strip()}")
+
+            if status_result.returncode == 0 and "active" in status_result.stdout:
+                logger.info("✅ Agent service is already running")
+                logger.info("🎉 MCP Proxy should be available at: http://localhost:8000")
+                logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+                return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.debug(f"🔍 Service status check failed: {e}")
+
+        # Service is not running, try to start it
+        logger.info("🔧 Agent service not running, starting it...")
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
@@ -706,8 +752,14 @@ class VMController:
             "sudo systemctl start agent-mcp"
         ]
 
+        logger.debug(f"🔍 Running start command: {' '.join(ssh_cmd)}")
+
         try:
-            subprocess.run(ssh_cmd, check=True)
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30, check=True)
+            logger.debug(f"🔍 Start command exit code: {result.returncode}")
+            logger.debug(f"🔍 Start command stdout: {result.stdout.strip()}")
+            logger.debug(f"🔍 Start command stderr: {result.stderr.strip()}")
+
             logger.info("✅ Agent services started in VM")
 
             # Wait for service to be ready - temporarily disabled for debugging
@@ -721,12 +773,22 @@ class VMController:
             # For debugging - just assume success
             logger.info("🎉 MCP Proxy should be available at: http://localhost:8000")
             logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
-        except subprocess.CalledProcessError:
+
+        except subprocess.CalledProcessError as e:
             logger.error("❌ Failed to start agent services in VM")
+            logger.error(f"🔍 Command exit code: {e.returncode}")
+            logger.error(f"🔍 Command stdout: {e.stdout}")
+            logger.error(f"🔍 Command stderr: {e.stderr}")
             logger.error("🔧 Troubleshooting:")
             logger.error("  • Check systemd service status: sudo systemctl status agent-mcp")
             logger.error("  • View service logs: journalctl -u agent-mcp")
             logger.error(f"  • SSH into VM: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+            logger.error("  • Check if passwordless sudo is working: sudo -n true")
+            raise
+        except subprocess.TimeoutExpired as e:
+            logger.error("❌ Agent service start command timed out")
+            logger.error(f"🔍 Command that timed out: {' '.join(ssh_cmd)}")
+            logger.error("🔧 This might indicate SSH or sudo issues")
             raise
 
     def _wait_for_agent_ready(self, ssh_key_path: Path, max_attempts: int = 20) -> bool:
@@ -932,21 +994,43 @@ class VMController:
     def _check_ssh_connectivity(self, ssh_key_path: Path) -> Dict[str, any]:
         """Check SSH connectivity with detailed diagnostics."""
         ssh_status = {'connected': False}
+
+        logger.debug(f"🔍 Checking SSH connectivity using key: {ssh_key_path}")
+        logger.debug(f"🔍 SSH key exists: {ssh_key_path.exists()}")
+
+        if ssh_key_path.exists():
+            logger.debug(f"🔍 SSH key permissions: {oct(ssh_key_path.stat().st_mode)[-3:]}")
+
         try:
             ssh_cmd = [
                 "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", "2222", "dev@localhost", "echo 'SSH OK'"
             ]
+
+            logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
             result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+
+            logger.debug(f"🔍 SSH command exit code: {result.returncode}")
+            logger.debug(f"🔍 SSH stdout: {result.stdout.strip()}")
+            logger.debug(f"🔍 SSH stderr: {result.stderr.strip()}")
+
             if result.returncode == 0 and "SSH OK" in result.stdout:
                 ssh_status['connected'] = True
+                logger.debug("✅ SSH connectivity confirmed")
             else:
-                ssh_status['error'] = result.stderr or "Connection failed"
+                ssh_status['error'] = f"SSH failed - exit code: {result.returncode}, stderr: {result.stderr}"
+                logger.debug(f"❌ SSH connectivity failed: {ssh_status['error']}")
         except subprocess.TimeoutExpired:
             ssh_status['error'] = "Connection timeout"
+            logger.debug("❌ SSH connectivity failed: timeout")
         except subprocess.CalledProcessError as e:
             ssh_status['error'] = f"SSH error: {e}"
+            logger.debug(f"❌ SSH connectivity failed: {e}")
+        except Exception as e:
+            ssh_status['error'] = f"Unexpected SSH error: {e}"
+            logger.debug(f"❌ SSH connectivity failed: unexpected error {e}")
+
         return ssh_status
 
     def _check_agent_service_detailed(self, ssh_key_path: Path) -> Dict[str, any]:
