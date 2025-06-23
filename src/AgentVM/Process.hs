@@ -14,12 +14,13 @@ module AgentVM.Process
 where
 
 import AgentVM.Log (AgentVmTrace (ProcessError, ProcessOutput, ProcessSpawned), MonadTrace (..))
+import Control.Concurrent.Timeout (timeout)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as TE
 import Protolude hiding (async, atomically, trace)
 import System.IO (Handle)
-import System.Process.Typed (ExitCode (..), Process, createPipe, getExitCode, getStderr, getStdout, proc, setStderr, setStdout, startProcess)
+import System.Process.Typed (ExitCode (..), Process, createPipe, getExitCode, getStderr, getStdout, proc, setStderr, setStdout, startProcess, stopProcess, waitExitCode)
 import UnliftIO (MonadUnliftIO, catchAny, tryAny)
 import UnliftIO.Async (async)
 
@@ -90,7 +91,9 @@ stopVMProcess ::
   ) =>
   VMProcess ->
   m ()
-stopVMProcess = notImplemented
+stopVMProcess (VMProcess process) = do
+  -- Stop the process
+  liftIO $ stopProcess process
 
 -- | Check if VM process is still running
 checkVMProcess :: VMProcess -> IO ProcessState
@@ -100,4 +103,7 @@ checkVMProcess process = do
 
 -- | Wait for a process with timeout
 waitForProcess :: Int -> Process a b c -> IO (Maybe ExitCode)
-waitForProcess = notImplemented
+waitForProcess timeoutMicros process = do
+  -- Convert microseconds to Integer for unbounded-delays
+  let timeoutMicrosInteger = fromIntegral timeoutMicros :: Integer
+  timeout timeoutMicrosInteger (waitExitCode process)

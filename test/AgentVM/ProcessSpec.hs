@@ -8,7 +8,7 @@ module AgentVM.ProcessSpec (spec) where
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log hiding (ProcessExited)
 import AgentVM.Monad (VMT, runVMT)
-import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startLoggedProcess, startVMProcess)
+import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startLoggedProcess, startVMProcess, stopVMProcess)
 import qualified AgentVM.Process as P
 import Control.Concurrent.Thread.Delay (delay)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
@@ -50,7 +50,26 @@ spec = describe "AgentVM.Process" $ do
     -- For now, we'll skip cleanup since VMProcess is opaque
 
     it "stops VM process gracefully" $ do
-      pending
+      -- Start a long-running process
+      let testScript = "/bin/sh"
+
+      -- Start the process using the VMT monad
+      process <- runVMT testEnv $ startVMProcess testScript
+
+      -- Check that it's running
+      checkVMProcess process `shouldReturn` ProcessRunning
+
+      -- Stop the process
+      runVMT testEnv $ stopVMProcess process
+
+      -- Small delay to ensure process has time to stop
+      delay 100000 -- 100ms
+
+      -- Check that it has stopped
+      state <- checkVMProcess process
+      case state of
+        ProcessExited _ -> return () -- Expected
+        ProcessRunning -> panic "Process should have stopped"
 
     it "checks if process is running" $ do
       -- Start a simple process with pipes
@@ -113,7 +132,30 @@ spec = describe "AgentVM.Process" $ do
         ProcessRunning -> panic "Process should have exited"
 
     it "waits for process with timeout" $ do
-      pending
+      -- Test case 1: Process that exits before timeout
+      process1 <-
+        startProcess $
+          proc "sleep" ["0.1"] -- 100ms sleep
+            & setStdout createPipe
+            & setStderr createPipe
+
+      -- Wait with generous timeout (1 second)
+      result1 <- P.waitForProcess 1000000 process1
+      result1 `shouldBe` Just ExitSuccess
+
+      -- Test case 2: Process that times out
+      process2 <-
+        startProcess $
+          proc "sleep" ["5"] -- 5 second sleep
+            & setStdout createPipe
+            & setStderr createPipe
+
+      -- Wait with short timeout (100ms)
+      result2 <- P.waitForProcess 100000 process2
+      result2 `shouldBe` Nothing
+
+      -- Clean up the long-running process
+      stopProcess process2
 
   describe "Process output capture" $ do
     it "captures stdout output" $ do
