@@ -97,10 +97,20 @@ def run_agent_vm_command(
     cmd = [config.agent_vm_cmd]
     if test_state_dir:
         cmd.extend(["--state-dir", str(test_state_dir)])
+
+    # Debug the configuration
+    logger.debug(f"Integration test config - debug: {config.debug}, verbose: {config.verbose}")
+
+    # Pass through debug/verbose flags to agent-vm itself
     if config.debug:
         cmd.append("--debug")
+        logger.debug("Added --debug flag to agent-vm command")
     elif config.verbose:
         cmd.append("--verbose")
+        logger.debug("Added --verbose flag to agent-vm command")
+    else:
+        logger.debug("No debug/verbose flags to add to agent-vm command")
+
     # Always pass the timeout to agent-vm to ensure it honors it
     cmd.extend(["--timeout", str(config.timeout)])
     cmd.extend(args)
@@ -543,33 +553,32 @@ def test_agent_service_startup(test_vm_config):
         else:
             logger.warning("⚠️ Agent service status unclear from VM status output")
 
-        # Test 2: Check for critical error indicators that suggest genuine service failure
-        critical_error_indicators = [
+        # Test 2: Check for explicit confirmation that agent service is running
+        has_running_service = "🟢 Agent Service: Running" in status_result.stdout
+
+        # Check for any indicators that the service is not working
+        error_indicators = [
             "❌ Agent service is not active",
             "Failed to start",
             "Service failed",
-            "🔴 VM Status: Stopped"
-        ]
-
-        # Less critical indicators that might just mean the service is still starting
-        startup_indicators = [
+            "🔴 VM Status: Stopped",
             "🟡 Agent Service: Not running",
             "🟡 MCP Proxy: Not responding"
         ]
 
-        has_critical_errors = any(error in status_result.stdout for error in critical_error_indicators)
-        has_startup_issues = any(indicator in status_result.stdout for indicator in startup_indicators)
-        has_running_service = "🟢 Agent Service: Running" in status_result.stdout
+        has_errors = any(error in status_result.stdout for error in error_indicators)
 
-        if has_critical_errors:
-            logger.error("Critical errors detected in agent service")
-            assert False, f"Agent service has critical errors: {status_result.stdout}"
-        elif has_running_service:
+        # Require explicit confirmation that the service is running
+        if has_running_service:
             logger.info("✓ Agent service is confirmed running")
-        elif has_startup_issues:
-            logger.warning("⚠️ Agent service appears to have startup issues, but this may be expected during initialization")
+        elif has_errors:
+            logger.error("Agent service errors detected")
+            assert False, f"Agent service is not working properly: {status_result.stdout}"
         else:
-            logger.info("✓ No obvious service errors detected")
+            # If we don't have explicit confirmation, but also no explicit errors,
+            # this is still a failure - we need positive confirmation
+            logger.error("Agent service status unclear - test requires explicit confirmation that service is running")
+            assert False, f"Agent service status unclear after {max_wait_time}s. Expected '🟢 Agent Service: Running' but got: {status_result.stdout}"
 
         # Test 3: Check that MCP port is accessible (if mentioned in status)
         if "MCP Endpoint" in status_result.stdout:

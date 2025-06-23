@@ -737,13 +737,37 @@ in
             f.write(str(vm_process.pid))
 
         # Wait for VM to be ready
+        logger.debug("🔍 === VM STARTUP MONITORING ===")
+        logger.debug(f"🔍 VM Name: {vm_name}")
+        logger.debug(f"🔍 SSH Key Path: {ssh_key_path}")
+        logger.debug(f"🔍 SSH Port: {ssh_port}")
+        logger.debug(f"🔍 VM PID: {vm_process.pid}")
+
+        # Check if VM process is actually running
+        vm_poll_result = vm_process.poll()
+        if vm_poll_result is not None:
+            logger.debug(f"🔍 VM process already exited with code: {vm_poll_result}")
+            logger.error("❌ VM process terminated immediately after start")
+            return False
+        else:
+            logger.debug("🔍 VM process is running, waiting for SSH readiness...")
+
         if self._wait_for_vm_ready(ssh_key_path, ssh_port):
+            logger.debug("✅ VM startup successful - SSH connectivity confirmed")
             logger.info(f"✅ VM started successfully (PID: {vm_process.pid})")
 
             # Start agent services in VM
             self._start_agent_in_vm(ssh_key_path, ssh_port)
         else:
+            logger.debug("❌ VM startup failed - SSH connectivity could not be established")
             logger.error("❌ VM startup failed - performing cleanup...")
+
+            # Check if VM process is still running for diagnostics
+            vm_poll_result = vm_process.poll()
+            if vm_poll_result is not None:
+                logger.debug(f"🔍 VM process exited during startup with code: {vm_poll_result}")
+            else:
+                logger.debug("🔍 VM process is still running but SSH is not responding")
 
             # Cleanup failed VM process
             try:
@@ -756,7 +780,8 @@ in
             logger.error("  • Check if nested virtualization is enabled")
             logger.error("  • Ensure sufficient memory and disk space")
             logger.error("  • Try: agent-vm destroy && agent-vm create")
-            logger.error(f"  • View verbose logs with: agent-vm --verbose start {branch}")
+            logger.error(f"  • View verbose logs with: agent-vm --debug start {branch}")
+            logger.error(f"  • Check VM console output manually")
             sys.exit(1)
 
     def stop_vm(self, branch: Optional[str] = None) -> None:
@@ -992,7 +1017,7 @@ in
                 ssh_cmd = [
                     "ssh", "-o", f"ConnectTimeout={timeout_per_attempt}", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                    "-p", str(ssh_port), "dev@localhost", "echo 'VM Ready'"
+                    "-p", str(ssh_port), "dev@localhost", "echo 'SSH_CONNECTION_OK'"
                 ]
 
                 if attempt == 0 or attempt % 10 == 0:  # Log command details periodically
@@ -1005,11 +1030,15 @@ in
                     logger.debug(f"🔍 SSH attempt {attempt + 1} stdout: {result.stdout}")
                     logger.debug(f"🔍 SSH attempt {attempt + 1} stderr: {result.stderr}")
 
-                if result.returncode == 0:
+                if result.returncode == 0 and "SSH_CONNECTION_OK" in result.stdout:
                     # Clear progress line
                     print("\r" + " " * 50 + "\r", end="", flush=True)
                     logger.info("✅ VM is ready for connections")
                     return True
+                elif result.returncode == 0 and "SSH_CONNECTION_OK" not in result.stdout:
+                    # SSH connected but didn't get expected output
+                    if attempt % 10 == 0:  # Log this issue periodically
+                        logger.debug(f"🔍 SSH connected but unexpected output: '{result.stdout.strip()}'")
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 if attempt % 10 == 0:  # Log errors periodically for debugging
                     logger.debug(f"🔍 SSH attempt {attempt + 1} failed: {e}")
@@ -1355,42 +1384,102 @@ in
         """Check SSH connectivity with detailed diagnostics."""
         ssh_status = {'connected': False}
 
-        logger.debug(f"🔍 Checking SSH connectivity using key: {ssh_key_path}")
-        logger.debug(f"🔍 SSH key exists: {ssh_key_path.exists()}")
+        logger.debug(f"🔍 === SSH CONNECTIVITY DIAGNOSTICS ===")
+        logger.debug(f"🔍 SSH Key Path: {ssh_key_path}")
+        logger.debug(f"🔍 SSH Key Exists: {ssh_key_path.exists()}")
+        logger.debug(f"🔍 SSH Port: {ssh_port}")
 
         if ssh_key_path.exists():
-            logger.debug(f"🔍 SSH key permissions: {oct(ssh_key_path.stat().st_mode)[-3:]}")
+            key_stat = ssh_key_path.stat()
+            logger.debug(f"🔍 SSH Key Permissions: {oct(key_stat.st_mode)[-3:]}")
+            logger.debug(f"🔍 SSH Key Size: {key_stat.st_size} bytes")
+            try:
+                # Read first line to verify it's a valid key
+                with open(ssh_key_path, 'r') as f:
+                    first_line = f.readline().strip()
+                logger.debug(f"🔍 SSH Key Type: {first_line[:50]}...")
+            except Exception as e:
+                logger.debug(f"🔍 SSH Key Read Error: {e}")
+        else:
+            logger.debug(f"🔍 SSH Key Missing - expected at: {ssh_key_path}")
+            ssh_status['error'] = f"SSH key not found at {ssh_key_path}"
+            return ssh_status
+
+        # Check if localhost is reachable on the SSH port
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex(('localhost', ssh_port))
+            sock.close()
+            if result == 0:
+                logger.debug(f"🔍 Port {ssh_port} is reachable on localhost")
+            else:
+                logger.debug(f"🔍 Port {ssh_port} is NOT reachable on localhost (connection refused)")
+        except Exception as e:
+            logger.debug(f"🔍 Port check failed: {e}")
 
         try:
             ssh_cmd = [
-                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
-                "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
-                "-p", str(ssh_port), "dev@localhost", "echo 'SSH OK'"
+                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "BatchMode=yes",  # Non-interactive
+                "-o", "PasswordAuthentication=no",  # Key-only auth
+                "-i", str(ssh_key_path),
+                "-p", str(ssh_port), "dev@localhost", "echo 'SSH_CONNECTION_OK'"
             ]
 
             logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
+
+            start_time = time.time()
             result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
+            duration = time.time() - start_time
 
-            logger.debug(f"🔍 SSH command exit code: {result.returncode}")
-            logger.debug(f"🔍 SSH stdout: {result.stdout.strip()}")
-            logger.debug(f"🔍 SSH stderr: {result.stderr.strip()}")
+            logger.debug(f"🔍 SSH Command Duration: {duration:.2f}s")
+            logger.debug(f"🔍 SSH Exit Code: {result.returncode}")
+            logger.debug(f"🔍 SSH Stdout: '{result.stdout.strip()}'")
+            logger.debug(f"🔍 SSH Stderr: '{result.stderr.strip()}'")
 
-            if result.returncode == 0 and "SSH OK" in result.stdout:
+            if result.returncode == 0 and "SSH_CONNECTION_OK" in result.stdout:
                 ssh_status['connected'] = True
-                logger.debug("✅ SSH connectivity confirmed")
+                logger.debug("✅ SSH connectivity confirmed - connection established successfully")
             else:
-                ssh_status['error'] = f"SSH failed - exit code: {result.returncode}, stderr: {result.stderr}"
+                error_details = []
+                if result.returncode != 0:
+                    error_details.append(f"exit code {result.returncode}")
+                if result.stderr:
+                    error_details.append(f"stderr: {result.stderr.strip()}")
+                if "SSH_CONNECTION_OK" not in result.stdout:
+                    error_details.append(f"unexpected stdout: {result.stdout.strip()}")
+
+                ssh_status['error'] = f"SSH failed - {', '.join(error_details)}"
                 logger.debug(f"❌ SSH connectivity failed: {ssh_status['error']}")
+
+                # Additional diagnostic info for common SSH issues
+                if "Connection refused" in result.stderr:
+                    logger.debug("🔍 DIAGNOSIS: Connection refused - VM SSH service may not be running")
+                elif "Host key verification failed" in result.stderr:
+                    logger.debug("🔍 DIAGNOSIS: Host key verification failed - using StrictHostKeyChecking=no should prevent this")
+                elif "Permission denied" in result.stderr:
+                    logger.debug("🔍 DIAGNOSIS: Permission denied - SSH key authentication failed")
+                elif "Connection timed out" in result.stderr:
+                    logger.debug("🔍 DIAGNOSIS: Connection timeout - VM may be slow to boot or network issue")
+                elif result.returncode == 255:
+                    logger.debug("🔍 DIAGNOSIS: SSH exit code 255 - connection/authentication failure")
+
         except subprocess.TimeoutExpired:
-            ssh_status['error'] = "Connection timeout"
-            logger.debug("❌ SSH connectivity failed: timeout")
+            ssh_status['error'] = "SSH connection timeout"
+            logger.debug("❌ SSH connectivity failed: timeout waiting for connection")
+            logger.debug("🔍 DIAGNOSIS: Timeout suggests VM may be very slow to respond or SSH service not ready")
         except subprocess.CalledProcessError as e:
-            ssh_status['error'] = f"SSH error: {e}"
-            logger.debug(f"❌ SSH connectivity failed: {e}")
+            ssh_status['error'] = f"SSH process error: {e}"
+            logger.debug(f"❌ SSH connectivity failed: process error {e}")
         except Exception as e:
             ssh_status['error'] = f"Unexpected SSH error: {e}"
             logger.debug(f"❌ SSH connectivity failed: unexpected error {e}")
 
+        logger.debug(f"🔍 === SSH DIAGNOSTICS COMPLETE ===")
         return ssh_status
 
     def _check_agent_service_detailed(self, ssh_key_path: Path, ssh_port: int = 2222) -> Dict[str, any]:
