@@ -9,6 +9,7 @@
 module AgentVM.Log
   ( AgentVmTrace (..),
     LogLevel (..),
+    LogContext,
     traceToMessage,
     renderTrace,
     renderLogLevel,
@@ -16,6 +17,7 @@ module AgentVM.Log
     vmLogger,
     vmLevelLogger,
     contramapIOTracer,
+    createLogContext,
     (<&),
   )
 where
@@ -25,11 +27,14 @@ import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
-import Protolude (Eq, FilePath, Generic, Int, MonadIO, Ord, Show, Text, show, ($), (.), (<>))
+import Protolude (Eq, FilePath, Generic, IO, Int, MonadIO, Ord, Show, Text, pure, show, ($), (.), (<>))
 import System.Console.ANSI (Color (Blue, Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleIntensity (BoldIntensity), ConsoleLayer (Foreground), SGR (Reset, SetColor, SetConsoleIntensity))
 import qualified System.Console.ANSI as ANSI
 import System.IO (Handle, stderr)
 import UnliftIO (liftIO)
+
+-- | Type alias for clarity
+type LogContext = IOTracer
 
 -- | MonadIO version of setSGR
 setSGR :: (MonadIO m) => [SGR] -> m ()
@@ -236,3 +241,7 @@ vmLevelLogger = IOTracer $ Tracer $ \leveledTrace -> do
   hPutStr stderr $ "[" <> logLevelText leveledTrace <> "] "
   setSGR [Reset]
   hPutStrLn stderr $ renderTrace (unLogLevel leveledTrace)
+
+-- | Create a log context for integration tests
+createLogContext :: IO (LogContext AgentVmTrace)
+createLogContext = pure vmLogger
