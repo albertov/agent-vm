@@ -51,7 +51,7 @@ let
                 --posix-acl \
                 --log-level=info &
               VIRTIOFSD_PIDS="$VIRTIOFSD_PIDS $!"
-            '') cfg.sharedDirectoriesVirtIO
+            '') cfg.sharedDirectoriesVIO
           )}
           
          # Wait for socket to be created
@@ -73,7 +73,7 @@ let
             mapAttrsToList (name: _dir: ''
               VIRTIOFS_OPTS="$VIRTIOFS_OPTS -chardev socket,id=char-${name},path=$TMPDIR/virtiofsd-${name}.sock"
               VIRTIOFS_OPTS="$VIRTIOFS_OPTS -device vhost-user-fs-pci,chardev=char-${name},tag=${name}"
-            '') cfg.sharedDirectoriesVirtIO
+            '') cfg.sharedDirectoriesVIO
           )}
           
           # CRITICAL: Override the VM script's memory configuration for virtiofs
@@ -85,7 +85,7 @@ let
 
 in
 {
-  options.virtualisation.sharedDirectoriesVirtIO = mkOption {
+  options.virtualisation.sharedDirectoriesVIO = mkOption {
     type = types.attrsOf (
       types.submodule {
         options = {
@@ -103,8 +103,7 @@ in
     default = { };
     description = "Directories to share with the VM using virtiofs";
   };
-
-  config = mkIf (cfg.sharedDirectoriesVirtIO != { }) {
+  config = mkIf (cfg.sharedDirectoriesVIO != { }) {
     # Ensure virtiofs kernel module is available
     boot.initrd.availableKernelModules = [ "virtiofs" ];
     boot.kernelModules = [ "virtiofs" ];
@@ -117,7 +116,7 @@ in
         options = [ "defaults" ];
         neededForBoot = false;
       };
-    }) cfg.sharedDirectoriesVirtIO;
+    }) cfg.sharedDirectoriesVIO;
 
     # Force mount at boot
     systemd.services = mapAttrs' (name: dir: {
@@ -132,12 +131,12 @@ in
           RemainAfterExit = true;
         };
       };
-    }) cfg.sharedDirectoriesVirtIO;
+    }) cfg.sharedDirectoriesVIO;
 
     # Create mount points
     systemd.tmpfiles.rules = mapAttrsToList (
       _name: dir: "d ${dir.target} 0755 root root -"
-    ) cfg.sharedDirectoriesVirtIO;
+    ) cfg.sharedDirectoriesVIO;
 
     # Create the wrapped VM runner
     system.build.vmWithVirtioFS = mkVirtiofsRunner;

@@ -126,7 +126,8 @@
                 system = "x86_64-linux";
               };
             }
-            (import ./nix/vm-config.nix)
+            ./nix/modules/vm-base.nix
+            ./nix/vm-config.nix
           ];
         };
       };

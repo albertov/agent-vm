@@ -1,114 +1,7 @@
-# vm-config.nix
 {
-  self,
-  config,
-  inputs,
-  pkgs,
   ...
 }:
-let
-  allInputs =
-    p:
-    (p.buildInputs or [ ])
-    ++ (p.nativeBuildInputs or [ ])
-    ++ (p.propagatedBuildInputs or [ ])
-    ++ (p.propagatedNativeBuildInputs or [ ]);
-in
 {
-  imports = [
-    "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
-    ./modules/mcp-proxy.nix
-    ./modules/selenium-server.nix
-    ./modules/virtiofs-qemu.nix
-  ];
-  services.qemuGuest.enable = true;
-  boot.tmp.useTmpfs = true;
-
-  # VM-specific configuration
-  virtualisation = {
-    memorySize = 1024 * 16; # 16GB RAM for development work
-    cores = 8; # 4 CPU cores
-    diskSize = 1024 * 32; # 32GB disk
-    graphics = false; # Headless for better performance
-    mountHostNixStore = true;
-    additionalPaths =
-      let
-        shell = config.services.mcp-proxy.shell;
-        systemChecks = self.checks.${pkgs.system} or { };
-        packages = self.packages.${pkgs.system} or { };
-        apps = self.apps.${pkgs.system} or { };
-        allItems =
-          allInputs shell
-          ++ (
-            if pkgs ? hixProject then
-              [
-                pkgs.hixProject.roots
-                pkgs.hixProject.plan-nix
-              ]
-            else
-              [ ]
-          )
-          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
-          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
-          ++ (map (x: x.program) (pkgs.lib.attrValues apps));
-
-        closure = pkgs.closureInfo { rootPaths = allItems; };
-      in
-      [ closure ];
-    writableStore = true;
-    writableStoreUseTmpfs = false;
-    useNixStoreImage = false;
-
-    # High-performance workspace sharing via VirtioFS
-    sharedDirectoriesVirtIO = {
-      workspace = {
-        # source gets injected by agent-vm
-        source = "/home/alberto/src/agent-vm";
-        target = "/var/lib/mcp-proxy/workspace";
-        #sandbox = "namespace";
-      };
-    };
-
-    forwardPorts = [
-
-      {
-        from = "host";
-        host.port = 8000;
-        guest.port = config.services.mcp-proxy.port;
-      } # MCP proxy
-    ];
-
-  };
-
-  # Firewall configuration
-  networking.firewall.enable = true;
-
-  environment.systemPackages = with pkgs; [
-    vim
-    git
-    codemcp
-  ];
-
-  # Security hardening
-  security = {
-    allowUserNamespaces = true; # Chrome needs user namespaces for its sandbox
-    lockKernelModules = true;
-    protectKernelImage = true;
-    # Configure passwordless sudo for dev user for systemctl commands
-    sudo = {
-      enable = true;
-      wheelNeedsPassword = false;
-    };
-  };
-
-  # Nix sandbox configuration
-  nix.settings.sandbox = false;
-  nix.settings.experimental-features = [
-    "nix-command"
-    "flakes"
-  ];
-  nix.settings.trusted-users = [ "mcp-proxy" ];
-
   # Configure host nix store as binary cache
   nix.settings.substituters = [
     "http://10.0.2.2:5000"
@@ -116,34 +9,13 @@ in
   nix.settings.trusted-public-keys = [
     "alberto-valverde-1:A+NbXRfx+Uo0tQNZ8hlip+1zru2P32l7/skPDeaZnxU="
   ];
-
   services.selenium-server.enable = true;
-
-  # Enable and configure the agent service
-  services.getty.autologinUser = "mcp-proxy";
-  users.users.mcp-proxy.extraGroups = [ "wheel" ];
-  users.users.mcp-proxy.packages = allInputs config.services.mcp-proxy.shell;
   services.mcp-proxy = {
-    enable = true;
-    openFirewall = true;
     # These would be overrided in a module added by the create admin command
     # which imports this base config
     port = 8000;
     uid = 1000;
     group = "users";
-    host = "0.0.0.0";
-    shell = self.devShells."${pkgs.system}".default;
-    namedServers.codemcp = {
-      enabled = true;
-      command = "${pkgs.codemcp}/bin/codemcp";
-    };
-    namedServers.selenium = {
-      enabled = true;
-      command = "${pkgs.mcp-selenium}/bin/mcp-selenium-hs";
-    };
-    allowOrigins = [ "https://claude.ai" ];
+    #shell = self.devShells."${pkgs.system}".default;
   };
-
-  # System state version
-  system.stateVersion = "25.05";
 }
