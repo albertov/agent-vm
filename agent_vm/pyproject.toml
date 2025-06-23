@@ -40,7 +40,7 @@ test = [
 ]
 
 [project.scripts]
-agent-vm = "agent_vm.vm_controller:main"
+agent-vm = "agent_vm:main"
 
 [project.urls]
 Homepage = "https://github.com/example/agent-vm"
@@ -51,6 +51,9 @@ Repository = "https://github.com/example/agent-vm.git"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["agent_vm*"]
+
+[tool.setuptools.package-dir]
+agent_vm = "."
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -74,7 +77,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["agent_vm"]
+source = ["."]
 omit = [
     "tests/*",
     "*/tests/*",
