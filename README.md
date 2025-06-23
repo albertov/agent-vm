@@ -42,14 +42,48 @@ integration-test
 # Run with verbose logging
 integration-test --verbose
 
+# Run with debug mode (comprehensive stderr/stdout capture)
+integration-test --debug
+
 # Use specific agent-vm executable
 integration-test --agent-vm ./path/to/agent-vm
+
+# Set custom timeout for VM operations
+integration-test --timeout 120
 
 # Run via nix flake
 nix run .#integration-test
 
-# Run with custom state directory (automatic in tests)
-nix run .#integration-test -- --verbose
+# Run with debug mode via nix flake
+nix run .#integration-test -- --debug
+
+# Run with custom timeout via nix flake
+nix run .#integration-test -- --timeout 120 --debug
+```
+
+#### Debug Mode
+
+The integration test executable supports comprehensive debug mode via the `--debug` flag that captures and logs all subprocess stderr/stdout for easier troubleshooting:
+
+**Debug Mode Features:**
+- **Complete Process Output**: Captures stderr and stdout from all agent-vm commands
+- **Timeout Diagnostics**: Shows detailed timeout information including command and duration
+- **Failure Analysis**: Logs process output even when commands fail or timeout
+- **Troubleshooting Hints**: Provides specific guidance for common VM startup issues
+
+**When to Use Debug Mode:**
+- VM start/stop operations are timing out
+- Commands are failing with unclear error messages
+- Need to see the actual agent-vm process output
+- Debugging nested virtualization or QEMU issues
+
+Example debug command that will show all process output:
+```bash
+# Debug a failing test with 30 second timeout
+integration-test --debug --timeout 30
+
+# Debug via nix with specific agent-vm build
+nix run .#integration-test -- --debug --agent-vm ./result/bin/agent-vm
 ```
 
 #### Test Structure
