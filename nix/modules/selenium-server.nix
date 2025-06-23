@@ -87,8 +87,7 @@ in
         # === CORE SECURITY ISOLATION ===
 
         # Prevent privilege escalation attacks - blocks setuid, capabilities acquisition
-        # DISABLED: Chrome needs to set up its sandbox
-        NoNewPrivileges = false;
+        NoNewPrivileges = true;
 
         # Provide isolated temporary directories (/tmp, /var/tmp) - prevents tmp race attacks
         PrivateTmp = true; # Use private /tmp and /var/tmp
@@ -170,7 +169,6 @@ in
           "/etc/nsswitch.conf" # Name service switch configuration
           "/etc/ssl" # SSL certificates directory
           "/nix/store"
-          "/proc/sys/fs/binfmt_misc" # Binary format handlers
           "/run/current-system/sw" # System-wide software
           "/etc/fonts" # Font configuration
           "/etc/machine-id" # Machine ID (Chrome might check this)

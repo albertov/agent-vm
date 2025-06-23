@@ -30,8 +30,6 @@ Chrome's sandbox requires user namespaces to create isolated processes. When the
 
 1. **Virtual Display**: Service wrapped with `xvfb-run -a` for headless operation
 2. **Relaxed Security**:
-   - `NoNewPrivileges = false` - Chrome sandbox setup
-   - `PrivateTmp = false` - Browser temp file access
    - `RestrictNamespaces = false` - Browser process isolation
    - `RemoveIPC = false` - Chrome inter-process communication
 3. **File Access**:
