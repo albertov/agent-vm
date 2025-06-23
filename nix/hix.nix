@@ -12,7 +12,7 @@ rec {
   shell.tools.hlint = "latest";
   shell.tools.ormolu = "latest";
   shell.tools.ghcid = "latest";
-  # shell.tools.haskell-language-server = "latest";
+  shell.tools.haskell-language-server = "2.10.0.0";
   # Non-Haskell tools to include in the development shell
   shell.nativeBuildInputs = with pkgs.buildPackages; [
     hoogle # This one has our local packages!

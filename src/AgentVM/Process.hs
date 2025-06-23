@@ -13,9 +13,15 @@ module AgentVM.Process
   )
 where
 
-import AgentVM.Log (AgentVmTrace (ProcessSpawned), MonadTrace (..))
-import Protolude hiding (trace)
-import System.Process.Typed (ExitCode (..), Process, getExitCode, proc, startProcess)
+import AgentVM.Log (AgentVmTrace (ProcessError, ProcessOutput, ProcessSpawned), MonadTrace (..))
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.Text.Encoding as TE
+import Protolude hiding (async, atomically, trace)
+import System.IO (Handle)
+import System.Process.Typed (ExitCode (..), Process, createPipe, getExitCode, getStderr, getStdout, proc, setStderr, setStdout, startProcess)
+import UnliftIO (MonadUnliftIO, catchAny)
+import UnliftIO.Async (async)
 
 -- | State of a VM process
 data ProcessState
@@ -23,29 +29,51 @@ data ProcessState
   | ProcessExited ExitCode
   deriving (Eq, Show)
 
-newtype VMProcess = VMProcess {unVMProcess :: Process () () ()}
+newtype VMProcess = VMProcess {unVMProcess :: Process () Handle Handle}
 
 -- TODO: This should be capturing stderr and stdout of the process and tracing
 -- them with the logger line by line for better debugging
 startLoggedProcess ::
   ( MonadTrace AgentVmTrace m,
-    MonadIO m
+    MonadUnliftIO m
   ) =>
   FilePath ->
   [Text] ->
-  m (Process () () ())
+  m (Process () Handle Handle)
 startLoggedProcess scriptPath args = do
   -- Trace the process spawn event
   trace $ ProcessSpawned (toS scriptPath) args
 
-  -- Start the process
-  let processConfig = proc scriptPath (map toS args)
-  liftIO $ startProcess processConfig
+  -- Start the process with captured stdout and stderr
+  let processConfig =
+        proc scriptPath (map toS args)
+          & setStdout createPipe
+          & setStderr createPipe
+
+  process <- liftIO $ startProcess processConfig
+
+  -- Spawn async tasks to read and trace output
+  let processName = toS scriptPath :: Text
+  _ <- async $ traceHandleOutput processName ProcessOutput (getStdout process)
+  _ <- async $ traceHandleOutput processName ProcessError (getStderr process)
+
+  return process
+  where
+    -- Helper to trace output from a handle line by line
+    traceHandleOutput :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => Text -> (Text -> Text -> AgentVmTrace) -> Handle -> m ()
+    traceHandleOutput name constructor handle = do
+      let loop = do
+            line <- liftIO $ BS.hGetLine handle
+            unless (BS.null line) $ do
+              let lineText = TE.decodeUtf8 line
+              trace (constructor name lineText)
+            loop
+      loop `catchAny` (\_ -> return ())
 
 -- | Start a VM process
 startVMProcess ::
   ( MonadTrace AgentVmTrace m,
-    MonadIO m
+    MonadUnliftIO m
   ) =>
   FilePath ->
   m VMProcess
