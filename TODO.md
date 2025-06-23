@@ -10,6 +10,10 @@
 ## Implementation Phases
 
 ### URGENT
+- [ ] Refactor the functions from Process.hs, SSH.hs, Nix.hs, etc
+  that take a 'IOTracer AgentVmTrace' to use the same pattern
+  as the previous step
+
 
 - [x] Refactor createVM and destroyVM so they look like this
 
@@ -17,13 +21,13 @@
 createVM ::
     (
     MonadReader env m,
-    HasType (LogContext AgentVmTrace) env
+    HasType (IOTracer AgentVmTrace) env
     ) => VMConfig -> m VMHandle
 
 destroyVM ::
     (
     MonadReader env m,
-    HasType (LogContext AgentVmTrace) env
+    HasType (IOTracer AgentVmTrace) env
     ) => VMHandle -> m ()
 ```
 
@@ -33,7 +37,7 @@ and crate a type like
 {-# LANGUAGE BangPatterns #-}
 -- | This lives in AgentVM.Env module
 data AgentVmEnv = AgentVmEnv {
-    tracer :: !(LogContext AgentVmTrace,)
+    tracer :: !(IOTracer AgentVmTrace,)
     ...
 } deriving Generic
 ```
@@ -64,6 +68,9 @@ class VM m where
 ```
 
 and implement an instance for it using createVM and destroyVM
+
+- [ ] Don't use IOTracer but Tracer so we can log in non-IO monads (not a
+  priority)
 
 - [x] - The log systems should be using a type like
         ```haskell
