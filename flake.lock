@@ -1250,21 +1250,6 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1749794982,
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_3": {
-      "locked": {
         "lastModified": 1747958103,
         "narHash": "sha256-qmmFCrfBwSHoWw7cVK4Aj+fns+c54EBP8cGqp/yK410=",
         "owner": "nixos",
@@ -1362,8 +1347,7 @@
         "mcp-nixos": "mcp-nixos",
         "mcp-proxy": "mcp-proxy",
         "mcp-selenium": "mcp-selenium",
-        "nixpkgs": "nixpkgs_2",
-        "nixpkgs-haskellNix": [
+        "nixpkgs": [
           "haskellNix",
           "nixpkgs-unstable"
         ],
@@ -1485,7 +1469,7 @@
     },
     "treefmt-nix_2": {
       "inputs": {
-        "nixpkgs": "nixpkgs_3"
+        "nixpkgs": "nixpkgs_2"
       },
       "locked": {
         "lastModified": 1749194973,

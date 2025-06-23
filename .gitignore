@@ -1,11 +1,40 @@
-run_hoogle.sh
-rescript_sys.sh
 *.sw?
 result*
 *.log
 __pycache__
 *.py?
-run_hoogle.sh
 
+# Haskell build artifacts
 cabal.project.local
+dist/
+dist-newstyle/
+.cabal-sandbox/
+cabal.sandbox.config
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+*.prof
+*.aux
+*.hp
+*.eventlog
+.stack-work/
+cabal-dev
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Haskell Language Server
+.hie/
+hie.yaml
+
+# Nix stuff
 nix/materialized/

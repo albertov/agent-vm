@@ -12,12 +12,11 @@
 
   inputs = {
     # Core inputs
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
     # Haskell.nix infrastructure
     haskellNix.url = "github:input-output-hk/haskell.nix";
-    nixpkgs-haskellNix.follows = "haskellNix/nixpkgs-unstable";
 
     treefmt-nix.url = "github:numtide/treefmt-nix";
 
@@ -44,6 +43,7 @@
 
   outputs =
     {
+      nixpkgs,
       self,
       flake-utils,
       treefmt-nix,
@@ -53,7 +53,8 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import inputs.nixpkgs-haskellNix {
+        traceShowId = x: builtins.trace "Debug: ${toString x}" x;
+        pkgs = import inputs.nixpkgs {
           inherit system;
           inherit (haskellNix) config;
           overlays = [
@@ -66,10 +67,34 @@
               agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
               agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
               hixProject = final.haskell-nix.hix.project {
-                src = builtins.path {
-                  path = ./agent-vm;
-                  name = "source";
-                };
+                  # We clean the source to avoid spurious recompiles
+                  src = final.lib.sources.cleanSourceWith rec {
+                    src = builtins.path {
+                      path = ./.;
+                      name = "source";
+                    };
+                    filter = path: type:
+                      let
+                        baseName = baseNameOf path;
+                        # Get relative path from source root
+                        relativePath = final.lib.removePrefix (toString src + "/") (toString path);
+                      in
+                      (
+                      # Don't traverse into excluded directories
+                      !(final.lib.hasPrefix "agent-vm-py" relativePath) &&
+                      !(final.lib.hasPrefix "cabal.project.local" relativePath) &&
+                      # no bash scripts
+                      !(final.lib.hasSuffix ".sh" baseName) &&
+                      !(final.lib.hasSuffix ".md" baseName) &&
+                      # non-haskell related files
+                      !(builtins.elem baseName [
+                          "codemcp.toml"
+                          "flake.nix"
+                          "flake.lock"
+                        ])
+                      # && (relativePath == traceShowId relativePath)
+                      );
+                  };
                 evalSystem = "x86_64-linux";
               };
             })
@@ -108,7 +133,7 @@
               name = "agent-vm";
               runtimeInputs = [ pkgs.agent-vm ];
               text = ''
-                exec agent-vm-test "$@"
+                exec agent-vm "$@"
               '';
             };
           };
@@ -161,7 +186,7 @@
                 echo "🔄 Updating Nix materialization..."
 
                 PLAN_RESULT="$(mktemp -d)/plan"
-                HIX="$(pwd)/agent-vm/nix/hix.nix"
+                HIX="$(pwd)/nix/hix.nix"
 
                 # Backup the original hix.nix
                 cp "$HIX" "$HIX".backup
@@ -173,7 +198,7 @@
 
                 # Step 2: Try to build the plan-nix (this will use IFD but generate what we need)
                 echo "🏗️ Building project plan..."
-                nix build .#hixProject.plan-nix -o "$PLAN_RESULT"
+                nix "$@" build .#hixProject.plan-nix -o "$PLAN_RESULT"
 
                 # Step 3: Remove old materialized files and copy new ones
                 echo "📁 Updating materialized files..."
@@ -190,7 +215,7 @@
                 # Step 5: Test that it works
                 echo "🧪 Testing materialization..."
                 git add -f nix/materialized
-                if nix flake check; then
+                if nix "$@" flake check; then
                   echo "✅ Flake check passed"
                   # Step 6: Commit the materialized files
                   echo "📝 Committing materialized files..."
