@@ -129,7 +129,7 @@ startVMProcess ::
   m VMProcess
 startVMProcess scriptPath args = do
   -- Use startLoggedProcess to start the process with logging
-  process <- startLoggedProcess scriptPath []
+  process <- startLoggedProcess scriptPath args
   pure $ VMProcess process
 
 type Timeout = Integer

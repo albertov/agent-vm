@@ -10,15 +10,16 @@ module AgentVM.ProcessSpec (spec) where
 
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log hiding (ProcessExited)
-import AgentVM.Monad (VMT, runVMT)
-import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startLoggedProcess, startVMProcess, stopVMProcess)
+import AgentVM.Monad (runVMT)
+import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, stopVMProcess)
 import qualified AgentVM.Process as P
+import Control.Concurrent.Thread.Delay (delay)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
-import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
-import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldContain, shouldReturn, shouldSatisfy)
-import UnliftIO.Exception (finally)
+import System.Process.Typed (ExitCode (..))
+import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldContain, shouldSatisfy)
+import UnliftIO (MonadUnliftIO)
 import UnliftIO.IORef (IORef, modifyIORef', newIORef, readIORef)
 
 -- | Test environment with custom tracer that captures traces
@@ -58,7 +59,7 @@ spec = describe "AgentVM.Process" $ do
           checkVMProcess process
             >>= liftIO
             . (`shouldBe` ProcessRunning)
-          stopVMProcess (Just 100_000) process
+          _ <- stopVMProcess (Just 100_000) process
           -- Check that it has stopped
           checkVMProcess process
             >>= liftIO
@@ -107,36 +108,31 @@ spec = describe "AgentVM.Process" $ do
           errorTraces `shouldSatisfy` any (\case ProcessError _ "Error message to stderr" -> True; _ -> False)
           errorTraces `shouldSatisfy` any (\case ProcessError _ "Another error line" -> True; _ -> False)
 
-  {-
-     - TODO: Adapt these tests to same pattern as above, don't
-     - use startVMProcess and stopVMProcess explicitly, use the
-     - safe withVMProcess instead
-
     it "captures both stdout and stderr output" $ do
       -- Create trace capture
       traceCapture <- newIORef []
       let env = testEnvWithCapture traceCapture
 
       -- Run process that outputs to both
-      process <- runVMT env $ startLoggedProcess (fixturePath "echo_both.sh") []
+      void $ runVMT @IO env $ withFixture "echo_both.sh" $ \process -> do
+        -- Wait for process to complete
+        void $ P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      _ <- waitExitCode process
+        -- Check captured traces
+        traces <- readIORef traceCapture
+        let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+        let errorTraces = [t | t@(ProcessError _ _) <- traces]
 
-      -- Check captured traces
-      traces <- readIORef traceCapture
-      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
-      let errorTraces = [t | t@(ProcessError _ _) <- traces]
+        liftIO $ do
+          length outputTraces `shouldBe` 3
+          length errorTraces `shouldBe` 2
 
-      length outputTraces `shouldBe` 3
-      length errorTraces `shouldBe` 2
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Starting process..." -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Processing data..." -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Done!" -> True; _ -> False)
 
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Starting process..." -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Processing data..." -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Done!" -> True; _ -> False)
-
-      errorTraces `shouldSatisfy` any (\case ProcessError _ "Warning: This is stderr" -> True; _ -> False)
-      errorTraces `shouldSatisfy` any (\case ProcessError _ "Error: Something went wrong" -> True; _ -> False)
+          errorTraces `shouldSatisfy` any (\case ProcessError _ "Warning: This is stderr" -> True; _ -> False)
+          errorTraces `shouldSatisfy` any (\case ProcessError _ "Error: Something went wrong" -> True; _ -> False)
 
     it "handles process with exit failure" $ do
       -- Create trace capture
@@ -144,19 +140,19 @@ spec = describe "AgentVM.Process" $ do
       let env = testEnvWithCapture traceCapture
 
       -- Run process that exits with failure
-      process <- runVMT env $ startLoggedProcess (fixturePath "exit_failure.sh") []
+      void $ runVMT @IO env $ withFixture "exit_failure.sh" $ \process -> do
+        -- Wait for process to complete
+        exitCode <- P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      exitCode <- waitExitCode process
-      exitCode `shouldBe` ExitFailure 1
+        -- Check captured traces
+        traces <- readIORef traceCapture
+        let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+        let errorTraces = [t | t@(ProcessError _ _) <- traces]
 
-      -- Check captured traces
-      traces <- readIORef traceCapture
-      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
-      let errorTraces = [t | t@(ProcessError _ _) <- traces]
-
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Attempting operation..." -> True; _ -> False)
-      errorTraces `shouldSatisfy` any (\case ProcessError _ "FATAL: Operation failed!" -> True; _ -> False)
+        liftIO $ do
+          exitCode `shouldBe` Just (ExitFailure 1)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Attempting operation..." -> True; _ -> False)
+          errorTraces `shouldSatisfy` any (\case ProcessError _ "FATAL: Operation failed!" -> True; _ -> False)
 
     it "handles multiline output with special characters" $ do
       -- Create trace capture
@@ -164,21 +160,21 @@ spec = describe "AgentVM.Process" $ do
       let env = testEnvWithCapture traceCapture
 
       -- Run process with multiline output
-      process <- runVMT env $ startLoggedProcess (fixturePath "multiline_output.sh") []
+      void $ runVMT @IO env $ withFixture "multiline_output.sh" $ \process -> do
+        -- Wait for process to complete
+        void $ P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      _ <- waitExitCode process
+        -- Check captured traces
+        traces <- readIORef traceCapture
+        let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
 
-      -- Check captured traces
-      traces <- readIORef traceCapture
-      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
-
-      length outputTraces `shouldBe` 5
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 1" -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 2" -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "" -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 4 after empty line" -> True; _ -> False)
-      outputTraces `shouldSatisfy` any (\case ProcessOutput _ line -> "special chars" `isInfixOf` toS line; _ -> False)
+        liftIO $ do
+          length outputTraces `shouldBe` 5
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 1" -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 2" -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "" -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Line 4 after empty line" -> True; _ -> False)
+          outputTraces `shouldSatisfy` any (\case ProcessOutput _ line -> "special chars" `isInfixOf` toS line; _ -> False)
 
     it "handles rapid output from both streams" $ do
       -- Create trace capture
@@ -186,25 +182,25 @@ spec = describe "AgentVM.Process" $ do
       let env = testEnvWithCapture traceCapture
 
       -- Run process with rapid output
-      process <- runVMT env $ startLoggedProcess (fixturePath "rapid_output.sh") []
+      void $ runVMT @IO env $ withFixture "rapid_output.sh" $ \process -> do
+        -- Wait for process to complete
+        void $ P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      _ <- waitExitCode process
+        -- Check captured traces
+        traces <- readIORef traceCapture
+        let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+        let errorTraces = [t | t@(ProcessError _ _) <- traces]
 
-      -- Check captured traces
-      traces <- readIORef traceCapture
-      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
-      let errorTraces = [t | t@(ProcessError _ _) <- traces]
+        liftIO $ do
+          length outputTraces `shouldBe` 10
+          length errorTraces `shouldBe` 10
 
-      length outputTraces `shouldBe` 10
-      length errorTraces `shouldBe` 10
-
-      -- Verify we captured all lines
-      [1 .. 10] `forM_` \i -> do
-        let expectedOut = "stdout line " <> show i :: Text
-        let expectedErr = "stderr line " <> show i :: Text
-        outputTraces `shouldSatisfy` any (\case ProcessOutput _ line -> expectedOut == toS line; _ -> False)
-        errorTraces `shouldSatisfy` any (\case ProcessError _ line -> expectedErr == toS line; _ -> False)
+          -- Verify we captured all lines
+          [1 .. 10] `forM_` \i -> do
+            let expectedOut = "stdout line " <> show i :: Text
+            let expectedErr = "stderr line " <> show i :: Text
+            outputTraces `shouldSatisfy` any (\case ProcessOutput _ line -> expectedOut == toS line; _ -> False)
+            errorTraces `shouldSatisfy` any (\case ProcessError _ line -> expectedErr == toS line; _ -> False)
 
     it "handles process with no output" $ do
       -- Create trace capture
@@ -212,20 +208,20 @@ spec = describe "AgentVM.Process" $ do
       let env = testEnvWithCapture traceCapture
 
       -- Run process with no output
-      process <- runVMT env $ startLoggedProcess (fixturePath "no_output.sh") []
+      void $ runVMT @IO env $ withFixture "no_output.sh" $ \process -> do
+        -- Wait for process to complete
+        void $ P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      _ <- waitExitCode process
+        -- Check captured traces (should only have ProcessSpawned)
+        traces <- readIORef traceCapture
+        let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+        let errorTraces = [t | t@(ProcessError _ _) <- traces]
+        let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
 
-      -- Check captured traces (should only have ProcessSpawned)
-      traces <- readIORef traceCapture
-      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
-      let errorTraces = [t | t@(ProcessError _ _) <- traces]
-      let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
-
-      length outputTraces `shouldBe` 0
-      length errorTraces `shouldBe` 0
-      length spawnTraces `shouldBe` 1
+        liftIO $ do
+          length outputTraces `shouldBe` 0
+          length errorTraces `shouldBe` 0
+          length spawnTraces `shouldBe` 1
 
     it "traces process spawn event with arguments" $ do
       -- Create trace capture
@@ -233,22 +229,21 @@ spec = describe "AgentVM.Process" $ do
       let env = testEnvWithCapture traceCapture
 
       -- Run process with arguments
-      process <- runVMT env $ startLoggedProcess (fixturePath "echo_stdout.sh") ["arg1", "arg2"]
+      void $ runVMT @IO env $ P.withVMProcess (fixturePath "echo_stdout.sh") ["arg1", "arg2"] defTimeout $ \process -> do
+        -- Wait for process to complete
+        void $ P.waitForProcess 1_000_000 process
 
-      -- Wait for process to complete
-      _ <- waitExitCode process
+        -- Check spawn trace
+        traces <- readIORef traceCapture
+        let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
 
-      -- Check spawn trace
-      traces <- readIORef traceCapture
-      let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
-
-      length spawnTraces `shouldBe` 1
-      case spawnTraces of
-        [ProcessSpawned path args] -> do
-          toS path `shouldContain` "echo_stdout.sh"
-          args `shouldBe` ["arg1", "arg2"]
-        _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
-  -}
+        liftIO $ do
+          length spawnTraces `shouldBe` 1
+          case spawnTraces of
+            [ProcessSpawned path args] -> do
+              toS path `shouldContain` "echo_stdout.sh"
+              args `shouldBe` ["arg1", "arg2"]
+            _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
 
   describe "Process error handling" $ do
     it "handles startup failures" $ do
@@ -260,8 +255,14 @@ spec = describe "AgentVM.Process" $ do
     it "cleans up on unexpected termination" $ do
       pending
 
-withFixture scriptText =
+withFixture :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => FilePath -> (VMProcess -> m a) -> m a
+withFixture scriptText action =
   P.withVMProcess
-    (fixturePath "echo_stderr.sh")
+    (fixturePath scriptText)
     []
     defTimeout
+    $ \process -> do
+      result <- action process
+      -- Give output capture threads time to finish
+      liftIO $ delay 100_000 -- 100ms delay
+      pure result
