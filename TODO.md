@@ -11,7 +11,7 @@ Read README.md for specs
 ### URGENT
 
 - [ ] Address FIXMEs in agent_vm/vm_controller.py
-- [ ] Fix this failing test: `run integration-test -- --verbose --debug --timeout 90 run -- -k test_agent_service_startup`
+- [ ] Fix this failing test: `integration-test --verbose --debug --timeout 90 run -- -k test_agent_service_startup`
 
 ### Phase 4: Security and Performance
 
