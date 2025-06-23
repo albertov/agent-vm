@@ -11,7 +11,61 @@
 
 ### URGENT
 
-- [ ] - The log systems should be using a type like
+- [ ] Refactor createVM and destroyVM so they look like this
+
+```haskell
+createVM ::
+    (
+    MonadReader env m,
+    HasType (LogContext AgentVmTrace) env
+    ) => VMConfig -> m VMHandle
+
+destroyVM ::
+    (
+    MonadReader env m,
+    HasType (LogContext AgentVmTrace) env
+    ) => VMHandle -> m ()
+```
+
+and crate a type like
+
+```haskell
+{-# LANGUAGE BangPatterns #-}
+-- | This lives in AgentVM.Env module
+data AgentVmEnv = AgentVmEnv {
+    tracer :: !(LogContext AgentVmTrace,)
+    ...
+} deriving Generic
+```
+
+to hold the app environment
+
+Then you'd do `runReaderT (createVM config) agentVmEnv` to use them
+But ALWAYS combine them like this:
+
+```haskell
+-- | This lives in AgentVM.Env module
+runVM = flip runReaderT
+
+-- | This lives where it is used
+runVM agentVmEnv $ do
+   machine <- createVM cfg
+   destroyVM machine
+```
+
+You'll see why we do this soon
+
+- [ ] - Create a VM type-class like
+```haskell
+class VM m where
+    create :: ...
+    destroy :: ...
+    ...
+```
+
+and implement an instance for it using createVM and destroyVM
+
+- [x] - The log systems should be using a type like
         ```haskell
         data LogLevel a = Critical a | Error a | Info a | Debug a | Trace a
            deriving via stock (Show, Ord, Eq, Generic, ToJSON, FromJSON, ...)
