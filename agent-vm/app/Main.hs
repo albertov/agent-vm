@@ -3,6 +3,7 @@
 -- | Main entry point for agent-vm CLI
 module Main (main) where
 
+import AgentVM.Log (vmLogger)
 import Options.Applicative
   ( Parser,
     auto,
@@ -25,8 +26,10 @@ import Options.Applicative
     value,
     (<**>),
   )
+import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude
 import System.Exit (exitFailure)
+import System.IO (stderr)
 
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath,
@@ -93,8 +96,11 @@ parseArgs = (,) <$> globalOpts <*> commandParser
 main :: IO ()
 main = do
   (_globalOpts, cmd) <- execParser opts
-  putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
-  exitFailure
+  -- Set up async logging with a buffer of 1000 messages
+  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
+    -- For now, just demonstrate logging is working
+    putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
+    exitFailure
   where
     opts =
       info

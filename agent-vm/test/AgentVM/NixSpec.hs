@@ -2,13 +2,18 @@
 
 module AgentVM.NixSpec (spec) where
 
-import AgentVM.Log (AgentVmTrace, LogAction (LogAction))
+import AgentVM.Log (AgentVmTrace)
 import AgentVM.Nix (buildVMConfig)
 import AgentVM.Types (BranchName (BranchName), VMError (..))
+import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
 import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldReturn, shouldSatisfy)
 import UnliftIO.Directory (createDirectoryIfMissing, withCurrentDirectory)
 import UnliftIO.Temporary (withSystemTempDirectory)
+
+-- | Test tracer that discards all logs
+testTracer :: IOTracer AgentVmTrace
+testTracer = IOTracer $ Tracer $ \_ -> return ()
 
 spec :: Spec
 spec = describe "AgentVM.Nix" $ do

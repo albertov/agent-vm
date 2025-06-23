@@ -7,17 +7,18 @@ module AgentVM.Nix
   )
 where
 
-import AgentVM.Log (AgentVmTrace (NixBuildCompleted, NixBuildFailed, NixBuildProgress, NixBuildStarted, ProcessSpawned), LogAction, (<&))
+import AgentVM.Log (AgentVmTrace (NixBuildCompleted, NixBuildFailed, NixBuildStarted, ProcessSpawned), (<&))
 import AgentVM.Types (BranchName, VMError (NixBuildFailed), unBranchName)
 import Control.Concurrent.STM (atomically)
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.Text as T
-import Protolude (Either (Left, Right), FilePath, IO, pure, return, ($), (<>))
-import System.Process.Typed (ExitCode (..), Process, byteStringOutput, closed, getStderr, getStdout, nullStream, proc, readProcess, setStderr, setStdin, setStdout, startProcess, waitExitCode, withProcessWait)
+import Plow.Logging (IOTracer (IOTracer))
+import Protolude (Either (Left, Right), FilePath, IO, return, ($), (<>))
+import System.Process.Typed (ExitCode (ExitFailure, ExitSuccess), Process, byteStringOutput, closed, getStderr, getStdout, nullStream, proc, setStderr, setStdin, setStdout, startProcess, waitExitCode, withProcessWait)
 
 -- | Build VM configuration using Nix
-buildVMConfig :: LogAction IO AgentVmTrace -> BranchName -> FilePath -> IO (Either VMError FilePath)
-buildVMConfig logger branchName workspace = do
+buildVMConfig :: IOTracer AgentVmTrace -> BranchName -> FilePath -> IO (Either VMError FilePath)
+buildVMConfig (IOTracer logger) branchName workspace = do
   logger <& NixBuildStarted flakeRefText
 
   let procConfig =
@@ -44,8 +45,8 @@ buildVMConfig logger branchName workspace = do
     flakeRefText = "path:" <> T.pack workspace <> "#vm-config." <> unBranchName branchName
 
 -- | Run Nix-generated VM script
-runVMScript :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
-runVMScript logger scriptPath = do
+runVMScript :: IOTracer AgentVmTrace -> FilePath -> IO (Process () () ())
+runVMScript (IOTracer logger) scriptPath = do
   let procConfig =
         setStdin closed $
           setStdout nullStream $

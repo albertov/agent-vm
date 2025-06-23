@@ -13,6 +13,12 @@ ByteString instead
 
 ## Use a Type-Test-Driven-Approach, that is, when implementing new functions:
 
+First of all, NO MOCKS! Only end2end for IO actions, do as many hspec property
+tests as you want for what can (and should!) be tested that way. But stuff that
+does IO should do it, if it needs a VM it should go into
+agent-vm/integration-test/Main.hs, hear me? Otherwise add it for hspec to discover under
+agent-vm/test, ok?
+
 1. Get the type signatures right and the body as `notImplemented`.
    Always write a unit test or integration test for new
    functionality or when there are new cases to test.
