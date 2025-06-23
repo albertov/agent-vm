@@ -43,8 +43,19 @@
     openssh.authorizedKeys.keys = [
       # Ephemeral SSH public key will be added here during VM creation
     ];
-    # Make the packages available to the agent available to the user too
-    packages = config.services.agent-mcp.shell.buildInputs or [];
+    # Make essential development tools available to the user
+    packages = with pkgs; [
+      git
+      nix
+      openssh
+      curl
+      python3
+      # MCP tools
+      codemcp
+      mcp-proxy
+      mcp-language-server
+      rescript-language-server
+    ];
   };
 
   # Define the dev group

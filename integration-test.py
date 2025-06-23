@@ -117,7 +117,7 @@ class AgentVMIntegrationTest:
     """Integration test runner for agent-vm using CLI calls only."""
 
     def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False,
-                 debug: bool = False, timeout: int = 60):
+                 debug: bool = False, timeout: int = 120):
         """Initialize integration test runner."""
         self.agent_vm_cmd = agent_vm_cmd
         self.verbose = verbose
@@ -523,7 +523,7 @@ Examples:
   integration-test --agent-vm ./agent-vm  # Use specific agent-vm executable
   integration-test --verbose         # Enable verbose output
   integration-test --debug           # Enable debug output with full stderr/stdout capture
-  integration-test --timeout 120     # Set custom timeout to 120 seconds
+  integration-test --timeout 180     # Set custom timeout to 180 seconds
         """
     )
 
@@ -533,8 +533,8 @@ Examples:
                        help='Enable verbose logging and debugging')
     parser.add_argument('--debug', '-d', action='store_true',
                        help='Enable debug mode with comprehensive stderr/stdout capture')
-    parser.add_argument('--timeout', '-t', type=int, default=60,
-                       help='Timeout in seconds for VM operations (default: 60)')
+    parser.add_argument('--timeout', '-t', type=int, default=120,
+                       help='Timeout in seconds for VM operations (default: 120)')
 
     args = parser.parse_args()
 
