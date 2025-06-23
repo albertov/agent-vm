@@ -11,6 +11,8 @@ module AgentVM.Config
   , vmConfigToJson
   ) where
 
+import Protolude
+
 import AgentVM.Types
 import Data.Aeson
 import Data.Text (Text)

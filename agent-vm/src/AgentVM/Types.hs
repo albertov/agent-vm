@@ -16,7 +16,8 @@ module AgentVM.Types
   , VMError(..)
   ) where
 
-import Data.Text (Text)
+import Protolude (Eq, Ord, Show, Text, FilePath, Int)
+
 import Data.Time (UTCTime)
 import System.Process.Typed (Process)
 import Data.Kind (Type)

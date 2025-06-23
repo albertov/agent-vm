@@ -4,6 +4,8 @@
 
 module Main (main, withTempStateDir, testVMConfig) where
 
+import Protolude
+
 import Test.Hspec (Spec, describe, it, pending, hspec)
 import System.IO.Temp (withSystemTempDirectory)
 import AgentVM.Types (VMConfig(VMConfig, vmConfigHost, vmConfigPort, vmConfigSshPort, vmConfigMemory, vmConfigCores, vmConfigNixPath, vmConfigWorkspace))

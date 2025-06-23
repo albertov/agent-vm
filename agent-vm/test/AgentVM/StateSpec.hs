@@ -3,6 +3,8 @@
 -- | Tests for VM state management
 module AgentVM.StateSpec (spec) where
 
+import Protolude
+
 import Test.Hspec (Spec, describe, it, pending)
 
 spec :: Spec

@@ -14,6 +14,8 @@ module AgentVM.Log
   , (<&)
   ) where
 
+import Protolude
+
 import AgentVM.Types
 import Data.Text (Text)
 import qualified Data.Text as T

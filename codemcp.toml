@@ -4,6 +4,10 @@ You MUST always obey the following rules:
 
 Read the README.md and TODO.md documents to see what's going on
 
+Use protolude and use unliftio when possible instead of base, specially for
+exception handling. Never catch SomeExeption explicitly, use the `*Any`
+functions from UnliftIO instead.
+
 When told to "continue", or "continue where you left off",... use the
 'branch_log' command to inspect the last commit you made and continue. I may
 have left a commit after yours to help you out, inspect it and take it into

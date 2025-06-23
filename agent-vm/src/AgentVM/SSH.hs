@@ -6,6 +6,8 @@ module AgentVM.SSH
   , trySSHConnect
   ) where
 
+import Protolude
+
 import AgentVM.Log
 import Data.Text (Text)
 

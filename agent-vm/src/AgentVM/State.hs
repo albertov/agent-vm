@@ -14,6 +14,8 @@ module AgentVM.State
   , releasePort
   ) where
 
+import Protolude (IO, STM, Map, Set, atomically, finally, when, error, show, ($), (<$>), (<*>))
+
 import AgentVM.Types
 import Control.Concurrent.STM
 import Control.Exception (finally)
