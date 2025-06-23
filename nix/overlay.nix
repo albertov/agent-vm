@@ -27,7 +27,7 @@ inputs: final: prev:
       ];
       text = ''
         source ${hookFile}
-        exec ${./start.sh} "$@"
+        ${builtins.readFile ../start.sh}
       '';
     };
 
