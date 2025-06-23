@@ -322,17 +322,51 @@ pytest --cov=agent_vm -m unit
 Run comprehensive integration tests that validate end-to-end workflows:
 
 ```bash
-# Run integration tests with pytest
-pytest -m integration
-
-# Run standalone integration test executable
+# Run all integration tests
 nix run .#integration-test
 
-# Run with debug output for troubleshooting
-nix run .#integration-test -- --debug --verbose
+# Run specific test by name
+nix run .#integration-test -- -k test_vm_creation
 
-# Use custom timeout and agent-vm executable
-nix run .#integration-test -- --timeout 120 --agent-vm /path/to/agent-vm
+# Run with debug output
+nix run .#integration-test -- --debug -s
+
+# Stop on first failure
+nix run .#integration-test -- -x
+
+# Custom timeout and verbose output
+nix run .#integration-test -- --timeout 180 --verbose
+
+# Combine multiple options
+nix run .#integration-test -- --debug -k test_agent_service -s
+
+# Pass additional pytest arguments after --
+nix run .#integration-test -- -- -v --tb=long --maxfail=2
+```
+
+**Integration Test CLI Options**:
+- `--agent-vm PATH` - Path to agent-vm executable (default: agent-vm in PATH)
+- `--timeout SECONDS` - Timeout for VM operations (default: 120)
+- `--debug` - Enable debug mode with full output
+- `--verbose` - Enable verbose logging
+- `-k EXPRESSION` - Run tests matching expression (pytest -k)
+- `-s` - Show print statements (pytest -s)
+- `-x` - Stop on first failure (pytest -x)
+- `--` - All arguments after this are passed to pytest
+
+**Examples**:
+```bash
+# Quick test of VM creation
+integration-test -k test_vm_creation
+
+# Debug a failing test with output
+integration-test --debug -s -k test_agent_service
+
+# Run all tests with custom timeout
+integration-test --timeout 180
+
+# Run with multiple pytest options
+integration-test -- -k "test_vm or test_agent" -v --maxfail=1
 ```
 
 ### Test Categories
