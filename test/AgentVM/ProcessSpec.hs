@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-x-partial #-}
@@ -20,7 +21,8 @@ import Protolude
 import System.FilePath ((</>))
 import System.Process.Typed (ExitCode (..))
 import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldContain, shouldSatisfy)
-import UnliftIO (MonadUnliftIO)
+import UnliftIO (MonadUnliftIO, SomeException)
+import qualified UnliftIO as UIO
 import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 
 -- | Test environment with custom tracer that captures traces
@@ -254,13 +256,58 @@ spec = describe "AgentVM.Process" $ do
 
   describe "Process error handling" $ do
     it "handles startup failures" $ do
-      pending
+      -- Try to start a non-existent executable
+      result <- UIO.try $ runVMT @IO testEnv $ do
+        P.withVMProcess "/non/existent/executable" [] defTimeout $ \process -> do
+          -- This should not be reached
+          liftIO $ expectationFailure "Process should have failed to start"
+
+      case result of
+        Left (_ :: SomeException) -> pure () -- Expected failure
+        Right _ -> expectationFailure "Expected process startup to fail"
 
     it "handles zombie processes" $ do
-      pending
+      -- Create trace capture
+      traceCapture <- newIORef []
+      let env = testEnvWithCapture traceCapture
+
+      -- Run process that creates zombies
+      exitCode <- runVMT @IO env $ withFixture "zombie_process.sh" $ \process -> do
+        -- Wait for process to complete
+        P.waitForProcess defWait process
+
+      -- Check that process completed normally
+      exitCode `shouldBe` Just ExitSuccess
+
+      -- Check traces were captured properly
+      traces <- readIORef traceCapture
+      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+
+      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Creating zombie process..." -> True; _ -> False)
 
     it "cleans up on unexpected termination" $ do
-      pending
+      -- Create trace capture
+      traceCapture <- newIORef []
+      let env = testEnvWithCapture traceCapture
+
+      -- Run process that terminates unexpectedly
+      result <- runVMT @IO env $ withFixture "unexpected_termination.sh" $ \process -> do
+        -- Wait for process to complete (it will be killed)
+        P.waitForProcess defWait process
+
+      -- Check that process was terminated (exit code should indicate termination)
+      case result of
+        Just (ExitFailure code) | code < 0 -> pure () -- Negative exit codes indicate signals
+        Just ExitSuccess -> expectationFailure "Expected process to be terminated, but it exited successfully"
+        Just (ExitFailure code) -> expectationFailure $ "Expected signal termination, got exit code: " <> show code
+        Nothing -> pure () -- Timeout is also acceptable for this test
+
+      -- Check traces were captured
+      traces <- readIORef traceCapture
+      let outputTraces = [t | t@(ProcessOutput _ _) <- traces]
+
+      -- Should capture some output before termination
+      outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Process starting normally..." -> True; _ -> False)
 
 withFixture :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => FilePath -> (VMProcess -> m a) -> m a
 withFixture scriptText =

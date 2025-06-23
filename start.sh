@@ -15,9 +15,5 @@ mcp-proxy \
   --port "${MCP_PROXY_PORT}" \
   --host "${MCP_PROXY_HOST}" \
   --allow-origin="${ALLOW_ORIGIN}" \
-  --debug \
-  --named-server codemcp \
-    codemcp \
-  --named-server selenium \
-    "${REPO_ROOT}/mcp_selenium.sh" \
-  --named-server hls ./mcp_language_haskell.sh
+  --named-server codemcp codemcp
+
