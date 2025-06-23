@@ -276,9 +276,6 @@ in
       # Environment variables for browsers
       environment = {
         HOME = "/var/lib/selenium-server"; # Ensure HOME is set
-        MOZ_FAKE_NO_SANDBOX = "1"; # Tell Firefox to not use its sandbox in containers
-        CHROME_DEVEL_SANDBOX = "/nix/store/*/chrome-sandbox"; # Chrome sandbox path
-        CHROME_NO_SANDBOX = "1"; # Disable Chrome sandbox in containers
       };
 
     };
