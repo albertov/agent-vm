@@ -17,6 +17,7 @@ module AgentVM.Types
     VMStateData (..),
     VMOp (..),
     VMError (..),
+    VMHandle (..),
   )
 where
 
@@ -80,6 +81,14 @@ data VMOp :: VMState -> VMState -> Type -> Type where
   Stop :: VMOp 'Running 'Stopped ()
   ForceStop :: VMOp 'Running 'Stopped ()
   MarkFailed :: Text -> VMOp s 'Failed ()
+
+-- | Handle to a running VM
+data VMHandle = VMHandle
+  { vmHandleId :: VMId,
+    vmHandleConfig :: VMConfig,
+    vmHandlePid :: Int
+  }
+  deriving (Eq, Show, Generic)
 
 -- | Errors that can occur during VM operations
 data VMError

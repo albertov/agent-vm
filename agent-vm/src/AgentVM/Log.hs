@@ -9,7 +9,6 @@
 module AgentVM.Log
   ( AgentVmTrace (..),
     LogLevel (..),
-    LogContext,
     traceToMessage,
     renderTrace,
     renderLogLevel,
@@ -32,9 +31,6 @@ import System.Console.ANSI (Color (Blue, Cyan, Green, Red, Yellow), ColorIntensi
 import qualified System.Console.ANSI as ANSI
 import System.IO (Handle, stderr)
 import UnliftIO (liftIO)
-
--- | Type alias for clarity
-type LogContext = IOTracer
 
 -- | MonadIO version of setSGR
 setSGR :: (MonadIO m) => [SGR] -> m ()
@@ -243,5 +239,5 @@ vmLevelLogger = IOTracer $ Tracer $ \leveledTrace -> do
   hPutStrLn stderr $ renderTrace (unLogLevel leveledTrace)
 
 -- | Create a log context for integration tests
-createLogContext :: IO (LogContext AgentVmTrace)
+createLogContext :: IO (IOTracer AgentVmTrace)
 createLogContext = pure vmLogger
