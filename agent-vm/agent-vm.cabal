@@ -13,7 +13,7 @@ common warnings
     ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wmissing-export-lists
                  -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
-                 -Werror
+                 -Werror -Wunused-packages
 
 library
     import:           warnings
@@ -86,11 +86,11 @@ executable agent-vm-test
     main-is:          Main.hs
     build-depends:    base
                     , hspec
-                    , hspec-discover
                     , QuickCheck
                     , temporary
                     , typed-process
+                    , filepath
+                    , protolude
     hs-source-dirs:   integration-test
     default-language: Haskell2010
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
-    build-tool-depends: hspec-discover:hspec-discover

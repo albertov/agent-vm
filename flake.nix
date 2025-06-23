@@ -2,7 +2,7 @@
   description = "Agent VM - Isolated MCP agent development environment using QEMU VMs";
 
   nixConfig = {
-    bash-prompt = "\\[\\e[0;1;94m\\]agent-vm \\[\\e[0m\\]\\w \\[\\e[0;1m\\]λ \\[\\e[0m\\]";
+    bash-prompt = "agent-vm \\[\\e[0m\\]\\w \\[\\e[0;1m\\]λ \\[\\e[0m\\]";
     extra-substituters = [
     ];
     extra-trusted-public-keys = [
