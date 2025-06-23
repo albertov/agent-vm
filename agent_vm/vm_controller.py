@@ -586,6 +586,35 @@ class VMController:
         logger.warning("Not in a git repository or git not available, using 'default' as branch name")
         return "default"
 
+    def _generate_vm_nix_expression(self, workspace_dir: Path, vm_config_path: str,
+                                     ssh_public_key: str, config_data: dict) -> str:
+        """Generate the Nix expression for building the VM."""
+        return f'''
+let
+  flake = builtins.getFlake "{workspace_dir}";
+  pkgs = flake.legacyPackages.${{builtins.currentSystem}};
+  nixpkgs = flake.inputs.nixpkgs;
+in
+  (nixpkgs.lib.nixosSystem {{
+    inherit pkgs;
+    inherit (pkgs) system;
+    modules = [
+      "{vm_config_path}"
+      {{
+        # Override SSH key and ports for this specific VM instance
+        users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];
+        services.agent-mcp.port = pkgs.lib.mkForce {config_data["port"]};
+        networking.firewall.allowedTCPPorts = pkgs.lib.mkForce [ 22 {config_data["port"]} ];
+        virtualisation.vmVariant.virtualisation.forwardPorts = pkgs.lib.mkForce [
+          {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
+          {{ from = "host"; host.port = {config_data.get("ssh_port", 2222)}; guest.port = 22; }}
+        ];
+        virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = pkgs.lib.mkForce "{workspace_dir}";
+      }}
+    ];
+  }}).config.system.build.vm
+'''
+
     def create_vm(self, host: str = "localhost", port: int = 8000,
                   branch: Optional[str] = None, config: str = "vm-config.nix") -> None:
         """Create a new VM configuration and workspace."""
@@ -733,6 +762,63 @@ class VMController:
         with config_file.open('w') as f:
             json.dump(config_data, f, indent=2)
 
+        # Generate and save the VM nix expression
+        logger.info("🔧 Generating VM nix expression...")
+        ssh_public_key = ssh_public_key.read_text().strip()
+        vm_nix_expr = self._generate_vm_nix_expression(
+            workspace_dir, flake_config_path, ssh_public_key, config_data
+        )
+
+        nix_expr_file = vm_config_dir / "vm.nix"
+        with nix_expr_file.open('w') as f:
+            f.write(vm_nix_expr)
+        logger.info(f"📄 Saved VM nix expression to: {nix_expr_file}")
+
+        # Pre-build the VM derivation
+        logger.info("🔨 Pre-building VM derivation (this may take a few minutes)...")
+        try:
+            result = subprocess.run(
+                ["nix", "build", "--no-link", "--print-out-paths", "--impure",
+                 "--expr", f"import {nix_expr_file}"],
+                capture_output=True,
+                text=True,
+                cwd=workspace_dir,
+                timeout=_get_global_timeout()
+            )
+
+            if result.returncode != 0:
+                logger.error(f"VM pre-build failed: {result.stderr}")
+                logger.warning("⚠️  VM derivation pre-build failed, but configuration was created")
+                logger.warning("The VM will be built on first start instead")
+            else:
+                vm_path = result.stdout.strip()
+                if vm_path:
+                    # Create GC root to prevent garbage collection
+                    gc_root_dir = vm_config_dir / "gc-roots"
+                    gc_root_dir.mkdir(exist_ok=True)
+                    gc_root_link = gc_root_dir / "vm"
+
+                    # Remove existing link if it exists
+                    if gc_root_link.exists() or gc_root_link.is_symlink():
+                        gc_root_link.unlink()
+
+                    # Create new GC root link
+                    gc_root_link.symlink_to(vm_path)
+                    logger.info(f"🔗 Created GC root: {gc_root_link} -> {vm_path}")
+
+                    # Store the pre-built path in config
+                    config_data["prebuilt_vm_path"] = vm_path
+                    with config_file.open('w') as f:
+                        json.dump(config_data, f, indent=2)
+
+                    logger.info("✨ VM derivation pre-built successfully!")
+        except subprocess.TimeoutExpired:
+            logger.warning("⚠️  VM pre-build timed out, but configuration was created")
+            logger.warning("The VM will be built on first start instead")
+        except Exception as e:
+            logger.warning(f"⚠️  VM pre-build failed: {e}")
+            logger.warning("The VM will be built on first start instead")
+
         logger.info("✅ VM configuration created successfully!")
         logger.info(f"📁 Branch: {branch}")
         logger.info(f"🗂️  Config directory: {vm_config_dir}")
@@ -787,62 +873,83 @@ class VMController:
 
         os.chdir(workspace_dir)
 
-        # Build VM configuration using existing vm-config.nix with agent service
-        logger.info("🔧 Building VM configuration with agent service...")
-        ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
+        # Check if we have a pre-built VM path
+        vm_path = None
+        prebuilt_path = config_data.get("prebuilt_vm_path")
 
-        # FIXME: This nix expression should be generated in the VM's state dir
-        # by the crate command!
-        try:
-            vm_build_cmd = [
-                    "nix", "build", "--no-link", "--print-out-paths", "--impure",
-                    "--expr", f'''
-let
-  flake = builtins.getFlake "{workspace_dir}";
-  pkgs = flake.legacyPackages.${{builtins.currentSystem}};
-  nixpkgs = flake.inputs.nixpkgs;
-in
-  (nixpkgs.lib.nixosSystem {{
-    inherit pkgs;
-    inherit (pkgs) system;
-    modules = [
-      "{vm_config_path}"
-      {{
-        # Override SSH key and ports for this specific VM instance
-        users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];
-        services.agent-mcp.port = pkgs.lib.mkForce {config_data["port"]};
-        networking.firewall.allowedTCPPorts = pkgs.lib.mkForce [ 22 {config_data["port"]} ];
-        virtualisation.vmVariant.virtualisation.forwardPorts = pkgs.lib.mkForce [
-          {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
-          {{ from = "host"; host.port = {ssh_port}; guest.port = 22; }}
-        ];
-        virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = pkgs.lib.mkForce "{workspace_dir}";
-      }}
-    ];
-  }}).config.system.build.vm
-                    '''
-                ]
+        if prebuilt_path and Path(prebuilt_path).exists():
+            logger.info("🚀 Using pre-built VM derivation for fast startup!")
+            vm_path = prebuilt_path
+        else:
+            # Check if we have the saved nix expression
+            nix_expr_file = vm_config_dir / "vm.nix"
+            if nix_expr_file.exists():
+                logger.info("🔧 Building VM from saved nix expression...")
+                try:
+                    result = subprocess.run(
+                        ["nix", "build", "--no-link", "--print-out-paths", "--impure",
+                         "--expr", f"import {nix_expr_file}"],
+                        capture_output=True,
+                        text=True,
+                        cwd=workspace_dir,
+                        timeout=_get_global_timeout()
+                    )
 
-            logger.debug(f"Running VM build command: {' '.join(vm_build_cmd)}")
-            result = subprocess.run(
-                vm_build_cmd,
-                capture_output=True,
-                text=True,
-                cwd=workspace_dir,
-                timeout=_get_global_timeout()  # Use global timeout for VM building
-            )
+                    if result.returncode == 0 and result.stdout.strip():
+                        vm_path = result.stdout.strip()
+                        # Update config with new pre-built path
+                        config_data["prebuilt_vm_path"] = vm_path
+                        with config_file.open('w') as f:
+                            json.dump(config_data, f, indent=2)
 
-            if result.returncode != 0:
-                logger.error(f"VM build failed with exit code: {result.returncode}")
-                logger.error(f"VM build stderr: {result.stderr}")
-                logger.error(f"VM build stdout: {result.stdout}")
-                logger.error(f"Command: {' '.join(vm_build_cmd)}")
-                logger.error(f"Working directory: {workspace_dir}")
-                raise subprocess.CalledProcessError(result.returncode, vm_build_cmd)
-            vm_path = result.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to build VM configuration: {e}")
-            sys.exit(1)
+                        # Update GC root
+                        gc_root_dir = vm_config_dir / "gc-roots"
+                        gc_root_dir.mkdir(exist_ok=True)
+                        gc_root_link = gc_root_dir / "vm"
+                        if gc_root_link.exists() or gc_root_link.is_symlink():
+                            gc_root_link.unlink()
+                        gc_root_link.symlink_to(vm_path)
+                        logger.info(f"🔗 Updated GC root: {gc_root_link} -> {vm_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to build from saved nix expression: {e}")
+                    vm_path = None
+
+            # Fall back to building inline if needed
+            if not vm_path:
+                logger.info("🔧 Building VM configuration with agent service...")
+                ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
+
+                # Generate the expression inline (backward compatibility)
+                vm_nix_expr = self._generate_vm_nix_expression(
+                    workspace_dir, vm_config_path, ssh_public_key, config_data
+                )
+
+                try:
+                    vm_build_cmd = [
+                        "nix", "build", "--no-link", "--print-out-paths", "--impure",
+                        "--expr", vm_nix_expr
+                    ]
+
+                    logger.debug(f"Running VM build command: {' '.join(vm_build_cmd)}")
+                    result = subprocess.run(
+                        vm_build_cmd,
+                        capture_output=True,
+                        text=True,
+                        cwd=workspace_dir,
+                        timeout=_get_global_timeout()
+                    )
+
+                    if result.returncode != 0:
+                        logger.error(f"VM build failed with exit code: {result.returncode}")
+                        logger.error(f"VM build stderr: {result.stderr}")
+                        logger.error(f"VM build stdout: {result.stdout}")
+                        logger.error(f"Command: {' '.join(vm_build_cmd)}")
+                        logger.error(f"Working directory: {workspace_dir}")
+                        raise subprocess.CalledProcessError(result.returncode, vm_build_cmd)
+                    vm_path = result.stdout.strip()
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Failed to build VM configuration: {e}")
+                    sys.exit(1)
 
         if not vm_path:
             logger.error("Failed to build VM")

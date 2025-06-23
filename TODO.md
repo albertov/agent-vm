@@ -61,6 +61,14 @@ Read README.md for specs
 - Configuration shows `debug: False, verbose: False` even when `--debug --verbose` flags are used
 - **Next**: Fix integration test configuration handling to properly pass debug flags to agent-vm
 
+### VM STARTUP OPTIMIZATION
+
+- [x] **Pre-build VM derivation for faster starts**
+  - Save VM derivation .nix code under the VM's state dir on the "create" command
+  - Pre-build the derivation during VM creation
+  - Create a GC root link in the state dir to prevent garbage collection
+  - This will make the "start" command swift to start in the future
+
 ### KNOWN ISSUES
 
 - [ ] **test_vm_start_stop_cycle** occasionally fails due to test setup issues
