@@ -15,19 +15,32 @@
 - [x] Add NoImplicitPrelude extension to cabal file
       and use protolude instead
 
-### Phase 1: Core Infrastructure (Weeks 1-2)
-- [ ] Set up project with Cabal and haskell.nix
-- [ ] Implement core types (Types.hs)
-- [ ] Implement logging infrastructure (Logging.hs)
-- [ ] Create STM-based registry (State.hs)
-- [ ] Add JSON config parsing (Config.hs)
+### Phase 1: Core Infrastructure (Weeks 1-2) ✅ COMPLETED
+- [x] Set up project with Cabal and haskell.nix
+- [x] Implement core types (Types.hs)
+- [x] Implement logging infrastructure (Logging.hs)
+- [x] Create STM-based registry (State.hs)
+- [x] Add JSON config parsing (Config.hs)
 
 ### Phase 2: VM Lifecycle Management (Weeks 3-4)
-- [ ] Write comprehensive integration tests with `pending` bodies
-- [ ] Implement Nix integration (Nix.hs)
-- [ ] Add process management for VM startup
+- [x] Write comprehensive integration tests with `pending` bodies
+- [ ] Implement Nix integration (Nix.hs) - IN PROGRESS
+  - [x] Basic module structure
+  - [ ] Mock subprocess calls for testing
+  - [ ] Full implementation
+- [ ] Add process management for VM startup - IN PROGRESS
+  - [x] checkVMProcess implementation
+  - [x] startVMProcess implementation
+  - [ ] stopVMProcess implementation
+  - [ ] waitForProcess implementation
 - [ ] Implement SSH connectivity (SSH.hs)
 - [ ] Port all VM operations (create, start, stop, destroy)
+
+### Progress Summary
+Successfully implemented using TDD approach:
+- VM Process Management: checkVMProcess, startVMProcess
+- VM State Management: All port allocation functions tested and working
+- Tests passing: 6/21 unit tests
 
 ### Phase 3: CLI Interface (Week 5)
 - [ ] Write comprehensive CLI tests with `pending` bodies

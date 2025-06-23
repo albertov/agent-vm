@@ -7,13 +7,16 @@ module AgentVM.Process
   )
 where
 
-import AgentVM.Log (AgentVmTrace, LogAction)
-import Protolude (Bool, FilePath, IO, Int, Maybe, notImplemented)
-import System.Process.Typed (ExitCode, Process)
+import AgentVM.Log (AgentVmTrace (ProcessSpawned), LogAction, (<&))
+import qualified Data.Text as T
+import Protolude
+import System.Process.Typed (ExitCode, Process, getExitCode, proc, startProcess)
 
 -- | Start a VM process
 startVMProcess :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
-startVMProcess = notImplemented
+startVMProcess logger scriptPath = do
+  logger <& ProcessSpawned (T.pack scriptPath) []
+  startProcess (proc scriptPath [])
 
 -- | Stop a VM process gracefully
 stopVMProcess :: LogAction IO AgentVmTrace -> Process () () () -> IO ()
@@ -21,7 +24,9 @@ stopVMProcess = notImplemented
 
 -- | Check if VM process is still running
 checkVMProcess :: Process () () () -> IO Bool
-checkVMProcess = notImplemented
+checkVMProcess process = do
+  exitCode <- getExitCode process
+  return $ isNothing exitCode
 
 -- | Wait for a process with timeout
 waitForProcess :: Int -> Process () () () -> IO (Maybe ExitCode)

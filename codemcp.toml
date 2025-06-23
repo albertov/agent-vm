@@ -15,6 +15,11 @@ When implementing new functions, first get the type signatures right leaving the
 body as `notImplemented`. Always write a unit test or integration test for new
 functionality or when there are new cases to test.
 
+When fleshing out the implementations, always implement the test or integration
+test body first, ONE AT A TIME, run just that one test to see if fail and then
+proceed until you run the test and see it pass.
+Then, and only then, proceed to implement another test body
+
 Check with the `test` command that everything compiles after every edit.
 
 When told to "continue", or "continue where you left off",... use the
