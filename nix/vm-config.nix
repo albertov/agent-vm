@@ -10,6 +10,7 @@
   imports = [
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
     ./modules/mcp-proxy.nix
+    ./modules/selenium-server.nix
   ];
   # VM-specific configuration
   virtualisation = {
@@ -64,6 +65,8 @@
 
   # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
   nix.settings.sandbox = false;
+
+  services.selenium-server.enable = true;
 
   # Enable and configure the agent service
   services.getty.autologinUser = "mcp-proxy";
