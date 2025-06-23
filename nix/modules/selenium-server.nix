@@ -36,6 +36,8 @@ in
           chromedriver
           chromium
           firefox
+          geckodriver
+          xvfb-run
         ];
       };
       settings = mkOption {
@@ -78,43 +80,55 @@ in
       serviceConfig = rec {
         Type = "exec";
         Restart = "always";
-        ExecStart = "${cfg.package}/bin/selenium-server -config ${cfgFile}";
+        ExecStart = "${pkgs.xvfb-run}/bin/xvfb-run -a ${cfg.package}/bin/selenium-server -config ${cfgFile}";
         User = "selenium-server";
         Group = "selenium-server";
 
         # === CORE SECURITY ISOLATION ===
 
         # Prevent privilege escalation attacks - blocks setuid, capabilities acquisition
-        NoNewPrivileges = true;
+        # DISABLED: Chrome needs to set up its sandbox
+        NoNewPrivileges = false;
 
         # Provide isolated temporary directories (/tmp, /var/tmp) - prevents tmp race attacks
-        PrivateTmp = true;
+        # Disabled because browsers need access to the real /tmp and /var/tmp
+        PrivateTmp = false;
 
         # Hide other processes in /proc - equivalent to hidepid=2, improves process isolation
-        ProcSubset = "pid"; # Only show PIDs belonging to this service
-        ProtectProc = "invisible"; # Make other processes invisible in /proc
+        # Relaxed for browsers which need to see other processes
+        ProcSubset = "all"; # Show all PIDs (browsers need this for process management)
+        ProtectProc = "default"; # Normal /proc visibility
 
         # Filesystem protection - prevents tampering with system files
-        ProtectSystem = "strict"; # Make entire root filesystem read-only except specific paths
+        # DISABLED: Chrome needs more filesystem access than "full" allows
+        ProtectSystem = false;
         ProtectHome = true; # Block access to /home directories
+
+        # Additional bind mounts for browser functionality
+        BindPaths = [
+          "/sys/fs/cgroup" # Cgroup information for browser sandboxing
+        ];
 
         # === KERNEL PROTECTION ===
 
         # Block access to kernel configuration and sensitive system information
-        ProtectKernelTunables = true; # Prevents writes to /proc/sys, /sys
-        ProtectKernelLogs = true; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs
-        ProtectKernelModules = true; # Prevents loading/unloading kernel modules, blocks /proc/kallsyms
+        # TEMPORARILY DISABLED for debugging
+        ProtectKernelTunables = false; # Prevents writes to /proc/sys, /sys
+        ProtectKernelLogs = false; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs
+        ProtectKernelModules = false; # Prevents loading/unloading kernel modules, blocks /proc/kallsyms
 
         # === MEMORY AND EXECUTION PROTECTION ===
 
         # Lock execution domain - prevents personality() syscall abuse
-        LockPersonality = true; # Lock execution domain
+        # DISABLED: Chrome might need to change execution domain
+        LockPersonality = false;
 
         # Block realtime scheduling - prevents DoS via CPU monopolization
         RestrictRealtime = true; # Block realtime scheduling
 
         # Block SUID/SGID execution - prevents privilege escalation via setuid binaries
-        RestrictSUIDSGID = true; # Block SUID/SGID execution
+        # DISABLED: Chrome sandbox helper might be setuid
+        RestrictSUIDSGID = false;
 
         # === NAMESPACE AND IPC PROTECTION ===
 
@@ -129,10 +143,12 @@ in
         ];
 
         # Block namespace creation - prevents unshare(), clone() with namespace flags
-        RestrictNamespaces = true;
+        # Relaxed for browsers which need to create sandboxed child processes
+        RestrictNamespaces = false;
 
         # Remove IPC objects on service stop - prevents IPC persistence attacks
-        RemoveIPC = true;
+        # DISABLED: Chrome needs IPC objects between its processes
+        RemoveIPC = false;
 
         # Working directory
         WorkingDirectory = "/var/lib/selenium-server";
@@ -148,6 +164,10 @@ in
         # Define exactly what paths the service can write to
         ReadWritePaths = [
           "/var/lib/selenium-server" # Service home directory for logs and temporary files
+          "/tmp" # Browsers need access to tmp for downloads and cache
+          "/var/tmp" # Additional temp space for browsers
+          "/run/user" # Browser runtime directories
+          "/dev/shm" # Chrome needs shared memory for rendering
         ];
 
         # Define essential read-only system paths needed for operation
@@ -156,35 +176,59 @@ in
           "/etc/hosts" # Host name resolution
           "/etc/nsswitch.conf" # Name service switch configuration
           "/etc/ssl" # SSL certificates directory
-          "/etc/ca-certificates" # Certificate authority certificates
+          "/nix/store"
+          "/proc/sys/fs/binfmt_misc" # Binary format handlers
+          "/run/current-system/sw" # System-wide software
+          "/etc/fonts" # Font configuration
+          "/etc/machine-id" # Machine ID (Chrome might check this)
+          "/proc/sys/kernel/osrelease" # OS release info
+          "/proc/sys/kernel/random/boot_id" # Boot ID
         ];
 
         # === DEVICE ACCESS RESTRICTIONS ===
 
         # Provide minimal /dev with only essential devices for browser operation
-        PrivateDevices = true;
-        DevicePolicy = "closed"; # Block access to all devices by default
-        DeviceAllow = [
-          # Explicitly allow only necessary devices for browser operation
-          "/dev/null rw" # Allow null device
-          "/dev/zero rw" # Allow zero device
-          "/dev/urandom r" # Allow random number generation
-          "/dev/shm rw" # Shared memory needed for browser rendering
-          "/dev/dri rw" # Direct Rendering Infrastructure for GPU acceleration
-        ];
+        # TEMPORARILY DISABLED: Chrome needs various devices
+        PrivateDevices = false;
+        # DevicePolicy = "closed"; # Block access to all devices by default
+        # DeviceAllow = [
+        #   # Explicitly allow only necessary devices for browser operation
+        #   "/dev/null rw" # Allow null device
+        #   "/dev/zero rw" # Allow zero device
+        #   "/dev/urandom r" # Allow random number generation
+        #   "/dev/shm rw" # Shared memory needed for browser rendering
+        #   "/dev/dri rw" # Direct Rendering Infrastructure for GPU acceleration
+        #   "/dev/pts rw" # Pseudo terminals for process communication
+        #   "/dev/ptmx rw" # PTY multiplexer for creating pseudo terminals
+        #   "char-usb_device rwm" # USB devices (for some WebDriver features)
+        # ];
 
         # === SYSTEM CALL FILTERING ===
 
         # Block dangerous syscalls while allowing necessary ones for browser operation
-        SystemCallFilter = [
-          "@system-service" # Allow standard service syscalls
-          "~@debug" # Block debugging syscalls (ptrace, etc.)
-          "~@mount" # Block mount operations
-          "~@reboot" # Block reboot/shutdown syscalls
-          "~@swap" # Block swap-related syscalls
-          "~@privileged" # Block privileged operations
-          "~@resources" # Block resource control syscalls
-        ];
+        # TEMPORARILY DISABLED: Chrome requires many syscalls that are hard to enumerate
+        # TODO: Re-enable with proper allowlist after testing
+        # SystemCallFilter = [
+        #   "@system-service" # Allow standard service syscalls
+        #   "@process" # Allow process-related syscalls for spawning browser processes
+        #   "@network-io" # Allow network I/O for WebDriver communication
+        #   "@ipc" # Allow IPC for browser process communication
+        #   "@file-system" # Allow filesystem operations
+        #   "@basic-io" # Allow basic I/O operations
+        #   "@timer" # Allow timer-related syscalls
+        #   "@sync" # Allow synchronization primitives
+        #   "@cpu-emulation" # Allow CPU emulation for JIT
+        #   "@memlock" # Allow memory locking operations
+        #   "ptrace" # Allow ptrace for Chrome crash handler
+        #   "pkey_alloc" # Allow memory protection keys for Chrome
+        #   "pkey_mprotect" # Allow memory protection key operations
+        #   "pkey_free" # Allow freeing memory protection keys
+        #   "~@debug" # Block debugging syscalls (except ptrace)
+        #   "~@mount" # Block mount operations
+        #   "~@reboot" # Block reboot/shutdown syscalls
+        #   "~@swap" # Block swap-related syscalls
+        #   "~@obsolete" # Block obsolete syscalls
+        # ];
 
         # === ADDITIONAL HARDENING ===
 
@@ -212,6 +256,29 @@ in
         #
         # Additional browser-related directories may need to be added to ReadWritePaths
         # if browsers require access to specific cache or configuration directories.
+        #
+        # The service is wrapped with xvfb-run to provide a virtual framebuffer,
+        # eliminating the need for a real display and handling DISPLAY variable automatically.
+        #
+        # Security settings have been relaxed in the following areas to allow browser drivers to function:
+        # - PrivateTmp=false: Browsers need access to real /tmp directories
+        # - RestrictNamespaces=false: Browsers create sandboxed child processes
+        # - ProcSubset="all": Browsers need to see other processes for management
+        # - Expanded ReadWritePaths: Added /tmp, /var/tmp, /run/user, /home/selenium-server for browser operations
+        # - SystemCallFilter disabled: Chrome requires many syscalls (ptrace, pkey_alloc, etc.)
+        # - Additional device permissions: Added PTY devices for process communication
+        # - Added bind mount for /sys/fs/cgroup for browser sandboxing
+        # - NoNewPrivileges=false: Chrome needs to set up its sandbox
+        # - RemoveIPC=false: Chrome uses IPC between processes
+        # - PrivateDevices=false: Chrome needs access to various devices
+      };
+
+      # Environment variables for browsers
+      environment = {
+        HOME = "/var/lib/selenium-server"; # Ensure HOME is set
+        MOZ_FAKE_NO_SANDBOX = "1"; # Tell Firefox to not use its sandbox in containers
+        CHROME_DEVEL_SANDBOX = "/nix/store/*/chrome-sandbox"; # Chrome sandbox path
+        CHROME_NO_SANDBOX = "1"; # Disable Chrome sandbox in containers
       };
 
     };

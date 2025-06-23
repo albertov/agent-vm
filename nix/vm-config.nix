@@ -22,7 +22,7 @@ in
     ./modules/virtiofs-qemu.nix
   ];
   services.qemuGuest.enable = true;
-  boot.tmpOnTmpfs = true;
+  boot.tmp.useTmpfs = true;
 
   # VM-specific configuration
   virtualisation = {
@@ -136,6 +136,10 @@ in
     namedServers.codemcp = {
       enabled = true;
       command = "${pkgs.codemcp}/bin/codemcp";
+    };
+    namedServers.selenium = {
+      enabled = true;
+      command = "${pkgs.mcp-selenium}/bin/mcp-selenium-hs";
     };
     allowOrigins = [ "https://claude.ai" ];
   };
