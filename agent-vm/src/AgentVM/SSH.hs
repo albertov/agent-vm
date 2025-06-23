@@ -10,10 +10,7 @@ module AgentVM.SSH
   )
 where
 
-import AgentVM.Log (AgentVmTrace)
-import Data.Generics.Product (HasType, the)
-import Lens.Micro.Mtl (view)
-import Plow.Logging (IOTracer, traceWith)
+import AgentVM.Log (AgentVmTrace, MonadTrace)
 import Protolude
 
 -- | Generate SSH keypair
@@ -22,8 +19,7 @@ generateSSHKey = notImplemented
 
 -- | Wait for SSH to become available
 waitForSSH ::
-  ( MonadReader env m,
-    HasType (IOTracer AgentVmTrace) env,
+  ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
   Text ->
