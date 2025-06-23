@@ -29,6 +29,7 @@ library
                     , async
                     , unliftio
                     , stm
+                    , containers
                     , unordered-containers
                     , text
                     , bytestring
@@ -80,7 +81,6 @@ test-suite spec
 -- This one does not run as part of the hermetic test suite
 executable agent-vm-test
     import:           warnings
-    type:             exitcode-stdio-1.0
     main-is:          Main.hs
     build-depends:    base
                     , hspec

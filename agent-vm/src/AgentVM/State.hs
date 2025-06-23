@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 -- | VM state management with STM
 module AgentVM.State
   ( VMRegistry(..)
