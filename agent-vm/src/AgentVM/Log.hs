@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -6,11 +7,14 @@
 -- | Logging infrastructure for agent-vm
 module AgentVM.Log
   ( AgentVmTrace (..),
-    Severity (..),
+    LogLevel (..),
     traceToMessage,
-    traceSeverity,
     renderTrace,
+    renderLogLevel,
+    traceLevel,
     vmLogger,
+    vmLevelLogger,
+    contramapIOTracer,
     (<&),
   )
 where
@@ -20,7 +24,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
 import Protolude (Eq, FilePath, Generic, Int, MonadIO, Ord, Show, Text, show, ($), (.), (<>))
-import System.Console.ANSI (Color (Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleLayer (Foreground), SGR (Reset, SetColor))
+import System.Console.ANSI (Color (Blue, Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleIntensity (BoldIntensity), ConsoleLayer (Foreground), SGR (Reset, SetColor, SetConsoleIntensity))
 import qualified System.Console.ANSI as ANSI
 import System.IO (Handle, stderr)
 import UnliftIO (liftIO)
@@ -37,19 +41,88 @@ hPutStr h = liftIO . TIO.hPutStr h
 hPutStrLn :: (MonadIO m) => Handle -> Text -> m ()
 hPutStrLn h = liftIO . TIO.hPutStrLn h
 
+-- | Contramap for IOTracer
+contramapIOTracer :: (a -> b) -> IOTracer b -> IOTracer a
+contramapIOTracer f (IOTracer tracerB) = IOTracer $ Tracer $ \a ->
+  let Tracer traceB = tracerB
+   in traceB (f a)
+
 -- | Convenience operator for logging using traceWith
 (<&) :: Tracer m a -> a -> m ()
 (<&) = traceWith
 
 infixr 1 <&
 
--- | Severity levels for logging
-data Severity
-  = Debug
-  | Info
-  | Warning
-  | Error
-  deriving (Show, Eq, Ord, Generic)
+-- | Log level wrapper for filtering and importance tagging
+data LogLevel a
+  = Critical a
+  | Error a
+  | Info a
+  | Debug a
+  | Trace a
+  deriving stock (Show, Eq, Ord, Generic)
+
+-- | Extract the wrapped value from LogLevel
+unLogLevel :: LogLevel a -> a
+unLogLevel = \case
+  Critical a -> a
+  Error a -> a
+  Info a -> a
+  Debug a -> a
+  Trace a -> a
+
+-- | Get the level as text
+logLevelText :: LogLevel a -> Text
+logLevelText = \case
+  Critical _ -> "CRITICAL"
+  Error _ -> "ERROR"
+  Info _ -> "INFO"
+  Debug _ -> "DEBUG"
+  Trace _ -> "TRACE"
+
+-- | Render a LogLevel with a custom renderer for the wrapped value
+renderLogLevel :: (a -> Text) -> LogLevel a -> Text
+renderLogLevel render level =
+  "[" <> logLevelText level <> "] " <> render (unLogLevel level)
+
+-- | Tag an AgentVmTrace with its appropriate LogLevel
+traceLevel :: AgentVmTrace -> LogLevel AgentVmTrace
+traceLevel trace = case trace of
+  -- Critical events - system failures that need immediate attention
+  VMFailed {} -> Critical trace
+  AgentServiceFailed {} -> Critical trace
+  -- Error events - failures that should be investigated
+  ProcessError {} -> Error trace
+  SSHFailed {} -> Error trace
+  NixBuildFailed {} -> Error trace
+  -- Info events - normal operational events
+  VMCreated {} -> Info trace
+  VMStarted {} -> Info trace
+  VMStopped {} -> Info trace
+  VMDestroyed {} -> Info trace
+  SSHConnected {} -> Info trace
+  NixBuildCompleted {} -> Info trace
+  PortAllocated {} -> Info trace
+  WorkspaceCreated {} -> Info trace
+  AgentServiceHealthy {} -> Info trace
+  -- Debug events - detailed operational info
+  VMStarting {} -> Debug trace
+  VMStopping {} -> Debug trace
+  ProcessSpawned {} -> Debug trace
+  ProcessExited {} -> Debug trace
+  SSHKeyGenerated {} -> Debug trace
+  SSHConnecting {} -> Debug trace
+  SSHCommandExecuted {} -> Debug trace
+  NixBuildStarted {} -> Debug trace
+  PortScanning {} -> Debug trace
+  PortReleased {} -> Debug trace
+  WorkspaceCloned {} -> Debug trace
+  WorkspaceSynced {} -> Debug trace
+  WorkspaceRemoved {} -> Debug trace
+  AgentServiceStarting {} -> Debug trace
+  -- Trace events - very detailed output
+  ProcessOutput {} -> Trace trace
+  NixBuildProgress {} -> Trace trace
 
 -- | All possible log events in the system
 -- FIXME: I want much more context in the constructors
@@ -98,24 +171,6 @@ data AgentVmTrace
 traceToMessage :: AgentVmTrace -> Text
 traceToMessage = renderTrace
 
--- | Determine severity from trace type
-traceSeverity :: AgentVmTrace -> Severity
-traceSeverity = \case
-  VMFailed {} -> Error
-  ProcessError {} -> Error
-  SSHFailed {} -> Error
-  AgentVM.Log.NixBuildFailed {} -> Error
-  AgentServiceFailed {} -> Error
-  VMCreated {} -> Info
-  VMStarted {} -> Info
-  VMStopped {} -> Info
-  SSHConnected {} -> Info
-  NixBuildCompleted {} -> Info
-  PortAllocated {} -> Info
-  WorkspaceCreated {} -> Info
-  AgentServiceHealthy {} -> Info
-  _ -> Debug
-
 -- | Render trace as formatted text
 renderTrace :: AgentVmTrace -> Text
 renderTrace = \case
@@ -150,21 +205,30 @@ renderTrace = \case
   AgentServiceHealthy b u -> "💚 Agent healthy on " <> unBranchName b <> " (up " <> u <> ")"
   AgentServiceFailed b e -> "❌ Agent failed on " <> unBranchName b <> ": " <> e
 
--- | Set color based on severity
-setSeverityColor :: (MonadIO m) => Severity -> m ()
-setSeverityColor severity =
-  setSGR $ case severity of
-    Debug -> [SetColor Foreground Dull Cyan]
-    Info -> [SetColor Foreground Vivid Green]
-    Warning -> [SetColor Foreground Vivid Yellow]
-    Error -> [SetColor Foreground Vivid Red]
+-- | Set color based on LogLevel
+setLogLevelColor :: (MonadIO m) => LogLevel a -> m ()
+setLogLevelColor level =
+  setSGR $ case level of
+    Trace _ -> [SetColor Foreground Dull Cyan]
+    Debug _ -> [SetColor Foreground Dull Blue]
+    Info _ -> [SetColor Foreground Vivid Green]
+    Error _ -> [SetColor Foreground Vivid Red]
+    Critical _ -> [SetColor Foreground Vivid Red, SetConsoleIntensity BoldIntensity]
 
 -- | Create a logger that outputs to stderr with colors
 vmLogger :: IOTracer AgentVmTrace
 vmLogger = IOTracer $ Tracer $ \traceEvent -> do
-  let severity = traceSeverity traceEvent
+  let leveledTrace = traceLevel traceEvent
       traceMessage = renderTrace traceEvent
-  setSeverityColor severity
-  hPutStr stderr $ "[" <> T.pack (show severity) <> "] "
+  setLogLevelColor leveledTrace
+  hPutStr stderr $ "[" <> logLevelText leveledTrace <> "] "
   setSGR [Reset]
   hPutStrLn stderr traceMessage
+
+-- | Create a level-aware logger that outputs to stderr with colors
+vmLevelLogger :: IOTracer (LogLevel AgentVmTrace)
+vmLevelLogger = IOTracer $ Tracer $ \leveledTrace -> do
+  setLogLevelColor leveledTrace
+  hPutStr stderr $ "[" <> logLevelText leveledTrace <> "] "
+  setSGR [Reset]
+  hPutStrLn stderr $ renderTrace (unLogLevel leveledTrace)
