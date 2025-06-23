@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-x-partial #-}
 
 -- | Tests for process management
 module AgentVM.ProcessSpec (spec) where
@@ -7,6 +8,7 @@ import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log (AgentVmTrace, vmLogger)
 import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startVMProcess)
+import Control.Concurrent.Thread.Delay (delay)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
 import System.Process.Typed (ExitCode (..), createPipe, proc, setStderr, setStdout, startProcess, stopProcess)
@@ -66,7 +68,7 @@ spec = describe "AgentVM.Process" $ do
       let vmProcess = VMProcess process
 
       -- Wait a bit for it to exit
-      threadDelay 100000 -- 100ms
+      delay 100000 -- 100ms
 
       -- Check it has exited
       state <- checkVMProcess vmProcess
@@ -87,7 +89,7 @@ spec = describe "AgentVM.Process" $ do
       let vmProcess = VMProcess process
 
       -- Wait a bit for it to exit
-      threadDelay 100000 -- 100ms
+      delay 100000 -- 100ms
 
       -- Check it has exited with failure
       state <- checkVMProcess vmProcess

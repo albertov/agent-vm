@@ -1,9 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | Main entry point for agent-vm CLI
 module Main (main) where
 
-import AgentVM.Log (LogLevel, renderLogLevel, renderTrace, traceLevel, vmLogger)
+import AgentVM.Log (AgentVmTrace (ProcessError), LogLevel, renderLogLevel, renderTrace, traceLevel, vmLogger)
 import Data.Functor.Contravariant (contramap)
 import Options.Applicative
   ( Parser,
@@ -27,6 +28,7 @@ import Options.Applicative
     value,
     (<**>),
   )
+import Plow.Logging (traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude
 import System.Exit (exitFailure)
@@ -103,7 +105,7 @@ main = do
     let finalTracer = contramap (renderLogLevel renderTrace . traceLevel) asyncTracer
 
     -- For now, just demonstrate logging is working
-    putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
+    traceWith finalTracer $ ProcessError "agent-vm" ("Haskell agent-vm: " <> toS (show cmd :: [Char]) <> " (not yet implemented)")
     exitFailure
   where
     opts =
