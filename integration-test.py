@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Integration test executable for agent-vm.
+Integration test executable for agent-vm using pytest.
 
 This test executable runs comprehensive integration tests by calling agent-vm
 through the CLI exclusively, without using mocks. It tests the complete
@@ -10,8 +10,6 @@ This is designed to be run manually or by CI systems and is separate from
 the normal test suite to avoid interfering with development workflows.
 """
 
-import typer
-import atexit
 import json
 import logging
 import os
@@ -23,6 +21,9 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+
+import pytest
+import typer
 
 
 # Color codes for terminal output
@@ -115,574 +116,475 @@ def setup_logging(verbose: bool = False):
 logger = logging.getLogger(__name__)
 
 
-class AgentVMIntegrationTest:
-    """Integration test runner for agent-vm using CLI calls only."""
+class IntegrationTestConfig:
+    """Integration test configuration class to hold test parameters."""
 
-    def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False,
-                 debug: bool = False, timeout: int = 120):
-        """Initialize integration test runner."""
+    def __init__(
+        self,
+        agent_vm_cmd: str = "agent-vm",
+        verbose: bool = False,
+        debug: bool = False,
+        timeout: int = 120
+    ):
         self.agent_vm_cmd = agent_vm_cmd
         self.verbose = verbose
         self.debug = debug
         self.timeout = timeout
-        self.test_state_dir = None
-        self.test_branch = f"integration-test-{int(time.time())}"
-        self.test_port = self._find_free_port(start_port=12000)  # Use dynamic port allocation
-        self.tests_passed = 0
-        self.tests_failed = 0
-        self.tests_skipped = 0
 
-    def _find_free_port(self, start_port: int = 12000, max_attempts: int = 100) -> int:
-        """Find a free port starting from start_port."""
-        for port in range(start_port, start_port + max_attempts):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(('localhost', port))
-                    logger.debug(f"Found free port: {port}")
-                    return port
-            except OSError:
-                continue
 
-        raise RuntimeError(f"Could not find a free port after {max_attempts} attempts starting from {start_port}")
+# Global test configuration - will be set by CLI or default values
+test_config: Optional[IntegrationTestConfig] = None
 
-    def run_agent_vm_command(self, args: List[str], check: bool = True,
-                           timeout: Optional[int] = None) -> subprocess.CompletedProcess:
-        """Run agent-vm command with test state directory."""
-        cmd = [self.agent_vm_cmd]
-        if self.test_state_dir:
-            cmd.extend(["--state-dir", str(self.test_state_dir)])
-        if self.verbose:
-            cmd.append("--verbose")
-        cmd.extend(args)
 
-        # Use instance timeout if none specified
-        if timeout is None:
-            timeout = self.timeout
+def get_test_config() -> IntegrationTestConfig:
+    """Get test configuration, creating default if not set."""
+    global test_config
+    if test_config is None:
+        # Create default configuration if not set by CLI
+        test_config = IntegrationTestConfig()
+    return test_config
 
-        logger.debug(f"Running command: {' '.join(cmd)}")
 
+def find_free_port(start_port: int = 12000, max_attempts: int = 100) -> int:
+    """Find a free port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=check,
-                timeout=timeout
-            )
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                logger.debug(f"Found free port: {port}")
+                return port
+        except OSError:
+            continue
 
-            # Log stdout/stderr based on debug/verbose flags and result status
-            should_log_output = (
-                self.debug or  # Always log if debug is enabled
-                self.verbose or  # Always log if verbose is enabled
-                result.returncode != 0  # Always log if command failed
-            )
+    raise RuntimeError(f"Could not find a free port after {max_attempts} attempts starting from {start_port}")
 
-            if should_log_output:
-                if result.stdout:
-                    logger.debug(f"Command stdout: {result.stdout}")
-                if result.stderr:
-                    logger.debug(f"Command stderr: {result.stderr}")
 
-            return result
+def run_agent_vm_command(
+    args: List[str],
+    test_state_dir: Path,
+    check: bool = True,
+    timeout: Optional[int] = None
+) -> subprocess.CompletedProcess:
+    """Run agent-vm command with test state directory."""
+    config = get_test_config()
 
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd)}")
+    cmd = [config.agent_vm_cmd]
+    if test_state_dir:
+        cmd.extend(["--state-dir", str(test_state_dir)])
+    if config.verbose:
+        cmd.append("--verbose")
+    cmd.extend(args)
 
-            # Log captured output from timeout exception when debug is enabled
-            if self.debug:
-                if hasattr(e, 'stdout') and e.stdout:
-                    logger.error(f"Timeout stdout: {e.stdout}")
-                if hasattr(e, 'stderr') and e.stderr:
-                    logger.error(f"Timeout stderr: {e.stderr}")
+    # Use instance timeout if none specified
+    if timeout is None:
+        timeout = config.timeout
 
-            raise
+    logger.debug(f"Running command: {' '.join(cmd)}")
 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed: {' '.join(cmd)}")
-            logger.error(f"Exit code: {e.returncode}")
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=check,
+            timeout=timeout
+        )
 
-            # Always log stdout/stderr for failed commands when debug is enabled
-            if self.debug or e.stdout or e.stderr:
-                if e.stdout:
-                    logger.error(f"Failed command stdout: {e.stdout}")
-                if e.stderr:
-                    logger.error(f"Failed command stderr: {e.stderr}")
+        # Log stdout/stderr based on debug/verbose flags and result status
+        should_log_output = (
+            config.debug or  # Always log if debug is enabled
+            config.verbose or  # Always log if verbose is enabled
+            result.returncode != 0  # Always log if command failed
+        )
 
-            raise
+        if should_log_output:
+            if result.stdout:
+                logger.debug(f"Command stdout: {result.stdout}")
+            if result.stderr:
+                logger.debug(f"Command stderr: {result.stderr}")
 
-    def setup_test_environment(self):
-        """Set up isolated test environment."""
-        logger.info("🔧 SETUP: Creating isolated test environment")
+        return result
 
-        # Create temporary state directory
-        self.test_state_dir = Path(tempfile.mkdtemp(prefix="agent-vm-integration-test-"))
-        logger.info(f"Test state directory: {self.test_state_dir}")
-        logger.info(f"Using dynamically allocated port: {self.test_port}")
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd)}")
 
-        # Register cleanup function to run on exit (even if script is interrupted)
-        atexit.register(self._emergency_cleanup)
+        # Log captured output from timeout exception when debug is enabled
+        if config.debug:
+            if hasattr(e, 'stdout') and e.stdout:
+                logger.error(f"Timeout stdout: {e.stdout}")
+            if hasattr(e, 'stderr') and e.stderr:
+                logger.error(f"Timeout stderr: {e.stderr}")
 
-        # Ensure we're in a git repository
-        try:
-            subprocess.run(["git", "rev-parse", "--git-dir"],
-                         capture_output=True, check=True)
-        except subprocess.CalledProcessError:
-            logger.error("Not in a git repository. Integration tests require git.")
-            sys.exit(1)
+        raise
 
-    def _emergency_cleanup(self):
-        """Emergency cleanup function registered with atexit."""
-        if hasattr(self, 'test_state_dir') and self.test_state_dir and self.test_state_dir.exists():
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed: {' '.join(cmd)}")
+        logger.error(f"Exit code: {e.returncode}")
+
+        # Always log stdout/stderr for failed commands when debug is enabled
+        if config.debug or e.stdout or e.stderr:
+            if e.stdout:
+                logger.error(f"Failed command stdout: {e.stdout}")
+            if e.stderr:
+                logger.error(f"Failed command stderr: {e.stderr}")
+
+        raise
+
+
+def can_run_vms() -> bool:
+    """Check if we can actually run VMs (nested virtualization available)."""
+    # Check for KVM support
+    if not Path("/dev/kvm").exists():
+        return False
+
+    # Check for qemu
+    try:
+        subprocess.run(["qemu-system-x86_64", "--version"],
+                     capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+    # Check for virtualization CPU flags
+    try:
+        with open("/proc/cpuinfo") as f:
+            cpuinfo = f.read()
+            if "vmx" not in cpuinfo and "svm" not in cpuinfo:
+                return False
+    except:
+        return False
+
+    return True
+
+
+@pytest.fixture(scope="session")
+def test_environment():
+    """Set up isolated test environment for the entire test session."""
+    logger.info("🔧 SETUP: Creating isolated test environment")
+
+    # Ensure we're in a git repository
+    try:
+        subprocess.run(["git", "rev-parse", "--git-dir"],
+                     capture_output=True, check=True)
+    except subprocess.CalledProcessError:
+        pytest.fail("Not in a git repository. Integration tests require git.")
+
+    # Create temporary state directory
+    test_state_dir = Path(tempfile.mkdtemp(prefix="agent-vm-integration-test-"))
+    logger.info(f"Test state directory: {test_state_dir}")
+
+    yield test_state_dir
+
+    # Cleanup
+    logger.info("🧹 CLEANUP: Removing test environment")
+    if test_state_dir.exists():
+        cleanup_attempts = 3
+        for attempt in range(cleanup_attempts):
             try:
-                logger.debug("Emergency cleanup: removing test state directory")
-                shutil.rmtree(self.test_state_dir)
-            except Exception as e:
-                # Use print instead of logger as logging might be shut down
-                print(f"Warning: Emergency cleanup failed: {e}")
+                shutil.rmtree(test_state_dir)
+                logger.info("Test state directory cleaned up successfully")
+                break
+            except OSError as e:
+                if attempt < cleanup_attempts - 1:
+                    logger.warning(f"Cleanup attempt {attempt + 1} failed, retrying: {e}")
+                    time.sleep(1)  # Wait a bit before retrying
+                else:
+                    logger.error(f"Failed to clean up test directory after {cleanup_attempts} attempts: {e}")
+                    logger.error(f"Manual cleanup may be required: {test_state_dir}")
 
-    def cleanup_test_environment(self):
-        """Clean up test environment with robust error handling."""
-        logger.info("🧹 CLEANUP: Removing test environment")
 
-        # First try to stop any running VMs
-        if hasattr(self, 'test_branch') and self.test_branch:
-            try:
-                logger.debug("Attempting to stop test VM before cleanup...")
-                self.run_agent_vm_command(["stop", self.test_branch], check=False, timeout=30)
-            except Exception as e:
-                logger.debug(f"VM stop during cleanup failed (this is expected): {e}")
+@pytest.fixture(scope="session")
+def test_vm_config(test_environment):
+    """Set up test VM configuration."""
+    test_state_dir = test_environment
+    test_branch = f"integration-test-{int(time.time())}"
+    test_port = find_free_port(start_port=12000)
 
-        # Clean up test state directory with multiple attempts
-        if self.test_state_dir and self.test_state_dir.exists():
-            cleanup_attempts = 3
-            for attempt in range(cleanup_attempts):
-                try:
-                    shutil.rmtree(self.test_state_dir)
-                    logger.info("Test state directory cleaned up successfully")
-                    # Unregister emergency cleanup since we succeeded
-                    try:
-                        atexit.unregister(self._emergency_cleanup)
-                    except ValueError:
-                        pass  # Function wasn't registered
-                    break
-                except OSError as e:
-                    if attempt < cleanup_attempts - 1:
-                        logger.warning(f"Cleanup attempt {attempt + 1} failed, retrying: {e}")
-                        time.sleep(1)  # Wait a bit before retrying
-                    else:
-                        logger.error(f"Failed to clean up test directory after {cleanup_attempts} attempts: {e}")
-                        logger.error(f"Manual cleanup may be required: {self.test_state_dir}")
+    logger.info(f"Using test branch: {test_branch}")
+    logger.info(f"Using dynamically allocated port: {test_port}")
+
+    vm_config = {
+        "test_state_dir": test_state_dir,
+        "test_branch": test_branch,
+        "test_port": test_port
+    }
+
+    yield vm_config
+
+    # Cleanup: try to stop and destroy the VM
+    try:
+        logger.debug("Attempting to stop test VM during cleanup...")
+        run_agent_vm_command(["stop", test_branch], test_state_dir, check=False, timeout=30)
+    except Exception as e:
+        logger.debug(f"VM stop during cleanup failed (this is expected): {e}")
+
+
+@pytest.mark.integration
+@pytest.mark.vm
+@pytest.mark.timeout(120)
+def test_vm_creation(test_vm_config):
+    """Test VM creation functionality."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
+    test_port = test_vm_config["test_port"]
+
+    logger.info("🧪 TEST: VM creation")
+
+    # Test creating a VM with custom configuration
+    result = run_agent_vm_command([
+        "create",
+        "--branch", test_branch,
+        "--port", str(test_port),
+        "--host", "localhost"
+    ], test_state_dir)
+
+    # Verify VM configuration was created
+    vm_config_dir = test_state_dir / test_branch
+    config_file = vm_config_dir / "config.json"
+
+    assert config_file.exists(), "VM configuration file was not created"
+
+    # Verify configuration contents
+    with config_file.open() as f:
+        config_data = json.load(f)
+
+    assert config_data["branch"] == test_branch
+    assert config_data["port"] == test_port
+    assert config_data["host"] == "localhost"
+
+    # Verify SSH keys were created
+    ssh_dir = vm_config_dir / "ssh"
+    private_key = ssh_dir / "id_ed25519"
+    public_key = ssh_dir / "id_ed25519.pub"
+
+    assert private_key.exists(), "SSH private key was not created"
+    assert public_key.exists(), "SSH public key was not created"
+
+    # Verify workspace was cloned
+    workspace_dir = vm_config_dir / "workspace"
+    assert workspace_dir.exists(), "Workspace directory was not created"
+    assert (workspace_dir / ".git").exists(), "Workspace is not a git repository"
+
+    logger.info("✅ PASS: VM creation successful")
+
+
+@pytest.mark.integration
+@pytest.mark.vm
+def test_vm_listing(test_vm_config):
+    """Test VM listing functionality."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
+
+    logger.info("🧪 TEST: VM listing")
+
+    result = run_agent_vm_command(["list"], test_state_dir)
+
+    # Should show our created VM
+    assert test_branch in result.stdout, f"Created VM {test_branch} not found in list output"
+
+    logger.info("✅ PASS: VM listing successful")
+
+
+@pytest.mark.integration
+@pytest.mark.vm
+def test_vm_status(test_vm_config):
+    """Test VM status functionality."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
+
+    logger.info("🧪 TEST: VM status")
+
+    result = run_agent_vm_command(["status", test_branch], test_state_dir)
+
+    # Should show VM as stopped initially
+    if "🔴 VM Status: Stopped" not in result.stdout:
+        logger.warning("VM status output may have changed format")
+
+    logger.info("✅ PASS: VM status check successful")
+
+
+@pytest.mark.integration
+@pytest.mark.vm
+@pytest.mark.slow
+@pytest.mark.timeout(300)
+def test_vm_start_stop_cycle(test_vm_config):
+    """Test VM start and stop functionality."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
+    config = get_test_config()
+
+    logger.info("🧪 TEST: VM start/stop cycle")
+
+    # Skip this test if we can't run VMs (e.g., in CI without nested virtualization)
+    if not can_run_vms():
+        pytest.skip("Nested virtualization not available")
+
+    # Test starting VM
+    logger.info("Starting VM...")
+
+    if config.debug:
+        logger.debug(f"About to start VM with timeout {config.timeout}s")
+
+    result = run_agent_vm_command(["start", test_branch], test_state_dir)
+
+    if config.debug:
+        logger.debug("VM start command completed successfully")
+
+    # Give it a moment to fully start
+    time.sleep(5)
+
+    # Check status after start
+    logger.info("Checking VM status after start...")
+    status_result = run_agent_vm_command(["status", test_branch], test_state_dir)
+
+    if config.debug:
+        logger.debug(f"VM status after start: {status_result.stdout}")
+
+    if "🟢 VM Status: Running" not in status_result.stdout:
+        logger.warning("VM may not have started properly")
+
+    # Test stopping VM
+    logger.info("Stopping VM...")
+    stop_result = run_agent_vm_command(["stop", test_branch], test_state_dir)
+
+    if config.debug:
+        logger.debug(f"VM stop result: {stop_result.stdout}")
+
+    # Check status after stop
+    logger.info("Checking VM status after stop...")
+    status_result = run_agent_vm_command(["status", test_branch], test_state_dir)
+
+    if config.debug:
+        logger.debug(f"VM status after stop: {status_result.stdout}")
+
+    if "🔴 VM Status: Stopped" not in status_result.stdout:
+        logger.warning("VM may not have stopped properly")
+
+    logger.info("✅ PASS: VM start/stop cycle successful")
+
+
+@pytest.mark.integration
+@pytest.mark.vm
+@pytest.mark.slow
+@pytest.mark.timeout(300)
+def test_agent_service_startup(test_vm_config):
+    """Test that the agent service starts properly in the VM."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
+    config = get_test_config()
+
+    logger.info("🧪 TEST: Agent service startup and health")
+
+    # Skip this test if we can't run VMs
+    if not can_run_vms():
+        pytest.skip("Nested virtualization not available")
+
+    try:
+        # Start the VM
+        logger.info("Starting VM for agent service test...")
+        result = run_agent_vm_command(["start", test_branch], test_state_dir)
+
+        if config.debug:
+            logger.debug("VM started, allowing services to initialize...")
+
+        # Wait longer for services to fully start
+        time.sleep(10)
+
+        # Test 1: Check VM status to see if agent service is mentioned
+        logger.info("Checking overall VM status...")
+        status_result = run_agent_vm_command(["status", test_branch], test_state_dir)
+
+        if config.debug:
+            logger.debug(f"VM status output:\n{status_result.stdout}")
+
+        # Look for positive indicators in the status output
+        status_indicators = [
+            "🟢 Agent Service: Running",
+            "🟢 MCP Proxy: Healthy",
+            "Agent Service: Running"
+        ]
+
+        service_running = any(indicator in status_result.stdout for indicator in status_indicators)
+        if service_running:
+            logger.info("✓ Agent service appears to be running based on status")
         else:
-            logger.debug("No test state directory to clean up")
+            logger.warning("⚠️ Agent service status unclear from VM status output")
 
-    def test_vm_creation(self):
-        """Test VM creation functionality."""
-        logger.info("🧪 TEST: VM creation")
+        # Test 2: Check for error indicators that would suggest service failure
+        error_indicators = [
+            "🟡 Agent Service: Not running",
+            "❌ Agent service is not active",
+            "Failed",
+            "Error"
+        ]
 
+        has_errors = any(error in status_result.stdout for error in error_indicators)
+        assert not has_errors, "Agent service appears to have errors"
+
+        # Test 3: Check that MCP port is accessible (if mentioned in status)
+        if "MCP Endpoint" in status_result.stdout:
+            logger.info("✓ MCP endpoint is accessible according to status")
+        else:
+            logger.warning("⚠️ MCP endpoint status not explicitly shown")
+
+        # Test 4: Use logs command to check for agent service activity
+        logger.info("Checking agent service logs...")
         try:
-            # Test creating a VM with custom configuration
-            result = self.run_agent_vm_command([
-                "create",
-                "--branch", self.test_branch,
-                "--port", str(self.test_port),
-                "--host", "localhost"
-            ])
-
-            # Verify VM configuration was created
-            vm_config_dir = self.test_state_dir / self.test_branch
-            config_file = vm_config_dir / "config.json"
-
-            if not config_file.exists():
-                raise AssertionError("VM configuration file was not created")
-
-            # Verify configuration contents
-            with config_file.open() as f:
-                config_data = json.load(f)
-
-            assert config_data["branch"] == self.test_branch
-            assert config_data["port"] == self.test_port
-            assert config_data["host"] == "localhost"
-
-            # Verify SSH keys were created
-            ssh_dir = vm_config_dir / "ssh"
-            private_key = ssh_dir / "id_ed25519"
-            public_key = ssh_dir / "id_ed25519.pub"
-
-            assert private_key.exists(), "SSH private key was not created"
-            assert public_key.exists(), "SSH public key was not created"
-
-            # Verify workspace was cloned
-            workspace_dir = vm_config_dir / "workspace"
-            assert workspace_dir.exists(), "Workspace directory was not created"
-            assert (workspace_dir / ".git").exists(), "Workspace is not a git repository"
-
-            logger.info("✅ PASS: VM creation successful")
-            self.tests_passed += 1
-
+            # The logs command might be interactive, so use a short timeout
+            logs_result = run_agent_vm_command(["logs", test_branch], test_state_dir, timeout=10)
+            logger.info("✓ Agent service logs accessible")
+        except subprocess.TimeoutExpired:
+            # This is expected since logs might be interactive
+            logger.info("✓ Logs command started (interactive mode expected)")
         except Exception as e:
-            logger.error(f"❌ FAIL: VM creation failed: {e}")
-            self.tests_failed += 1
-            raise
+            logger.warning(f"⚠️ Could not access logs: {e}")
 
-    def test_vm_listing(self):
-        """Test VM listing functionality."""
-        logger.info("🧪 TEST: VM listing")
+        logger.info("✅ PASS: Agent service startup test successful")
 
+    finally:
+        # Always try to stop the VM
         try:
-            result = self.run_agent_vm_command(["list"])
-
-            # Should show our created VM
-            if self.test_branch not in result.stdout:
-                raise AssertionError(f"Created VM {self.test_branch} not found in list output")
-
-            logger.info("✅ PASS: VM listing successful")
-            self.tests_passed += 1
-
-        except Exception as e:
-            logger.error(f"❌ FAIL: VM listing failed: {e}")
-            self.tests_failed += 1
-            raise
-
-    def test_vm_status(self):
-        """Test VM status functionality."""
-        logger.info("🧪 TEST: VM status")
-
-        try:
-            result = self.run_agent_vm_command(["status", self.test_branch])
-
-            # Should show VM as stopped initially
-            if "🔴 VM Status: Stopped" not in result.stdout:
-                logger.warning("VM status output may have changed format")
-
-            logger.info("✅ PASS: VM status check successful")
-            self.tests_passed += 1
-
-        except Exception as e:
-            logger.error(f"❌ FAIL: VM status check failed: {e}")
-            self.tests_failed += 1
-            raise
-
-    def test_vm_start_stop_cycle(self):
-        """Test VM start and stop functionality."""
-        logger.info("🧪 TEST: VM start/stop cycle")
-
-        # Skip this test if we can't run VMs (e.g., in CI without nested virtualization)
-        if not self._can_run_vms():
-            logger.warning("⚠️ SKIP: VM start/stop cycle (nested virtualization not available)")
-            self.tests_skipped += 1
-            return
-
-        try:
-            # Test starting VM
-            logger.info("Starting VM...")
-
-            if self.debug:
-                logger.debug(f"About to start VM with timeout {self.timeout}s")
-
-            result = self.run_agent_vm_command(["start", self.test_branch])
-
-            if self.debug:
-                logger.debug("VM start command completed successfully")
-
-            # Give it a moment to fully start
-            time.sleep(5)
-
-            # Check status after start
-            logger.info("Checking VM status after start...")
-            status_result = self.run_agent_vm_command(["status", self.test_branch])
-
-            if self.debug:
-                logger.debug(f"VM status after start: {status_result.stdout}")
-
-            if "🟢 VM Status: Running" not in status_result.stdout:
-                logger.warning("VM may not have started properly")
-
-            # Test stopping VM
-            logger.info("Stopping VM...")
-            stop_result = self.run_agent_vm_command(["stop", self.test_branch])
-
-            if self.debug:
-                logger.debug(f"VM stop result: {stop_result.stdout}")
-
-            # Check status after stop
-            logger.info("Checking VM status after stop...")
-            status_result = self.run_agent_vm_command(["status", self.test_branch])
-
-            if self.debug:
-                logger.debug(f"VM status after stop: {status_result.stdout}")
-
-            if "🔴 VM Status: Stopped" not in status_result.stdout:
-                logger.warning("VM may not have stopped properly")
-
-            logger.info("✅ PASS: VM start/stop cycle successful")
-            self.tests_passed += 1
-
-        except subprocess.TimeoutExpired as e:
-            logger.error("❌ FAIL: VM start/stop cycle timed out")
-
-            if self.debug:
-                logger.error(f"Timeout details: command={' '.join(e.cmd) if e.cmd else 'unknown'}, timeout={e.timeout}")
-                logger.error("This usually indicates VM startup issues. Check:")
-                logger.error("- Nested virtualization support (/dev/kvm exists)")
-                logger.error("- QEMU installation and dependencies")
-                logger.error("- Available system resources (RAM, CPU)")
-                logger.error("- Nix build system can create VMs")
-
-            self.tests_failed += 1
-            # Try to clean up
-            try:
-                logger.info("Attempting cleanup after timeout...")
-                self.run_agent_vm_command(["stop", self.test_branch], check=False)
-            except:
-                if self.debug:
-                    logger.debug("Cleanup also failed or timed out")
-                pass
-
-        except Exception as e:
-            logger.error(f"❌ FAIL: VM start/stop cycle failed: {e}")
-
-            if self.debug:
-                logger.error(f"Exception type: {type(e).__name__}")
-                logger.error(f"Exception details: {str(e)}")
-
-            self.tests_failed += 1
-            # Try to clean up
-            try:
-                logger.info("Attempting cleanup after failure...")
-                self.run_agent_vm_command(["stop", self.test_branch], check=False)
-            except:
-                if self.debug:
-                    logger.debug("Cleanup also failed")
-                pass
-
-    def test_agent_service_startup(self):
-        """Test that the agent service starts properly in the VM."""
-        logger.info("🧪 TEST: Agent service startup and health")
-
-        # Skip this test if we can't run VMs
-        if not self._can_run_vms():
-            logger.warning("⚠️ SKIP: Agent service startup (nested virtualization not available)")
-            self.tests_skipped += 1
-            return
-
-        try:
-            # Start the VM
-            logger.info("Starting VM for agent service test...")
-            result = self.run_agent_vm_command(["start", self.test_branch])
-
-            if self.debug:
-                logger.debug("VM started, allowing services to initialize...")
-
-            # Wait longer for services to fully start
-            time.sleep(10)
-
-            # Test 1: Check VM status to see if agent service is mentioned
-            logger.info("Checking overall VM status...")
-            status_result = self.run_agent_vm_command(["status", self.test_branch])
-
-            if self.debug:
-                logger.debug(f"VM status output:\n{status_result.stdout}")
-
-            # Look for positive indicators in the status output
-            status_indicators = [
-                "🟢 Agent Service: Running",
-                "🟢 MCP Proxy: Healthy",
-                "Agent Service: Running"
-            ]
-
-            service_running = any(indicator in status_result.stdout for indicator in status_indicators)
-            if service_running:
-                logger.info("✓ Agent service appears to be running based on status")
-            else:
-                logger.warning("⚠️ Agent service status unclear from VM status output")
-
-            # Test 2: Check for error indicators that would suggest service failure
-            error_indicators = [
-                "🟡 Agent Service: Not running",
-                "❌ Agent service is not active",
-                "Failed",
-                "Error"
-            ]
-
-            has_errors = any(error in status_result.stdout for error in error_indicators)
-            if has_errors:
-                logger.error("❌ Found error indicators in VM status")
-                raise AssertionError("Agent service appears to have errors")
-
-            # Test 3: Check that MCP port is accessible (if mentioned in status)
-            if "MCP Endpoint" in status_result.stdout:
-                logger.info("✓ MCP endpoint is accessible according to status")
-            else:
-                logger.warning("⚠️ MCP endpoint status not explicitly shown")
-
-            # Test 4: Use logs command to check for agent service activity
-            logger.info("Checking agent service logs...")
-            try:
-                # The logs command might be interactive, so use a short timeout
-                logs_result = self.run_agent_vm_command(["logs", self.test_branch], timeout=10)
-                logger.info("✓ Agent service logs accessible")
-            except subprocess.TimeoutExpired:
-                # This is expected since logs might be interactive
-                logger.info("✓ Logs command started (interactive mode expected)")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not access logs: {e}")
-
-            logger.info("✅ PASS: Agent service startup test successful")
-            self.tests_passed += 1
-
-        except subprocess.TimeoutExpired as e:
-            logger.error("❌ FAIL: Agent service startup test timed out")
-            if self.debug:
-                logger.error(f"Timeout details: {e}")
-            self.tests_failed += 1
-
-        except Exception as e:
-            logger.error(f"❌ FAIL: Agent service startup test failed: {e}")
-            if self.debug:
-                logger.error(f"Exception details: {str(e)}")
-            self.tests_failed += 1
-
-        finally:
-            # Always try to stop the VM
-            try:
-                logger.info("Stopping VM after agent service test...")
-                self.run_agent_vm_command(["stop", self.test_branch], check=False)
-            except:
-                if self.debug:
-                    logger.debug("VM stop after agent service test failed")
-                pass
-
-    def test_vm_destruction(self):
-        """Test VM destruction functionality."""
-        logger.info("🧪 TEST: VM destruction")
-
-        try:
-            # Ensure VM is stopped first
-            try:
-                self.run_agent_vm_command(["stop", self.test_branch], check=False)
-            except:
-                pass  # VM might already be stopped
-
-            # Test destroying VM
-            result = self.run_agent_vm_command(["destroy", self.test_branch])
-
-            # Verify VM configuration was removed
-            vm_config_dir = self.test_state_dir / self.test_branch
-            if vm_config_dir.exists():
-                raise AssertionError("VM configuration directory was not removed")
-
-            # Verify it's no longer in the list
-            list_result = self.run_agent_vm_command(["list"])
-            if self.test_branch in list_result.stdout:
-                raise AssertionError("Destroyed VM still appears in list")
-
-            logger.info("✅ PASS: VM destruction successful")
-            self.tests_passed += 1
-
-        except Exception as e:
-            logger.error(f"❌ FAIL: VM destruction failed: {e}")
-            self.tests_failed += 1
-            raise
-
-    def _can_run_vms(self) -> bool:
-        """Check if we can actually run VMs (nested virtualization available)."""
-        # Check for KVM support
-        if not Path("/dev/kvm").exists():
-            return False
-
-        # Check for qemu
-        try:
-            subprocess.run(["qemu-system-x86_64", "--version"],
-                         capture_output=True, check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
-
-        # Check for virtualization CPU flags
-        try:
-            with open("/proc/cpuinfo") as f:
-                cpuinfo = f.read()
-                if "vmx" not in cpuinfo and "svm" not in cpuinfo:
-                    return False
+            logger.info("Stopping VM after agent service test...")
+            run_agent_vm_command(["stop", test_branch], test_state_dir, check=False)
         except:
-            return False
-
-        return True
-
-    def run_all_tests(self):
-        """Run all integration tests with robust cleanup."""
-        logger.info("🚀 Starting agent-vm integration tests")
-        logger.info(f"Using agent-vm command: {self.agent_vm_cmd}")
-
-        start_time = time.time()
-        cleanup_attempted = False
-
-        try:
-            self.setup_test_environment()
-
-            # Run tests in order
-            test_methods = [
-                self.test_vm_creation,
-                self.test_vm_listing,
-                self.test_vm_status,
-                self.test_vm_start_stop_cycle,
-                self.test_agent_service_startup,
-                self.test_vm_destruction,
-            ]
-
-            for test_method in test_methods:
-                try:
-                    test_method()
-                except Exception as e:
-                    logger.error(f"Test {test_method.__name__} failed: {e}")
-                    # Continue with other tests
-
-        except Exception as e:
-            logger.error(f"Critical error during test setup or execution: {e}")
-        finally:
-            # Always attempt cleanup, even if tests failed or were interrupted
-            try:
-                self.cleanup_test_environment()
-                cleanup_attempted = True
-            except Exception as e:
-                logger.error(f"Cleanup failed: {e}")
-                cleanup_attempted = False
-
-        end_time = time.time()
-        duration = end_time - start_time
-
-        # Report results
-        total_tests = self.tests_passed + self.tests_failed + self.tests_skipped
-        logger.info("=" * 60)
-        logger.info("🏁 Integration Test Results")
-        logger.info(f"Total tests: {total_tests}")
-        logger.info(f"✅ Passed: {self.tests_passed}")
-        logger.info(f"❌ Failed: {self.tests_failed}")
-        logger.info(f"⚠️ Skipped: {self.tests_skipped}")
-        logger.info(f"⏱️ Duration: {duration:.1f} seconds")
-
-        if not cleanup_attempted:
-            logger.warning("⚠️ Cleanup may have failed - manual cleanup might be required")
-
-        if self.tests_failed > 0:
-            logger.error("❌ Integration tests FAILED")
-            return False
-        else:
-            logger.info("✅ All integration tests PASSED")
-            return True
+            if config.debug:
+                logger.debug("VM stop after agent service test failed")
+            pass
 
 
-# Global state for options
-_global_state = {
-    "agent_vm_cmd": "agent-vm",
-    "verbose": False,
-    "debug": False,
-    "timeout": 120
-}
+@pytest.mark.integration
+@pytest.mark.vm
+@pytest.mark.timeout(120)
+def test_vm_destruction(test_vm_config):
+    """Test VM destruction functionality."""
+    test_state_dir = test_vm_config["test_state_dir"]
+    test_branch = test_vm_config["test_branch"]
 
-# Initialize typer app
+    logger.info("🧪 TEST: VM destruction")
+
+    # Ensure VM is stopped first
+    try:
+        run_agent_vm_command(["stop", test_branch], test_state_dir, check=False)
+    except:
+        pass  # VM might already be stopped
+
+    # Test destroying VM
+    result = run_agent_vm_command(["destroy", test_branch], test_state_dir)
+
+    # Verify VM configuration was removed
+    vm_config_dir = test_state_dir / test_branch
+    assert not vm_config_dir.exists(), "VM configuration directory was not removed"
+
+    # Verify it's no longer in the list
+    list_result = run_agent_vm_command(["list"], test_state_dir)
+    assert test_branch not in list_result.stdout, "Destroyed VM still appears in list"
+
+    logger.info("✅ PASS: VM destruction successful")
+
+
+# CLI interface using typer
 app = typer.Typer(
     name="integration-test",
-    help="Integration test executable for agent-vm",
+    help="Integration test executable for agent-vm using pytest",
     epilog="""
 This executable runs comprehensive integration tests for agent-vm by calling
 the CLI exclusively (no mocks). It creates an isolated test environment and
@@ -706,10 +608,13 @@ def main_callback(
     timeout: int = typer.Option(120, "--timeout", "-t", help="Timeout in seconds for VM operations (default: 120)")
 ) -> None:
     """Main callback to handle global options."""
-    _global_state["agent_vm_cmd"] = agent_vm
-    _global_state["verbose"] = verbose
-    _global_state["debug"] = debug
-    _global_state["timeout"] = timeout
+    global test_config
+    test_config = IntegrationTestConfig(
+        agent_vm_cmd=agent_vm,
+        verbose=verbose,
+        debug=debug,
+        timeout=timeout
+    )
 
     # Set up logging - debug mode implies verbose
     setup_logging(verbose=verbose or debug)
@@ -717,20 +622,51 @@ def main_callback(
 
 @app.command()
 def run(
-    ctx: typer.Context
+    ctx: typer.Context,
+    pytest_args: List[str] = typer.Argument(None, help="Additional pytest arguments")
 ) -> None:
-    """Run all integration tests."""
+    """Run all integration tests using pytest."""
     try:
-        # Run integration tests
-        test_runner = AgentVMIntegrationTest(
-            agent_vm_cmd=_global_state["agent_vm_cmd"],
-            verbose=_global_state["verbose"],
-            debug=_global_state["debug"],
-            timeout=_global_state["timeout"]
-        )
+        config = get_test_config()
 
-        success = test_runner.run_all_tests()
-        raise typer.Exit(0 if success else 1)
+        logger.info("🚀 Starting agent-vm integration tests using pytest")
+        logger.info(f"Using agent-vm command: {config.agent_vm_cmd}")
+
+        # Build pytest arguments
+        pytest_argv = [__file__]  # Run tests from this file
+
+        # Add pytest configuration
+        pytest_argv.extend([
+            "-v",  # Verbose output
+            "--tb=short",  # Short traceback format
+        ])
+
+        # Configure to ignore cache warnings in read-only environment
+        pytest_argv.extend([
+            "-p", "no:cacheprovider",  # Disable cache provider to avoid read-only warnings
+        ])
+
+        # Add timeout configuration if needed
+        if config.timeout != 120:  # Only if different from default
+            pytest_argv.extend([f"--timeout={config.timeout}"])
+
+        # Add debug options if enabled
+        if config.debug:
+            pytest_argv.extend(["-s", "--capture=no"])  # No capture for debug output
+
+        # Add any additional pytest arguments passed by user
+        if pytest_args:
+            pytest_argv.extend(pytest_args)
+
+        # Run pytest
+        exit_code = pytest.main(pytest_argv)
+
+        if exit_code == 0:
+            logger.info("✅ All integration tests PASSED")
+        else:
+            logger.error("❌ Integration tests FAILED")
+
+        raise typer.Exit(exit_code)
 
     except typer.Exit:
         # Re-raise typer.Exit exceptions (these are normal)
