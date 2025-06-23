@@ -84,8 +84,8 @@
                       # Don't traverse into excluded directories
                       !(final.lib.hasPrefix "cabal.project.local" relativePath)
                       &&
-                        # no bash scripts
-                        !(final.lib.hasSuffix ".sh" baseName)
+                        # no bash scripts except test fixtures
+                        !(final.lib.hasSuffix ".sh" baseName && !(final.lib.hasPrefix "test/fixtures/" relativePath))
                       && !(final.lib.hasSuffix ".md" baseName)
                       &&
                         # non-haskell related files

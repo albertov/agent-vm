@@ -228,8 +228,12 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       length spawnTraces `shouldBe` 1
       case spawnTraces of
         [ProcessSpawned path args] -> do
-          toS path `shouldContain` "echo_stdout.sh"
-          args `shouldBe` ["arg1", "arg2"]
+          path `shouldBe` "bash"
+          case args of
+            (scriptPath : scriptArgs) -> do
+              toS scriptPath `shouldSatisfy` (\arg -> "echo_stdout.sh" `isInfixOf` arg)
+              scriptArgs `shouldBe` ["arg1", "arg2"]
+            [] -> expectationFailure "Expected script path and arguments"
         _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
 
   describe "Process output capture functions" $ do
@@ -237,7 +241,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       -- Run process that outputs to both
       script <- fixturePath "echo_both.sh"
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture script []
+        process <- P.startLoggedProcessWithCapture "bash" [toS script]
 
         -- Wait and capture output
         result <- waitForProcessCaptured defWait process
@@ -259,7 +263,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       runVMT @IO testEnv $ do
         script <- fixturePath "exit_failure.sh"
         ((), stdout, stderr) <-
-          P.withVMProcessCaptured script [] defTimeout $
+          P.withVMProcessCaptured "bash" [toS script] defTimeout $
             void . P.waitForProcess defWait
         liftIO $ do
           -- Check captured output
@@ -270,7 +274,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       runVMT @IO testEnv $ do
         script <- fixturePath "rapid_output.sh"
         ((), stdout, stderr) <-
-          P.withVMProcessCaptured script [] defTimeout $
+          P.withVMProcessCaptured "bash" [toS script] defTimeout $
             void . P.waitForProcess defWait
         liftIO $ do
           -- Should have captured at least some output
@@ -280,7 +284,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
     it "captures output with withVMProcessCaptured" $ \(testEnv, _) -> do
       script <- fixturePath "echo_both.sh"
       (result, stdout, stderr) <- runVMT @IO testEnv $
-        withVMProcessCaptured script [] defTimeout $ \process -> do
+        withVMProcessCaptured "bash" [toS script] defTimeout $ \process -> do
           -- Wait for completion
           void $ P.waitForProcess defWait process
           pure "test result"
@@ -296,7 +300,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       runVMT @IO testEnv $ do
         script <- fixturePath "no_output.sh"
         ((), stdout, stderr) <-
-          P.withVMProcessCaptured script [] defTimeout $
+          P.withVMProcessCaptured "bash" [toS script] defTimeout $
             void . P.waitForProcess defWait
         liftIO $ do
           stdout `shouldBe` ""
@@ -307,7 +311,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       runVMT @IO testEnv $ do
         script <- fixturePath "rapid_output.sh"
         ((), stdout, stderr) <-
-          P.withVMProcessCaptured script [] defTimeout $
+          P.withVMProcessCaptured "bash" [toS script] defTimeout $
             void . P.waitForProcess defWait
         liftIO $ do
           let stdoutLines = lines stdout
@@ -328,7 +332,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       result <- UIO.try $
         runVMT @IO testEnv $ do
           script <- fixturePath "echo_both.sh"
-          withVMProcessCaptured script [] defTimeout $ \_ -> do
+          withVMProcessCaptured "bash" [toS script] defTimeout $ \_ -> do
             -- Wait a bit to ensure some output is generated
             liftIO $ delay 100_000
             -- Throw an exception
@@ -389,8 +393,8 @@ withFixture :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => FilePath -> (VMPr
 withFixture scriptText fun = do
   script <- fixturePath scriptText
   P.withVMProcess
-    script
-    []
+    "bash"
+    [toS script]
     defTimeout
     fun
 
@@ -403,8 +407,8 @@ withFixtureArgs ::
 withFixtureArgs scriptText args fun = do
   script <- fixturePath scriptText
   P.withVMProcess
-    script
-    args
+    "bash"
+    (toS script : args)
     defTimeout
     fun
 
