@@ -91,7 +91,7 @@ in
 
   # Security hardening
   security = {
-    allowUserNamespaces = false;
+    allowUserNamespaces = true; # Chrome needs user namespaces for its sandbox
     lockKernelModules = true;
     protectKernelImage = true;
     # Configure passwordless sudo for dev user for systemctl commands
@@ -101,7 +101,7 @@ in
     };
   };
 
-  # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
+  # Nix sandbox configuration
   nix.settings.sandbox = false;
   nix.settings.experimental-features = [
     "nix-command"

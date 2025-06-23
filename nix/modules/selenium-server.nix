@@ -133,7 +133,7 @@ in
         # === NAMESPACE AND IPC PROTECTION ===
 
         # Block control group modifications - prevents container escape via cgroup manipulation
-        ProtectControlGroups = true;
+        ProtectControlGroups = false;
 
         # Restrict network address families - only allow necessary network protocols
         RestrictAddressFamilies = [
