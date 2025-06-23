@@ -115,7 +115,7 @@ inputs: final: prev:
   integration-test = final.writeShellApplication {
     name = "integration-test";
     runtimeInputs = with final; [
-      python3
+      (python3.withPackages (ps: with ps; [ typer ]))
       agent-vm
       git
       openssh
