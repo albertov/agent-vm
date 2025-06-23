@@ -3,7 +3,7 @@
 -- | Tests for process management
 module AgentVM.ProcessSpec (spec) where
 
-import AgentVM.Env (AgentVmEnv (..), runVM)
+import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log (AgentVmTrace, vmLogger)
 import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startVMProcess)

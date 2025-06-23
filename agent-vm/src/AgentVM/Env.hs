@@ -4,7 +4,6 @@
 -- | Environment module for AgentVM operations
 module AgentVM.Env
   ( AgentVmEnv (..),
-    runVM,
   )
 where
 
@@ -20,7 +19,3 @@ data AgentVmEnv = AgentVmEnv
   -- Add more fields as needed
   }
   deriving (Generic)
-
--- | Run a VM operation in the AgentVmEnv environment
-runVM :: AgentVmEnv -> ReaderT AgentVmEnv m a -> m a
-runVM = flip runReaderT
