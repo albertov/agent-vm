@@ -19,7 +19,22 @@
     diskSize = 1024*32; # 32GB disk
     graphics = false; # Headless for better performance
     mountHostNixStore = true;
-    additionalPaths = [ config.system.build.toplevel ];
+    additionalPaths = 
+      let
+        shell = config.services.mcp-proxy.shell;
+        systemChecks = self.checks.${pkgs.system} or {};
+        allItems = [
+          config.system.build.toplevel
+          shell
+        ] ++ (shell.buildInputs or [])
+          ++ (shell.nativeBuildInputs or []) 
+          ++ (shell.propagatedBuildInputs or [])
+          ++ (shell.propagatedNativeBuildInputs or [])
+          ++ (pkgs.lib.attrValues systemChecks);
+        
+        closure = pkgs.closureInfo { rootPaths = allItems; };
+        storePaths = pkgs.lib.splitString "\n" (builtins.readFile "${closure}/store-paths");
+      in pkgs.lib.filter (path: path != "") storePaths;
     writableStore = true;
     writableStoreUseTmpfs = false;
     useNixStoreImage = false;
