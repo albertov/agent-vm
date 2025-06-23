@@ -59,7 +59,7 @@
           hoogleEnv = final.hixProject.ghcWithHoogle (
             _:
             builtins.attrValues (
-              final.lib.filterAttrs (_: p: p.isLocal or false && p.components ?  library) final.hixProject.hsPkgs
+              final.lib.filterAttrs (_: p: p.isLocal or false && p.components ? library) final.hixProject.hsPkgs
             )
           );
           hoogle = final.writeShellApplication {
@@ -113,20 +113,20 @@
     {
       nixosConfigurations = {
         agent-vm = nixpkgs.lib.nixosSystem {
-        specialArgs = {
-          inherit inputs self;
+          specialArgs = {
+            inherit inputs self;
+          };
+          modules = [
+            {
+              nixpkgs = {
+                inherit overlays;
+                inherit (haskellNix) config;
+                system = "x86_64-linux";
+              };
+            }
+            (import ./nix/vm-config.nix)
+          ];
         };
-        modules = [
-          {
-            nixpkgs = {
-              inherit overlays;
-              inherit (haskellNix) config;
-              system = "x86_64-linux";
-            };
-          }
-          (import ./nix/vm-config.nix)
-        ];
-      };
       };
     }
     // flake-utils.lib.eachDefaultSystem (

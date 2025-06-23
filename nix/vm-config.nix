@@ -1,5 +1,11 @@
 # vm-config.nix
-{ self, config, inputs, pkgs, ... }:
+{
+  self,
+  config,
+  inputs,
+  pkgs,
+  ...
+}:
 {
   imports = [
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
@@ -14,7 +20,7 @@
 
     # High-performance workspace sharing via VirtioFS
     sharedDirectories = {
-      workspace = {  
+      workspace = {
         # source gets injected by agent-vm
         source = "/home/alberto/src/agent-vm";
         target = "/var/lib/mcp-proxy/workspace";
@@ -74,7 +80,7 @@
       enabled = true;
       command = "${pkgs.codemcp}/bin/codemcp";
     };
-    allowOrigins = ["https://claude.ai"];
+    allowOrigins = [ "https://claude.ai" ];
   };
 
   # System state version

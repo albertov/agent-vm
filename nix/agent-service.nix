@@ -74,8 +74,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    networking.firewall.allowedTCPPorts =
-      lib.optional cfg.openFirewall [ cfg.port ];
+    networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall [ cfg.port ];
 
     systemd.services.agent-mcp =
       let
@@ -176,7 +175,7 @@ in
     users.users = lib.mkIf (cfg.user != "root" && cfg.user != "dev") {
       ${cfg.user} = {
         isNormalUser = true;
-        uid =  1000; #TODO: Make configurable and inject from host
+        uid = 1000; # TODO: Make configurable and inject from host
         group = cfg.group;
         description = "Agent MCP service user";
       };

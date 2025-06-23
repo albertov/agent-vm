@@ -100,6 +100,9 @@ Use "git show" to show the changes of a commit ot range of commits
 # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
 verbosity = "DEBUG"
 
+[commands.bash]
+command = ["bash"]
+
 [commands.test]
 command = ["nix", "flake", "check"]
 

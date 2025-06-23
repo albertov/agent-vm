@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -22,16 +27,18 @@ let
 
       args = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         description = "Arguments to pass to the command.";
         example = [ "mcp-server-fetch" ];
       };
 
       environment = mkOption {
         type = types.attrsOf types.str;
-        default = {};
+        default = { };
         description = "Environment variables specific to this named server.";
-        example = { API_KEY = "secret"; };
+        example = {
+          API_KEY = "secret";
+        };
       };
 
       workingDirectory = mkOption {
@@ -43,42 +50,73 @@ let
   };
 
   # Generate command line arguments
-  mkArgs = let
-    mkServerScript = name: server:
-      let
-        app = pkgs.writeShellApplication {
-          inherit name;
-          text = "exec ${server.command} ${escapeShellArgs server.args}";
-        };
-      in "${app}/bin/${name}";
-    # Server mode arguments  
-    serverArgs = 
-      optionals (cfg.defaultServer.enable) [ cfg.defaultServer.command ] ++
-      optionals (cfg.port != 0) [ "--port" (toString cfg.port) ] ++
-      optionals (cfg.host != "127.0.0.1") [ "--host" cfg.host ] ++
-      optionals cfg.stateless [ "--stateless" ] ++
-      optionals (cfg.allowOrigins != [])
-        (lib.concatMap (x:  ["--allow-origin" x]) cfg.allowOrigins) ++
-      flatten (mapAttrsToList (name: server: [ "--named-server" name (mkServerScript name server)]) 
-        (filterAttrs (_: server: server.enabled) cfg.namedServers)) ++
-      optionals (cfg.defaultServer.enable) [ "--" ] ++
-      cfg.defaultServer.args;
+  mkArgs =
+    let
+      mkServerScript =
+        name: server:
+        let
+          app = pkgs.writeShellApplication {
+            inherit name;
+            text = "exec ${server.command} ${escapeShellArgs server.args}";
+          };
+        in
+        "${app}/bin/${name}";
+      # Server mode arguments
+      serverArgs =
+        optionals (cfg.defaultServer.enable) [ cfg.defaultServer.command ]
+        ++ optionals (cfg.port != 0) [
+          "--port"
+          (toString cfg.port)
+        ]
+        ++ optionals (cfg.host != "127.0.0.1") [
+          "--host"
+          cfg.host
+        ]
+        ++ optionals cfg.stateless [ "--stateless" ]
+        ++ optionals (cfg.allowOrigins != [ ]) (
+          lib.concatMap (x: [
+            "--allow-origin"
+            x
+          ]) cfg.allowOrigins
+        )
+        ++ flatten (
+          mapAttrsToList (name: server: [
+            "--named-server"
+            name
+            (mkServerScript name server)
+          ]) (filterAttrs (_: server: server.enabled) cfg.namedServers)
+        )
+        ++ optionals (cfg.defaultServer.enable) [ "--" ]
+        ++ cfg.defaultServer.args;
 
-    # Global arguments
-    globalArgs = 
-      optionals cfg.debug [ "--debug" ] ++
-      optionals cfg.passEnvironment [ "--pass-environment" ] ++
-      flatten (mapAttrsToList (k: v: [ "--env" k v ]) cfg.environment) ++
-      optionals (cfg.workingDirectory != null) [ "--cwd" cfg.workingDirectory ];
+      # Global arguments
+      globalArgs =
+        optionals cfg.debug [ "--debug" ]
+        ++ optionals cfg.passEnvironment [ "--pass-environment" ]
+        ++ flatten (
+          mapAttrsToList (k: v: [
+            "--env"
+            k
+            v
+          ]) cfg.environment
+        )
+        ++ optionals (cfg.workingDirectory != null) [
+          "--cwd"
+          cfg.workingDirectory
+        ];
 
-  in serverArgs ++ globalArgs;
+    in
+    serverArgs ++ globalArgs;
 
   # Generate environment variables
-  mkEnvironment = 
-    cfg.environment //
-    (optionalAttrs cfg.passEnvironment (filterAttrs (n: v: hasPrefix "MCP_" n || hasPrefix "UV_" n) config.environment.variables));
+  mkEnvironment =
+    cfg.environment
+    // (optionalAttrs cfg.passEnvironment (
+      filterAttrs (n: _v: hasPrefix "MCP_" n || hasPrefix "UV_" n) config.environment.variables
+    ));
 
-in {
+in
+{
   options.services.mcp-proxy = {
     enable = mkEnableOption "mcp-proxy service";
 
@@ -120,9 +158,11 @@ in {
 
     environment = mkOption {
       type = types.attrsOf types.str;
-      default = {};
+      default = { };
       description = "Environment variables for the mcp-proxy process and default server.";
-      example = { HOME = "/var/lib/mcp-proxy"; };
+      example = {
+        HOME = "/var/lib/mcp-proxy";
+      };
     };
 
     workingDirectory = mkOption {
@@ -175,9 +215,12 @@ in {
 
     allowOrigins = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "Allowed origins for CORS. Empty list disables CORS.";
-      example = [ "*" "https://example.com" ];
+      example = [
+        "*"
+        "https://example.com"
+      ];
     };
 
     defaultServer = {
@@ -196,7 +239,7 @@ in {
 
       args = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         description = "Arguments to pass to the default server command.";
         example = [ "mcp-server-fetch" ];
       };
@@ -204,7 +247,7 @@ in {
 
     namedServers = mkOption {
       type = types.attrsOf (types.submodule namedServerOptions);
-      default = {};
+      default = { };
       description = "Named stdio servers configuration.";
       example = literalExpression ''
         {
@@ -227,7 +270,7 @@ in {
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.defaultServer.enable || cfg.namedServers != {};
+        assertion = cfg.defaultServer.enable || cfg.namedServers != { };
         message = "services.mcp-proxy must have either defaultServer enabled or namedServers configured";
       }
       {
@@ -236,8 +279,7 @@ in {
       }
     ];
 
-    networking.firewall.allowedTCPPorts =
-      lib.optional cfg.openFirewall cfg.port;
+    networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall cfg.port;
 
     users.users.${cfg.user} = mkIf (cfg.user == "mcp-proxy") {
       group = cfg.group;
@@ -268,78 +310,86 @@ in {
             };
         hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
         shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
-        startService =
-          pkgs.writeShellApplication {
-            name = "start";
-            runtimeInputs =
-              with pkgs;
-              [
-                git
-                nix
-                bash
-                cfg.package
-              ]
-              ++ shellInputs;
-            excludeShellChecks = [
-              "SC1091" # So we can 'source' the shellHook
-            ];
-            text = ''
-              source ${hookFile}
-              mcp-proxy ${escapeShellArgs mkArgs};
-            '';
-          };
+        startService = pkgs.writeShellApplication {
+          name = "start";
+          runtimeInputs =
+            with pkgs;
+            [
+              git
+              nix
+              bash
+              cfg.package
+            ]
+            ++ shellInputs;
+          excludeShellChecks = [
+            "SC1091" # So we can 'source' the shellHook
+          ];
+          text = ''
+            source ${hookFile}
+            mcp-proxy ${escapeShellArgs mkArgs};
+          '';
+        };
       in
-    {
-      description = "MCP Proxy Service";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      {
+        description = "MCP Proxy Service";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "network.target" ];
 
-      serviceConfig = {
-        Type = "exec";
-        User = cfg.user;
-        Group = cfg.group;
-        ExecStart = "${startService}/bin/start";
-        Restart = "always";
-        RestartSec = "10s";
+        serviceConfig = {
+          Type = "exec";
+          User = cfg.user;
+          Group = cfg.group;
+          ExecStart = "${startService}/bin/start";
+          Restart = "always";
+          RestartSec = "10s";
 
-        # Security settings
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
-        RestrictNamespaces = true;
-        LockPersonality = true;
-        RestrictRealtime = true;
-        RestrictSUIDSGID = true;
-        RemoveIPC = true;
+          # Security settings
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          ProcSubset = "pid";
+          ProtectProc = "invisible";
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ProtectKernelTunables = true;
+          ProtectKernelLogs = true;
+          # Memory and Execution Protection
+          MemoryDenyWriteExecute = true; # W^X enforcement
+          LockPersonality = true; # Lock execution domain
+          RestrictRealtime = true; # Block realtime scheduling
+          RestrictSUIDSGID = true; # Block SUID/SGID execution
+          ProtectKernelModules = true;
+          ProtectControlGroups = true;
+          RestrictAddressFamilies = [
+            "AF_UNIX"
+            "AF_INET"
+            "AF_INET6"
+          ];
+          RestrictNamespaces = true;
+          RemoveIPC = true;
 
-        # Working directory
-        WorkingDirectory = config.users.users."${cfg.user}".home;
+          # Working directory
+          WorkingDirectory = config.users.users."${cfg.user}".home;
 
-        # Capabilities
-        CapabilityBoundingSet = "";
-        AmbientCapabilities = "";
+          # Capabilities
+          CapabilityBoundingSet = "";
+          AmbientCapabilities = "";
 
-        # File system access
-        ReadWritePaths = [
-          config.users.users."${cfg.user}".home
-        ];
-        ReadOnlyPaths = [ 
-          "/etc/resolv.conf"  # DNS resolution
-          "/etc/hosts"        # Host name resolution
-          "/etc/nsswitch.conf" # Name service switch
-          "/etc/ssl"          # SSL certificates
-          "/etc/ca-certificates" # CA certificates
-	];
-        PrivateNetwork = false;  # Ensure network access is available
+          # File system access
+          ReadWritePaths = [
+            config.users.users."${cfg.user}".home
+          ];
+          ReadOnlyPaths = [
+            "/etc/resolv.conf" # DNS resolution
+            "/etc/hosts" # Host name resolution
+            "/etc/nsswitch.conf" # Name service switch
+            "/etc/ssl" # SSL certificates
+            "/etc/ca-certificates" # CA certificates
+          ];
+          PrivateNetwork = false; # Ensure network access is available
+        };
+
+        environment = mkEnvironment;
       };
-
-      environment = mkEnvironment;
-    };
 
   };
 }
