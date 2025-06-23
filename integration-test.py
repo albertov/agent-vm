@@ -806,6 +806,11 @@ def run(
             "-p", "no:cacheprovider",  # Disable cache provider to avoid read-only warnings
         ])
 
+        # Filter out unknown mark warnings
+        pytest_argv.extend([
+            "--disable-warnings",  # Disable all warnings
+        ])
+
         # Add timeout configuration to all tests as backup enforcement
         pytest_argv.extend([f"--timeout={config.timeout + 20}"])  # Add buffer time for pytest enforcement
 

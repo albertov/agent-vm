@@ -114,6 +114,8 @@ def setup_logging(verbose: bool = False):
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# Global debug flag
+_global_debug = False
 
 # Global list to track tempfiles for cleanup
 _temp_files: List[tempfile._TemporaryFileWrapper] = []
@@ -126,6 +128,69 @@ def _cleanup_tempfiles():
             temp_file.close()
         except Exception:
             pass  # Ignore errors during cleanup
+
+
+def _cleanup_old_logs(state_dir: Path, max_age_days: int = 7):
+    """Clean up old log files from state directory."""
+    if not state_dir:
+        return
+
+    try:
+        import time
+        cutoff_time = time.time() - (max_age_days * 24 * 60 * 60)
+
+        # Clean up logs from VM-specific directories: {state_dir}/{vm_name}/tmp/logs/
+        for vm_dir in state_dir.iterdir():
+            if vm_dir.is_dir():
+                vm_logs_dir = vm_dir / "tmp" / "logs"
+                if vm_logs_dir.exists():
+                    for log_file in vm_logs_dir.rglob("*.log"):
+                        if log_file.is_file():
+                            try:
+                                if log_file.stat().st_mtime < cutoff_time:
+                                    log_file.unlink()
+                                    logger.debug(f"Cleaned up old log file: {log_file}")
+                            except (OSError, PermissionError):
+                                pass  # Ignore cleanup errors
+
+                    # Remove empty tmp/logs directory
+                    try:
+                        if vm_logs_dir.exists() and not any(vm_logs_dir.iterdir()):
+                            vm_logs_dir.rmdir()
+                            # Also remove tmp directory if empty
+                            tmp_dir = vm_logs_dir.parent
+                            if tmp_dir.exists() and not any(tmp_dir.iterdir()):
+                                tmp_dir.rmdir()
+                    except OSError:
+                        pass  # Directory not empty or other error
+
+        # Also clean up any legacy logs in {state_dir}/tmp/logs/ (from old structure)
+        legacy_logs_dir = state_dir / "tmp" / "logs"
+        if legacy_logs_dir.exists():
+            for log_file in legacy_logs_dir.rglob("*.log"):
+                if log_file.is_file():
+                    try:
+                        if log_file.stat().st_mtime < cutoff_time:
+                            log_file.unlink()
+                            logger.debug(f"Cleaned up legacy log file: {log_file}")
+                    except (OSError, PermissionError):
+                        pass  # Ignore cleanup errors
+
+            # Clean up empty legacy directories
+            try:
+                for subdir in legacy_logs_dir.iterdir():
+                    if subdir.is_dir():
+                        try:
+                            subdir.rmdir()  # Remove if empty
+                        except OSError:
+                            pass
+                if not any(legacy_logs_dir.iterdir()):
+                    legacy_logs_dir.rmdir()
+            except OSError:
+                pass
+
+    except Exception:
+        pass  # Ignore all cleanup errors
 
 
 # Register cleanup function to run at exit
@@ -143,12 +208,15 @@ def _get_last_lines(file_path: str, num_lines: int = 20) -> List[str]:
         return []
 
 
-def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+def run_subprocess(cmd: List[str], state_dir: Optional[Path] = None, vm_name: Optional[str] = None, debug: bool = False, **kwargs) -> subprocess.CompletedProcess:
     """
-    Run subprocess with stdout/stderr captured to tempfiles.
+    Run subprocess with stdout/stderr captured to tempfiles in state directory.
 
     Args:
         cmd: Command to run as list of strings
+        state_dir: VM state directory (should be {base_dir}/{vm_name} for VM operations)
+        vm_name: VM name for log organization
+        debug: Whether to keep logs for debugging
         **kwargs: Additional keyword arguments for subprocess.run
 
     Returns:
@@ -156,11 +224,27 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
 
     On error, logs the last 20 lines of stdout/stderr and their file paths.
     """
-    # Create temporary files for stdout and stderr
-    stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stdout_',
-                                              suffix='.log', delete=False)
-    stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stderr_',
-                                              suffix='.log', delete=False)
+    # Determine log directory - use VM-specific structure when possible
+    if state_dir:
+        # For VM operations: {state_dir}/tmp/logs/ where state_dir is {base_dir}/{vm_name}
+        # For general operations: {state_dir}/tmp/logs/
+        log_dir = state_dir / "tmp" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        if vm_name:
+            log_prefix = f"{vm_name}_"
+        else:
+            log_prefix = "agent_vm_"
+    else:
+        # Fallback to system tmp
+        log_dir = Path("/tmp")
+        log_prefix = "agent_vm_"
+
+    # Create temporary files for stdout and stderr in the appropriate directory
+    stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix=f'{log_prefix}stdout_',
+                                              suffix='.log', delete=False, dir=log_dir)
+    stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix=f'{log_prefix}stderr_',
+                                              suffix='.log', delete=False, dir=log_dir)
 
     # Track for cleanup
     _temp_files.extend([stdout_temp, stderr_temp])
@@ -173,8 +257,9 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
         kwargs_copy['text'] = True
 
     logger.debug(f"Running command: {' '.join(cmd)}")
-    logger.debug(f"stdout log: {stdout_temp.name}")
-    logger.debug(f"stderr log: {stderr_temp.name}")
+    if debug:
+        logger.debug(f"stdout log: {stdout_temp.name}")
+        logger.debug(f"stderr log: {stderr_temp.name}")
 
     try:
         result = subprocess.run(cmd, **kwargs_copy)
@@ -198,8 +283,9 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
         # If command failed, log the last 20 lines of output
         if result.returncode != 0:
             logger.error(f"Command failed with exit code {result.returncode}: {' '.join(cmd)}")
-            logger.error(f"stdout log path: {stdout_temp.name}")
-            logger.error(f"stderr log path: {stderr_temp.name}")
+            if debug:
+                logger.error(f"stdout log path: {stdout_temp.name}")
+                logger.error(f"stderr log path: {stderr_temp.name}")
 
             # Log last 20 lines of stdout if not empty
             stdout_lines = _get_last_lines(stdout_temp.name, 20)
@@ -214,6 +300,14 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
                 logger.error("Last 20 lines of stderr:")
                 for line in stderr_lines:
                     logger.error(f"stderr: {line.rstrip()}")
+        else:
+            # Command succeeded - clean up logs unless debug mode is enabled
+            if not debug:
+                try:
+                    os.unlink(stdout_temp.name)
+                    os.unlink(stderr_temp.name)
+                except OSError:
+                    pass  # File already removed
 
         return result
 
@@ -224,8 +318,9 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
 
         logger.error(f"Command execution failed: {' '.join(cmd)}")
         logger.error(f"Exception: {e}")
-        logger.error(f"stdout log path: {stdout_temp.name}")
-        logger.error(f"stderr log path: {stderr_temp.name}")
+        if debug:
+            logger.error(f"stdout log path: {stdout_temp.name}")
+            logger.error(f"stderr log path: {stderr_temp.name}")
 
         # Log any captured output before exception
         stdout_lines = _get_last_lines(stdout_temp.name, 20)
@@ -241,17 +336,6 @@ def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
                 logger.error(f"stderr: {line.rstrip()}")
 
         raise
-    finally:
-        # Clean up temp files if command succeeded and files are still around
-        try:
-            if 'result' in locals() and result.returncode == 0:
-                try:
-                    os.unlink(stdout_temp.name)
-                    os.unlink(stderr_temp.name)
-                except OSError:
-                    pass  # File already removed
-        except (NameError, UnboundLocalError):
-            pass  # result was never created
 
 
 class ProcessWithOutput:
@@ -259,13 +343,29 @@ class ProcessWithOutput:
     Wrapper for subprocess.Popen that captures output to tempfiles.
     """
 
-    def __init__(self, cmd: List[str], **kwargs):
+    def __init__(self, cmd: List[str], state_dir: Optional[Path] = None, vm_name: Optional[str] = None, debug: bool = False, **kwargs):
         """Initialize Popen with tempfile capture."""
+        # Determine log directory - use VM-specific structure when possible
+        if state_dir:
+            # For VM operations: {state_dir}/tmp/logs/ where state_dir is {base_dir}/{vm_name}
+            # For general operations: {state_dir}/tmp/logs/
+            log_dir = state_dir / "tmp" / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+
+            if vm_name:
+                log_prefix = f"{vm_name}_"
+            else:
+                log_prefix = "agent_vm_"
+        else:
+            # Fallback to system tmp
+            log_dir = Path("/tmp")
+            log_prefix = "agent_vm_"
+
         # Create temporary files for stdout and stderr
-        self.stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stdout_',
-                                                       suffix='.log', delete=False)
-        self.stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stderr_',
-                                                       suffix='.log', delete=False)
+        self.stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix=f'{log_prefix}stdout_',
+                                                       suffix='.log', delete=False, dir=log_dir)
+        self.stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix=f'{log_prefix}stderr_',
+                                                       suffix='.log', delete=False, dir=log_dir)
 
         # Track for cleanup
         _temp_files.extend([self.stdout_temp, self.stderr_temp])
@@ -280,10 +380,12 @@ class ProcessWithOutput:
             kwargs_copy['text'] = True
 
         logger.debug(f"Starting process: {' '.join(cmd)}")
-        logger.debug(f"stdout log: {self.stdout_temp.name}")
-        logger.debug(f"stderr log: {self.stderr_temp.name}")
+        if debug:
+            logger.debug(f"stdout log: {self.stdout_temp.name}")
+            logger.debug(f"stderr log: {self.stderr_temp.name}")
 
         self.cmd = cmd
+        self.debug = debug
         self.process = subprocess.Popen(cmd, **kwargs_copy)
         self.pid = self.process.pid
 
@@ -299,8 +401,9 @@ class ProcessWithOutput:
             # If process failed, log output
             if returncode != 0:
                 logger.error(f"Process failed with exit code {returncode}: {' '.join(self.cmd)}")
-                logger.error(f"stdout log path: {self.stdout_temp.name}")
-                logger.error(f"stderr log path: {self.stderr_temp.name}")
+                if self.debug:
+                    logger.error(f"stdout log path: {self.stdout_temp.name}")
+                    logger.error(f"stderr log path: {self.stderr_temp.name}")
 
                 # Log last 20 lines of output
                 stdout_lines = _get_last_lines(self.stdout_temp.name, 20)
@@ -314,6 +417,14 @@ class ProcessWithOutput:
                     logger.error("Last 20 lines of stderr:")
                     for line in stderr_lines:
                         logger.error(f"stderr: {line.rstrip()}")
+            else:
+                # Process succeeded - clean up logs unless debug mode is enabled
+                if not self.debug:
+                    try:
+                        os.unlink(self.stdout_temp.name)
+                        os.unlink(self.stderr_temp.name)
+                    except OSError:
+                        pass  # File already removed
 
             return returncode
         finally:
@@ -356,6 +467,13 @@ class VMController:
             self.base_dir = Path(state_dir).expanduser().resolve()
         else:
             self.base_dir = self.home_dir / ".local" / "share" / "agent-vms"
+
+        # Store for subprocess logging
+        self.state_dir = self.base_dir
+
+        # Clean up old log files
+        _cleanup_old_logs(self.state_dir)
+
         self.origin_repo = self._get_origin_repo()
 
     def _get_origin_repo(self) -> str:
@@ -363,6 +481,8 @@ class VMController:
         try:
             result = run_subprocess(
                 ["git", "remote", "get-url", "origin"],
+                state_dir=self.state_dir,
+                debug=_global_debug,
                 capture_output=True,
                 text=True,
                 check=True
@@ -377,6 +497,8 @@ class VMController:
         try:
             result = run_subprocess(
                 ["git", "rev-parse", "--show-toplevel"],
+                state_dir=self.state_dir,
+                debug=_global_debug,
                 capture_output=True,
                 text=True,
                 check=True
@@ -397,7 +519,11 @@ class VMController:
             # Find stale QEMU processes
             result = run_subprocess(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
-                capture_output=True, text=True
+                state_dir=self.base_dir / vm_name if vm_name else self.state_dir,
+                vm_name=vm_name,
+                debug=_global_debug,
+                capture_output=True,
+                text=True
             )
             if result.returncode == 0:
                 pids = result.stdout.strip().split('\n')
@@ -729,7 +855,13 @@ in
         env = os.environ.copy()
         env["QEMU_OPTS"] = f"-name {vm_name}"
 
-        vm_process = ProcessWithOutput(vm_cmd, env=env)
+        vm_process = ProcessWithOutput(
+            vm_cmd,
+            state_dir=vm_config_dir,
+            vm_name=vm_name,
+            debug=_global_debug,
+            env=env
+        )
 
         # Store PID
         pid_file = vm_config_dir / "vm.pid"
@@ -1617,10 +1749,15 @@ def _setup_global_options(
     timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Set up global options that apply to all commands."""
+    global _global_debug
+
     _global_state["state_dir"] = state_dir
     _global_state["verbose"] = verbose
     _global_state["debug"] = debug
     _global_state["timeout"] = timeout
+
+    # Set global debug flag for subprocess logging
+    _global_debug = debug
 
     # Debug takes precedence over verbose
     if debug:
