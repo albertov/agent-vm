@@ -108,7 +108,7 @@ command = ["cabal", "build"]
 doc = "Runs cabal build. Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.cabal_test]
-command = ["cabal", "test"]
+command = ["timeout", "60s", "cabal", "test"]
 doc = "Runs cabal test. Accepts the name of a single package as an argument to run their specific tests"
 
 [commands.lynx]
