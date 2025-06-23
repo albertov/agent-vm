@@ -10,9 +10,7 @@ Read README.md for specs
 
 ### URGENT
 
-- [x] Refactor to use typer for CLI.
-- [x] Make agent service run properly inside the VM
-- [x] We should probe for a free port starting at 2222 to forward ssh, not hardcode 2222
+- [ ] Fix this failing test: `run integration-test -- --verbose --debug --timeout 90 run -- -k test_agent_service_startup`
 
 ### Phase 4: Security and Performance
 
