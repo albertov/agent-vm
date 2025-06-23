@@ -337,6 +337,7 @@ class VMController:
 - Research and specification complete
 - Architecture design finalized
 - Implementation plan documented
+- **ARCHITECTURE.md**: Comprehensive architecture documentation created
 - VM configuration specification updated with:
   - Dynamic firewall configuration using service port
   - User package inheritance from agent service
@@ -345,14 +346,16 @@ class VMController:
   - Updated system state version to 24.11
 - **Phase 0: Package Setup**
   - ✅ Step 0: Added `agent-vm` Python application package derivation to overlay.nix
+- **Phase 1: Core VM Infrastructure**
+  - ✅ Steps 1-4: VM configuration, workspace sharing, networking, and lifecycle management implemented
 
 **🔄 IN PROGRESS:**
-- Phase 1: Core VM Infrastructure (ready to start)
+- Phase 2: Development Integration (next steps)
 
 **⏳ PENDING:**
-- Phase 1-5 implementation phases
+- Phase 2-5 implementation phases
 - Testing and validation
-- Documentation updates
+- Integration testing
 
 ## Notes
 
