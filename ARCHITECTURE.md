@@ -15,29 +15,29 @@ The Agent VM project implements secure, hardware-isolated execution environments
 ### High-Level Component Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Host System                          │
-│  ┌─────────────────┐  ┌──────────────────────────────────┐  │
-│  │   agent-vm      │  │        VM Instance               │  │
+┌──────────────────────────────────────────────────────────-───┐
+│                        Host System                           │
+│  ┌─────────────────┐  ┌────────────────────────────────-──┐  │
+│  │   agent-vm      │  │        VM Instance                │  │
 │  │  (Python CLI)   │  │  ┌─────────────────────────────┐  │  │
 │  │                 │◄─┤  │      NixOS Guest            │  │  │
 │  │ • VM Lifecycle  │  │  │  ┌─────────────────────────┐│  │  │
 │  │ • SSH Access    │  │  │  │   agent-mcp.service     ││  │  │
 │  │ • Status Mgmt   │  │  │  │  (systemd service)      ││  │  │
 │  └─────────────────┘  │  │  │                         ││  │  │
-│           │            │  │  │ • mcp-proxy             ││  │  │
-│           │            │  │  │ • codemcp               ││  │  │
-│           │            │  │  │ • mcp-language-server   ││  │  │
+│           │           │  │  │ • mcp-proxy             ││  │  │
+│           │           │  │  │ • codemcp               ││  │  │
+│           │           │  │  │ • mcp-language-server   ││  │  │
 │  ┌─────────────────┐  │  │  │ • selenium              ││  │  │
 │  │  Workspace      │  │  │  │ • rescript-lsp          ││  │  │
 │  │  (VirtioFS)     │◄─┼──┼──┤ • mcp-nixos             ││  │  │
 │  │                 │  │  │  └─────────────────────────┘│  │  │
 │  │ • Git Repo      │  │  │                             │  │  │
-│  │ • SSH Keys      │  │  │  Port Forwarding:           │  │  │
-│  │ • Config Files  │  │  │  • 2222 → 22 (SSH)         │  │  │
-│  └─────────────────┘  │  │  • 8000 → 8000 (MCP)       │  │  │
-│                        │  └─────────────────────────────┘  │  │
-└─────────────────────────────────────────────────────────────┘
+│  │                 │  │  │  Port Forwarding:           │  │  │
+│  │ • Config Files  │  │  │  • 2222 → 22 (SSH)          │  │  │
+│  └─────────────────┘  │  │  • 8000 → 8000 (MCP)        │  │  │
+│                        │└──-──────────────────────────┘  │  │
+└─────────────────────────────────────────────────────── ──────┘
 ```
 
 ### Core Components
@@ -70,7 +70,7 @@ agent-vm destroy [<branch>]                        # Remove VM config
 **Purpose**: NixOS configuration for secure, isolated VM instances
 
 **Key Specifications:**
-- **Resources**: 4GB RAM, 4 CPU cores, 20GB disk
+- **Resources**: 16GB RAM, 8 CPU cores, 4GB disk
 - **Isolation**: Headless mode, network isolation, minimal attack surface
 - **Sharing**: VirtioFS high-performance workspace sharing
 - **Access**: SSH on port 2222, MCP proxy on port 8000

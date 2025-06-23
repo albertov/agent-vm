@@ -2,7 +2,7 @@
 set -eu -o pipefail
 
 git log -p \
-  "$(git merge-base HEAD master)...HEAD" -- \
+  "$(git merge-base HEAD origin/main)...HEAD" -- \
   ':(exclude)golden/**' \
   ':(exclude)*.json' \
   "$@"
