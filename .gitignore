@@ -40,3 +40,4 @@ hie.yaml
 nix/materialized/
 *.bak
 *.qcow2
+*.atomic

@@ -176,6 +176,21 @@ in
     services.getty.autologinUser = "mcp-proxy";
     users.users.mcp-proxy.extraGroups = [ "wheel" ];
     users.users.mcp-proxy.packages = allInputs config.services.mcp-proxy.shell;
+    system.activationScripts.mcp-proxy-env =
+      let
+        hookFile = pkgs.writeText "shellHook.source" (config.services.mcp-proxy.shell.shellHook or "");
+      in
+      ''
+      MCP_HOME_DIR="${config.users.users.mcp-proxy.home}"
+      mkdir -p "$MCP_HOME_DIR"
+      cat >> "$MCP_HOME_DIR"/.profile << 'EOF'
+      export IN_NIX_SHELL=YES
+      pushd ${config.users.users.mcp-proxy.home}/workspace
+      source ${hookFile}
+      popd
+      EOF
+      '';
+
     services.mcp-proxy = {
       enable = true;
       openFirewall = true;
