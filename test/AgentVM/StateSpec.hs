@@ -1,13 +1,13 @@
 -- | Tests for VM state management
 module AgentVM.StateSpec (spec) where
 
-import AgentVM.State (VMRegistry (..), allocatePort, newVMRegistry, releasePort)
+import AgentVM.State (VMRegistry (vmLocks, vmMap, vmPorts), allocatePort, newVMRegistry, releasePort)
 import Control.Concurrent.STM (atomically, readTVarIO)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Network.Socket (SockAddr (SockAddrInet), SocketType (Stream), bind, close, defaultProtocol, listen, socket)
+import Network.Socket (SockAddr (SockAddrInet), SocketType (Stream), bind, close, defaultProtocol, socket)
 import qualified Network.Socket as Socket
-import Protolude (Bool (True), Either (Left, Right), IO, show, ($), (/=), (<>), (>), (>=))
+import Protolude (Bool (True), Either (Left, Right), show, ($), (/=), (<>), (>), (>=))
 import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldSatisfy)
 
 spec :: Spec

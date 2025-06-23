@@ -14,6 +14,7 @@ import Control.Concurrent.Thread.Delay (delay)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
+import System.Directory (getCurrentDirectory)
 import System.FilePath ((</>))
 import System.Process.Typed (ExitCode (..), createPipe, getExitCode, proc, setStderr, setStdout, startProcess, stopProcess, waitExitCode)
 import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldContain, shouldReturn, shouldSatisfy)
@@ -21,7 +22,7 @@ import UnliftIO.Exception (finally)
 
 -- | Test environment with custom tracer that captures traces
 testEnvWithCapture :: IORef [AgentVmTrace] -> AgentVmEnv
-testEnvWithCapture traceRef = AgentVmEnv {tracer = IOTracer $ Tracer $ \trace -> modifyIORef' traceRef (trace :)}
+testEnvWithCapture traceRef = AgentVmEnv {tracer = IOTracer $ Tracer $ \trace -> liftIO $ modifyIORef' traceRef (trace :)}
 
 -- | Test environment with tracer
 testEnv :: AgentVmEnv
