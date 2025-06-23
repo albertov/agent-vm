@@ -20,14 +20,7 @@ in
     ./modules/mcp-proxy.nix
     ./modules/selenium-server.nix
   ];
-  services.nix-serve = {
-    enable = true;
-    port = 5000;
-    bindAddress = "127.0.0.1";
-    # No signing needed for local use since we trust the host
-    # store
-    secretKeyFile = null;
-  };
+  services.qemuGuest.enable = true;
 
   # VM-specific configuration
   virtualisation = {
@@ -76,8 +69,8 @@ in
       };
     };
 
-    # Port forwarding for MCP proxy
     forwardPorts = [
+
       {
         from = "host";
         host.port = 8000;
@@ -89,9 +82,6 @@ in
 
   # Firewall configuration
   networking.firewall.enable = true;
-
-  # Optimize for VM environment
-  services.qemuGuest.enable = true;
 
   environment.systemPackages = with pkgs; [
     vim
@@ -121,15 +111,10 @@ in
 
   # Configure host nix store as binary cache
   nix.settings.substituters = [
-    "http://127.0.0.1:5000"
-    "https://cache.iog.io" # Additional cache from flake config
-  ];
-  # Trust the host store implicitly since it's mounted from host
-  nix.settings.trusted-substituters = [
-    "http://127.0.0.1:5000"
+    "http://10.0.2.2:5000"
   ];
   nix.settings.trusted-public-keys = [
-    "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+    "alberto-valverde-1:A+NbXRfx+Uo0tQNZ8hlip+1zru2P32l7/skPDeaZnxU="
   ];
 
   services.selenium-server.enable = true;
