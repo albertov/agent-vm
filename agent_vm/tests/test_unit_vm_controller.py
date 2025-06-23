@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from unittest.mock import Mock, patch, call, MagicMock
 import pytest
-from agent_vm.vm_controller import VMController
+from vm_controller import VMController
 
 
 @pytest.mark.unit

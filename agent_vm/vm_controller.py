@@ -19,13 +19,96 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout  # Ensure output goes to stdout
-)
+# Color codes for terminal output
+class Colors:
+    """ANSI color codes for terminal output."""
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+
+    # Standard colors
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+
+    # Bright colors
+    BRIGHT_RED = '\033[91m'
+    BRIGHT_GREEN = '\033[92m'
+    BRIGHT_YELLOW = '\033[93m'
+    BRIGHT_BLUE = '\033[94m'
+    BRIGHT_MAGENTA = '\033[95m'
+    BRIGHT_CYAN = '\033[96m'
+
+
+class ColorFormatter(logging.Formatter):
+    """Custom formatter with color support."""
+
+    # Color mapping for different log levels
+    COLORS = {
+        logging.DEBUG: Colors.DIM + Colors.WHITE,
+        logging.INFO: Colors.BRIGHT_BLUE,
+        logging.WARNING: Colors.BRIGHT_YELLOW,
+        logging.ERROR: Colors.BRIGHT_RED,
+        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
+    }
+
+    def format(self, record):
+        # Apply color based on log level
+        color = self.COLORS.get(record.levelno, Colors.RESET)
+
+        # Format the message
+        formatted = super().format(record)
+
+        # Add colors if output is a TTY
+        if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+            # Color the level name
+            level_color = color + record.levelname + Colors.RESET
+            formatted = formatted.replace(record.levelname, level_color)
+
+            # Add colored prefix based on message content
+            if "✅" in record.msg or "SUCCESS" in record.msg.upper():
+                formatted = Colors.BRIGHT_GREEN + "✅ " + Colors.RESET + formatted
+            elif "❌" in record.msg or "ERROR" in record.msg.upper():
+                formatted = Colors.BRIGHT_RED + "❌ " + Colors.RESET + formatted
+            elif "⚠️" in record.msg or "WARNING" in record.msg.upper():
+                formatted = Colors.BRIGHT_YELLOW + "⚠️ " + Colors.RESET + formatted
+            elif "🔧" in record.msg or "BUILDING" in record.msg.upper():
+                formatted = Colors.BRIGHT_CYAN + "🔧 " + Colors.RESET + formatted
+            elif "🚀" in record.msg or "STARTING" in record.msg.upper():
+                formatted = Colors.BRIGHT_MAGENTA + "🚀 " + Colors.RESET + formatted
+
+        return formatted
+
+
+# Configure logging with colored output
+def setup_logging(verbose: bool = False):
+    """Set up colored logging configuration."""
+    level = logging.DEBUG if verbose else logging.INFO
+
+    # Create formatter
+    formatter = ColorFormatter(
+        fmt="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S"
+    )
+
+    # Create handler
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=level,
+        handlers=[handler],
+        force=True  # Override any existing configuration
+    )
+
+
+# Set up initial logging (will be reconfigured in main() if needed)
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -206,13 +289,13 @@ class VMController:
         with config_file.open('w') as f:
             json.dump(config_data, f, indent=2)
 
-        logger.info("VM configuration created successfully!")
-        logger.info(f"Branch: {branch}")
-        logger.info(f"Config directory: {vm_config_dir}")
-        logger.info(f"Workspace: {workspace_dir}")
-        logger.info(f"SSH key: {ssh_private_key}")
+        logger.info(f"✅ VM configuration created successfully!")
+        logger.info(f"📁 Branch: {branch}")
+        logger.info(f"🗂️  Config directory: {vm_config_dir}")
+        logger.info(f"💾 Workspace: {workspace_dir}")
+        logger.info(f"🔑 SSH key: {ssh_private_key}")
         logger.info("")
-        logger.info(f"Start the VM with: agent-vm start {branch}")
+        logger.info(f"🚀 Next step: Start the VM with: {Colors.BRIGHT_GREEN}agent-vm start {branch}{Colors.RESET}")
 
     def start_vm(self, branch: Optional[str] = None) -> None:
         """Start VM from existing configuration."""
@@ -243,7 +326,7 @@ class VMController:
         # Clean up any stale processes first
         self._cleanup_stale_processes(vm_name)
 
-        logger.info(f"Starting VM for branch: {branch}")
+        logger.info(f"🚀 Starting VM for branch: {branch}")
 
         # Get the original flake directory before changing to workspace
         try:
@@ -252,13 +335,13 @@ class VMController:
                 capture_output=True, text=True, check=True
             ).stdout.strip()
         except subprocess.CalledProcessError:
-            logger.error("Could not determine original flake directory")
+            logger.error("❌ Could not determine original flake directory")
             sys.exit(1)
 
         os.chdir(workspace_dir)
 
         # Build VM configuration
-        logger.info("Building VM configuration...")
+        logger.info("🔧 Building VM configuration...")
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
         # Create a temporary VM configuration file with injected SSH key
@@ -336,13 +419,25 @@ class VMController:
 
         # Wait for VM to be ready
         if self._wait_for_vm_ready(ssh_key_path):
-            logger.info(f"VM started successfully (PID: {vm_process.pid})")
+            logger.info(f"✅ VM started successfully (PID: {vm_process.pid})")
 
             # Start agent services in VM
             self._start_agent_in_vm(ssh_key_path)
         else:
-            logger.error("VM startup failed")
-            self._stop_vm_by_pid(vm_config_dir)
+            logger.error("❌ VM startup failed - performing cleanup...")
+
+            # Cleanup failed VM process
+            try:
+                self._stop_vm_by_pid(vm_config_dir)
+                logger.info("🧹 Cleanup completed")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Cleanup failed: {cleanup_error}")
+
+            logger.error("🔧 Troubleshooting tips:")
+            logger.error("  • Check if nested virtualization is enabled")
+            logger.error("  • Ensure sufficient memory and disk space")
+            logger.error("  • Try: agent-vm destroy && agent-vm create")
+            logger.error(f"  • View verbose logs with: agent-vm --verbose start {branch}")
             sys.exit(1)
 
     def stop_vm(self, branch: Optional[str] = None) -> None:
@@ -552,7 +647,10 @@ class VMController:
 
     def _wait_for_vm_ready(self, ssh_key_path: Path, max_attempts: int = 30) -> bool:
         """Wait for VM to be ready for SSH connections."""
-        logger.info("Waiting for VM to be ready...")
+        logger.info("🚀 Waiting for VM to be ready...")
+
+        # Progress indicators
+        progress_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
         for attempt in range(max_attempts):
             try:
@@ -563,21 +661,40 @@ class VMController:
                 ]
                 result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
                 if result.returncode == 0:
-                    logger.info("VM is ready for connections")
+                    # Clear progress line
+                    print("\r" + " " * 50 + "\r", end="", flush=True)
+                    logger.info("✅ VM is ready for connections")
                     return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 pass
 
-            print(".", end="", flush=True)
+            # Show progress with spinning indicator
+            progress_char = progress_chars[attempt % len(progress_chars)]
+            remaining_time = (max_attempts - attempt) * 2
+            mins, secs = divmod(remaining_time, 60)
+
+            if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+                # Show colorful progress with spinning indicator
+                print(f"\r{Colors.BRIGHT_CYAN}{progress_char}{Colors.RESET} "
+                      f"Waiting for VM... "
+                      f"{Colors.DIM}[{attempt + 1}/{max_attempts}] "
+                      f"~{mins:02d}:{secs:02d} remaining{Colors.RESET}",
+                      end="", flush=True)
+            else:
+                # Fallback for non-TTY environments
+                if attempt % 5 == 0:  # Print every 5 attempts to reduce noise
+                    print(f"Waiting for VM... [{attempt + 1}/{max_attempts}]")
+
             time.sleep(2)
 
-        print()  # New line after dots
-        logger.error(f"VM failed to become ready after {max_attempts} attempts")
+        # Clear progress line and show error
+        print("\r" + " " * 50 + "\r", end="", flush=True)
+        logger.error(f"❌ VM failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
         return False
 
     def _start_agent_in_vm(self, ssh_key_path: Path) -> None:
         """Start agent services in VM using systemd."""
-        logger.info("Starting agent services in VM...")
+        logger.info("🔧 Starting agent services in VM...")
 
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
@@ -588,18 +705,29 @@ class VMController:
 
         try:
             subprocess.run(ssh_cmd, check=True)
-            logger.info("Agent services started in VM")
+            logger.info("✅ Agent services started in VM")
 
             # Wait for service to be ready
-            self._wait_for_agent_ready(ssh_key_path)
-            logger.info("MCP Proxy available at: http://localhost:8000")
-            logger.info("To access VM shell: agent-vm shell")
+            if self._wait_for_agent_ready(ssh_key_path):
+                logger.info("🎉 MCP Proxy available at: http://localhost:8000")
+                logger.info(f"💻 To access VM shell: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+            else:
+                logger.warning("⚠️ Agent services started but MCP proxy is not responding")
+                logger.info("🔍 Check service logs with: agent-vm logs")
         except subprocess.CalledProcessError:
-            logger.error("Failed to start agent services in VM")
+            logger.error("❌ Failed to start agent services in VM")
+            logger.error("🔧 Troubleshooting:")
+            logger.error("  • Check systemd service status: sudo systemctl status agent-mcp")
+            logger.error("  • View service logs: journalctl -u agent-mcp")
+            logger.error(f"  • SSH into VM: {Colors.BRIGHT_GREEN}agent-vm shell{Colors.RESET}")
+            raise
 
     def _wait_for_agent_ready(self, ssh_key_path: Path, max_attempts: int = 20) -> bool:
         """Wait for agent service to be ready."""
-        logger.info("Waiting for agent service to be ready...")
+        logger.info("🔧 Waiting for agent service to be ready...")
+
+        # Progress indicators
+        progress_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
         for attempt in range(max_attempts):
             try:
@@ -611,16 +739,35 @@ class VMController:
                 ]
                 result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
                 if result.returncode == 0:
-                    logger.info("Agent service is ready")
+                    # Clear progress line
+                    print("\r" + " " * 60 + "\r", end="", flush=True)
+                    logger.info("✅ Agent service is ready")
                     return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 pass
 
-            print(".", end="", flush=True)
+            # Show progress with spinning indicator
+            progress_char = progress_chars[attempt % len(progress_chars)]
+            remaining_time = (max_attempts - attempt) * 2
+            mins, secs = divmod(remaining_time, 60)
+
+            if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+                # Show colorful progress with spinning indicator
+                print(f"\r{Colors.BRIGHT_MAGENTA}{progress_char}{Colors.RESET} "
+                      f"Starting MCP services... "
+                      f"{Colors.DIM}[{attempt + 1}/{max_attempts}] "
+                      f"~{mins:02d}:{secs:02d} remaining{Colors.RESET}",
+                      end="", flush=True)
+            else:
+                # Fallback for non-TTY environments
+                if attempt % 3 == 0:  # Print every 3 attempts to reduce noise
+                    print(f"Starting MCP services... [{attempt + 1}/{max_attempts}]")
+
             time.sleep(2)
 
-        print()  # New line after dots
-        logger.error(f"Agent service failed to become ready after {max_attempts} attempts")
+        # Clear progress line and show error
+        print("\r" + " " * 60 + "\r", end="", flush=True)
+        logger.error(f"❌ Agent service failed to become ready after {max_attempts} attempts ({max_attempts * 2} seconds)")
         return False
 
     def _stop_vm_by_pid(self, vm_config_dir: Path) -> None:
@@ -916,6 +1063,10 @@ Examples:
         """
     )
 
+    # Global options
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose logging with debug information')
+
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
     # Create command
@@ -961,6 +1112,9 @@ Examples:
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    # Set up logging based on verbose flag
+    setup_logging(verbose=args.verbose)
 
     controller = VMController()
 

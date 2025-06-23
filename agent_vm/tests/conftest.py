@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch, MagicMock
 import json
 
 # Import the module under test
-from agent_vm.vm_controller import VMController
+from vm_controller import VMController
 
 
 @pytest.fixture

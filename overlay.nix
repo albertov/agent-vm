@@ -63,6 +63,8 @@ inputs: final: prev:
 
     # Test dependencies for build-time testing
     nativeBuildInputs = [
+      final.python3.pkgs.setuptools
+      final.python3.pkgs.wheel
       final.python3.pkgs.pytest
       final.python3.pkgs.pytest-mock
       final.python3.pkgs.pytest-timeout
@@ -79,7 +81,7 @@ inputs: final: prev:
       # Run pytest with coverage and timeouts
       python -m pytest tests/ -v \
         --timeout=300 \
-        --cov=agent_vm \
+        --cov=vm_controller \
         --cov-report=term-missing \
         -m "not integration" \
         || echo "Tests failed but continuing build for now"
@@ -88,7 +90,7 @@ inputs: final: prev:
     '';
 
     # Type checking during build
-    pythonImportsCheck = [ "agent_vm" "agent_vm.vm_controller" ];
+    pythonImportsCheck = [ "vm_controller" ];
 
     meta = with final.lib; {
       description = "VM control tool for managing development VMs";
