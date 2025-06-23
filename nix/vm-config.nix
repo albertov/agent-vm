@@ -6,6 +6,13 @@
   pkgs,
   ...
 }:
+let
+  allInputs = p:
+       (p.buildInputs or [ ])
+    ++ (p.nativeBuildInputs or [ ])
+    ++ (p.propagatedBuildInputs or [ ])
+    ++ (p.propagatedNativeBuildInputs or [ ]);
+in
 {
   imports = [
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
@@ -23,16 +30,24 @@
       let
         shell = config.services.mcp-proxy.shell;
         systemChecks = self.checks.${pkgs.system} or { };
+        packages = self.packages.${pkgs.system} or { };
+        apps = self.apps.${pkgs.system} or { };
         allItems =
           [
             config.system.build.toplevel
-            shell
+            self
           ]
-          ++ (shell.buildInputs or [ ])
-          ++ (shell.nativeBuildInputs or [ ])
-          ++ (shell.propagatedBuildInputs or [ ])
-          ++ (shell.propagatedNativeBuildInputs or [ ])
-          ++ (pkgs.lib.concatMap (x: x.propagatedNativeBuildInputs) (pkgs.lib.attrValues systemChecks));
+          ++ allInputs shell
+          ++ (if pkgs?hixProject
+            then [
+              pkgs.hixProject.roots
+              pkgs.hixProject.plan-nix
+            ]
+            else [])
+          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
+          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
+          ++ (map (x: x.program) (pkgs.lib.attrValues apps))
+          ;
 
         closure = pkgs.closureInfo { rootPaths = allItems; };
       in
@@ -99,6 +114,7 @@
   # Enable and configure the agent service
   services.getty.autologinUser = "mcp-proxy";
   users.users.mcp-proxy.extraGroups = [ "wheel" ];
+  users.users.mcp-proxy.packages = allInputs config.services.mcp-proxy.shell;
   services.mcp-proxy = {
     enable = true;
     openFirewall = true;

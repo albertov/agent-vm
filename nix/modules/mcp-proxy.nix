@@ -296,6 +296,11 @@ in
 
     systemd.services.mcp-proxy =
       let
+        allInputs = p:
+             (p.buildInputs or [ ])
+          ++ (p.nativeBuildInputs or [ ])
+          ++ (p.propagatedBuildInputs or [ ])
+          ++ (p.propagatedNativeBuildInputs or [ ]);
         # Use the provided shell or create a minimal default
         shell =
           if cfg.shell != null then
@@ -309,7 +314,7 @@ in
               ];
             };
         hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-        shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
+        shellInputs = allInputs shell;
         startService = pkgs.writeShellApplication {
           name = "start";
           runtimeInputs =
