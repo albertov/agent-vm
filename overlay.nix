@@ -54,11 +54,11 @@ inputs: final: prev:
   # ReScript language server from rescript-lsp input
   rescript-language-server = inputs.rescript-lsp.packages.${final.system}.default;
 
-  # VM management tool for agent isolation
-  agent-vm = final.python3.pkgs.buildPythonApplication {
-    pname = "agent-vm";
+  # VM management tool for agent isolation (Python version)
+  agent-vm-py = final.python3.pkgs.buildPythonApplication {
+    pname = "agent-vm-py";
     version = "1.0.0";
-    src = ./agent-vm;
+    src = ./agent-vm-py;
     format = "pyproject";
 
     # Runtime dependencies
@@ -116,14 +116,37 @@ inputs: final: prev:
       license = licenses.mit;
       maintainers = [ ];
       platforms = platforms.linux;
-      mainProgram = "agent-vm";
+      mainProgram = "agent-vm-py";
     };
   };
 
-  integration-test = final.writeShellApplication {
-    name = "integration-test";
+  # VM management tool for agent isolation (Haskell version)
+  agent-vm = final.haskell-nix.project' {
+    src = ./agent-vm;
+    compiler-nix-name = "ghc966";
+
+    # Configure the project
+    modules = [{
+      # Package configuration
+      packages.agent-vm = {
+        # Disable haddock for faster builds during development
+        doHaddock = false;
+      };
+    }];
+
+    # Shell configuration for development
+    shell.tools = {
+      cabal = {};
+      haskell-language-server = {};
+      hlint = {};
+      hoogle = {};
+    };
+  };
+
+  py-integration-test = final.writeShellApplication {
+    name = "py-integration-test";
     runtimeInputs = with final; [
-      agent-vm
+      agent-vm-py
     ];
     text = ''
       exec agent-vm-tests "$@"

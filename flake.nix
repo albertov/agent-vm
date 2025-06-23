@@ -16,6 +16,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
+    # Haskell.nix infrastructure
+    haskellNix.url = "github:input-output-hk/haskell.nix";
+    nixpkgs-haskellNix.follows = "haskellNix/nixpkgs-unstable";
+
     treefmt-nix.url = "github:numtide/treefmt-nix";
 
     # ReScript language server
@@ -39,13 +43,15 @@
     mcp-nixos.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils, treefmt-nix, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, treefmt-nix, haskellNix, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
+        pkgs = import inputs.nixpkgs-haskellNix {
           inherit system;
-          config.allowUnfree = true;
+          inherit (haskellNix) config;
           overlays = [
+            # Haskell.nix overlay
+            haskellNix.overlay
             # Agent overlay
             (import ./overlay.nix inputs)
           ];
@@ -61,14 +67,19 @@
 
         # Apps for running the agent
         apps = rec {
-          # Main agent VM app - this is the primary interface
-          agent-vm = flake-utils.lib.mkApp {
-            drv = pkgs.agent-vm;
+          # Main agent VM app (Python version) - for backward compatibility
+          agent-vm-py = flake-utils.lib.mkApp {
+            drv = pkgs.agent-vm-py;
           };
 
-          # Integration test executable for comprehensive testing
-          integration-test = flake-utils.lib.mkApp {
-            drv = pkgs.integration-test;
+          # Haskell agent-vm app (new implementation)
+          agent-vm = flake-utils.lib.mkApp {
+            drv = pkgs.agent-vm.agent-vm.components.exes.agent-vm;
+          };
+
+          # Python integration test executable for comprehensive testing
+          py-integration-test = flake-utils.lib.mkApp {
+            drv = pkgs.py-integration-test;
           };
 
           # Direct agent execution (fallback)
@@ -79,39 +90,50 @@
             };
           };
 
-          # Default app is the agent-vm tool
-          default = agent-vm;
+          # Haskell integration test stub (to be implemented)
+          integration-test = flake-utils.lib.mkApp {
+            drv = pkgs.writeShellApplication {
+              name = "integration-test";
+              text = ''
+                echo "Haskell integration tests not yet implemented"
+                exit 1
+              '';
+            };
+          };
+
+          # Default app is the agent-vm-py tool (for now)
+          default = agent-vm-py;
 
           # Convenience aliases for VM management
           create-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "create-vm";
-              runtimeInputs = [ pkgs.agent-vm ];
-              text = "exec agent-vm create \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm-py ];
+              text = "exec agent-vm-py create \"$@\"";
             };
           };
 
           start-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "start-vm";
-              runtimeInputs = [ pkgs.agent-vm ];
-              text = "exec agent-vm start \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm-py ];
+              text = "exec agent-vm-py start \"$@\"";
             };
           };
 
           stop-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "stop-vm";
-              runtimeInputs = [ pkgs.agent-vm ];
-              text = "exec agent-vm stop \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm-py ];
+              text = "exec agent-vm-py stop \"$@\"";
             };
           };
 
           shell-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "shell-vm";
-              runtimeInputs = [ pkgs.agent-vm ];
-              text = "exec agent-vm shell \"$@\"";
+              runtimeInputs = [ pkgs.agent-vm-py ];
+              text = "exec agent-vm-py shell \"$@\"";
             };
           };
         };
@@ -119,7 +141,7 @@
         # Development shells
         devShells = {
           default = pkgs.mkShell {
-            inputsFrom = [ pkgs.agent-vm ];
+            inputsFrom = [ pkgs.agent-vm-py ];
             buildInputs = with pkgs; [
 
               # Runtime tools
@@ -128,44 +150,86 @@
               python3.pkgs.pytest
 
               # Integration testing
-              integration-test
+              py-integration-test
             ];
 
             shellHook = ''
               echo "🚀 Agent VM Development Environment"
+              echo ""
               echo "📦 Available commands:"
-              echo "  agent-vm create     - Create a new VM configuration"
-              echo "  agent-vm start      - Start VM for current branch"
-              echo "  agent-vm stop       - Stop VM"
-              echo "  agent-vm shell      - Open shell in VM"
-              echo "  agent-vm status     - Show VM status"
-              echo "  agent-vm list       - List all VM configurations"
-              echo "  agent-vm destroy    - Destroy VM configuration"
+              echo "  agent-vm-py create  - Create a new VM configuration (Python)"
+              echo "  agent-vm-py start   - Start VM for current branch"
+              echo "  agent-vm-py stop    - Stop VM"
+              echo "  agent-vm-py shell   - Open shell in VM"
+              echo "  agent-vm-py status  - Show VM status"
+              echo "  agent-vm-py list    - List all VM configurations"
+              echo "  agent-vm-py destroy - Destroy VM configuration"
+              echo ""
+              echo "  agent-vm           - Haskell version (in development)"
               echo ""
               echo "🧪 Testing:"
-              echo "  integration-test    - Run integration tests (no mocks)"
+              echo "  py-integration-test - Run Python integration tests"
+              echo "  integration-test    - Run Haskell integration tests (stub)"
               echo "  pytest tests/       - Run unit tests"
+              echo ""
+              echo "🛠️ Development shells:"
+              echo "  nix develop .#haskell - Enter Haskell development environment"
+              echo "  nix develop          - This shell (default)"
               echo ""
               echo "📖 Documentation: ./AGENT_ISOLATION.md"
               echo "📋 Task list: ./TODO.md"
             '';
           };
 
-          # Minimal shell with just agent-vm
+          # Minimal shell with just agent-vm-py
           minimal = pkgs.mkShell {
             buildInputs = with pkgs; [
-              agent-vm
+              agent-vm-py
               git
               openssh
               qemu
             ];
           };
+
+          # Haskell development shell
+          haskell = pkgs.agent-vm.shellFor {
+            tools = {
+              cabal = {};
+              haskell-language-server = {};
+              hlint = {};
+              hoogle = {};
+            };
+            buildInputs = with pkgs; [
+              git
+              openssh
+              qemu
+              curl
+            ];
+            shellHook = ''
+              echo "🚀 Agent VM Haskell Development Environment"
+              echo "📦 Available tools:"
+              echo "  cabal              - Build tool"
+              echo "  haskell-language-server - LSP server"
+              echo "  hlint              - Linter"
+              echo "  hoogle             - API search"
+              echo ""
+              echo "🔨 Build commands:"
+              echo "  cabal build        - Build the project"
+              echo "  cabal test         - Run tests"
+              echo "  cabal run agent-vm - Run the executable"
+              echo ""
+              echo "📋 Task list: ./TODO.md"
+            '';
+          };
         };
 
         # Checks for CI/testing
         checks = {
-          # Ensure agent-vm builds correctly
-          agent-vm-build = pkgs.agent-vm;
+          # Ensure agent-vm-py builds correctly
+          agent-vm-py-build = pkgs.agent-vm-py;
+
+          # Ensure agent-vm Haskell builds correctly
+          agent-vm-build = pkgs.agent-vm.agent-vm.components.exes.agent-vm;
 
           # Ensure all MCP packages build
           mcp-packages-build = pkgs.symlinkJoin {
