@@ -9,12 +9,14 @@ Usage: agent-vm <command> [options]
 """
 
 import argparse
+import atexit
 import json
 import logging
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -112,6 +114,212 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+# Global list to track tempfiles for cleanup
+_temp_files: List[tempfile._TemporaryFileWrapper] = []
+
+
+def _cleanup_tempfiles():
+    """Clean up all temporary files on exit."""
+    for temp_file in _temp_files:
+        try:
+            temp_file.close()
+        except:
+            pass  # Ignore errors during cleanup
+
+
+# Register cleanup function to run at exit
+atexit.register(_cleanup_tempfiles)
+
+
+def _get_last_lines(file_path: str, num_lines: int = 20) -> List[str]:
+    """Get the last N lines from a file."""
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+            return lines[-num_lines:] if len(lines) > num_lines else lines
+    except Exception:
+        return []
+
+
+def run_subprocess(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+    """
+    Run subprocess with stdout/stderr captured to tempfiles.
+
+    Args:
+        cmd: Command to run as list of strings
+        **kwargs: Additional keyword arguments for subprocess.run
+
+    Returns:
+        CompletedProcess with stdout/stderr captured
+
+    On error, logs the last 20 lines of stdout/stderr and their file paths.
+    """
+    # Create temporary files for stdout and stderr
+    stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stdout_',
+                                              suffix='.log', delete=False)
+    stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stderr_',
+                                              suffix='.log', delete=False)
+
+    # Track for cleanup
+    _temp_files.extend([stdout_temp, stderr_temp])
+
+    # Set capture output options
+    kwargs_copy = kwargs.copy()
+    if 'capture_output' not in kwargs_copy:
+        kwargs_copy['stdout'] = stdout_temp
+        kwargs_copy['stderr'] = stderr_temp
+        kwargs_copy['text'] = True
+
+    logger.debug(f"Running command: {' '.join(cmd)}")
+    logger.debug(f"stdout log: {stdout_temp.name}")
+    logger.debug(f"stderr log: {stderr_temp.name}")
+
+    try:
+        result = subprocess.run(cmd, **kwargs_copy)
+
+        # Flush and close temp files
+        stdout_temp.flush()
+        stderr_temp.flush()
+        stdout_temp.close()
+        stderr_temp.close()
+
+        # Read captured output for return value
+        with open(stdout_temp.name, 'r', encoding='utf-8', errors='replace') as f:
+            captured_stdout = f.read()
+        with open(stderr_temp.name, 'r', encoding='utf-8', errors='replace') as f:
+            captured_stderr = f.read()
+
+        # Create result with captured output
+        result.stdout = captured_stdout
+        result.stderr = captured_stderr
+
+        # If command failed, log the last 20 lines of output
+        if result.returncode != 0:
+            logger.error(f"Command failed with exit code {result.returncode}: {' '.join(cmd)}")
+            logger.error(f"stdout log path: {stdout_temp.name}")
+            logger.error(f"stderr log path: {stderr_temp.name}")
+
+            # Log last 20 lines of stdout if not empty
+            stdout_lines = _get_last_lines(stdout_temp.name, 20)
+            if stdout_lines:
+                logger.error("Last 20 lines of stdout:")
+                for line in stdout_lines:
+                    logger.error(f"stdout: {line.rstrip()}")
+
+            # Log last 20 lines of stderr if not empty
+            stderr_lines = _get_last_lines(stderr_temp.name, 20)
+            if stderr_lines:
+                logger.error("Last 20 lines of stderr:")
+                for line in stderr_lines:
+                    logger.error(f"stderr: {line.rstrip()}")
+
+        return result
+
+    except Exception as e:
+        # Close temp files
+        stdout_temp.close()
+        stderr_temp.close()
+
+        logger.error(f"Command execution failed: {' '.join(cmd)}")
+        logger.error(f"Exception: {e}")
+        logger.error(f"stdout log path: {stdout_temp.name}")
+        logger.error(f"stderr log path: {stderr_temp.name}")
+
+        # Log any captured output before exception
+        stdout_lines = _get_last_lines(stdout_temp.name, 20)
+        if stdout_lines:
+            logger.error("Last 20 lines of stdout before exception:")
+            for line in stdout_lines:
+                logger.error(f"stdout: {line.rstrip()}")
+
+        stderr_lines = _get_last_lines(stderr_temp.name, 20)
+        if stderr_lines:
+            logger.error("Last 20 lines of stderr before exception:")
+            for line in stderr_lines:
+                logger.error(f"stderr: {line.rstrip()}")
+
+        raise
+
+
+class ProcessWithOutput:
+    """
+    Wrapper for subprocess.Popen that captures output to tempfiles.
+    """
+
+    def __init__(self, cmd: List[str], **kwargs):
+        """Initialize Popen with tempfile capture."""
+        # Create temporary files for stdout and stderr
+        self.stdout_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stdout_',
+                                                       suffix='.log', delete=False)
+        self.stderr_temp = tempfile.NamedTemporaryFile(mode='w+', prefix='agent_vm_stderr_',
+                                                       suffix='.log', delete=False)
+
+        # Track for cleanup
+        _temp_files.extend([self.stdout_temp, self.stderr_temp])
+
+        # Set capture output options if not already set
+        kwargs_copy = kwargs.copy()
+        if 'stdout' not in kwargs_copy:
+            kwargs_copy['stdout'] = self.stdout_temp
+        if 'stderr' not in kwargs_copy:
+            kwargs_copy['stderr'] = self.stderr_temp
+        if 'text' not in kwargs_copy:
+            kwargs_copy['text'] = True
+
+        logger.debug(f"Starting process: {' '.join(cmd)}")
+        logger.debug(f"stdout log: {self.stdout_temp.name}")
+        logger.debug(f"stderr log: {self.stderr_temp.name}")
+
+        self.cmd = cmd
+        self.process = subprocess.Popen(cmd, **kwargs_copy)
+        self.pid = self.process.pid
+
+    def wait(self, timeout=None):
+        """Wait for process to complete."""
+        try:
+            returncode = self.process.wait(timeout)
+
+            # Flush temp files
+            self.stdout_temp.flush()
+            self.stderr_temp.flush()
+
+            # If process failed, log output
+            if returncode != 0:
+                logger.error(f"Process failed with exit code {returncode}: {' '.join(self.cmd)}")
+                logger.error(f"stdout log path: {self.stdout_temp.name}")
+                logger.error(f"stderr log path: {self.stderr_temp.name}")
+
+                # Log last 20 lines of output
+                stdout_lines = _get_last_lines(self.stdout_temp.name, 20)
+                if stdout_lines:
+                    logger.error("Last 20 lines of stdout:")
+                    for line in stdout_lines:
+                        logger.error(f"stdout: {line.rstrip()}")
+
+                stderr_lines = _get_last_lines(self.stderr_temp.name, 20)
+                if stderr_lines:
+                    logger.error("Last 20 lines of stderr:")
+                    for line in stderr_lines:
+                        logger.error(f"stderr: {line.rstrip()}")
+
+            return returncode
+        finally:
+            self.stdout_temp.close()
+            self.stderr_temp.close()
+
+    def poll(self):
+        """Check if process has terminated."""
+        return self.process.poll()
+
+    def terminate(self):
+        """Terminate the process."""
+        return self.process.terminate()
+
+    def kill(self):
+        """Kill the process."""
+        return self.process.kill()
+
+
 class VMController:
     """VM lifecycle management controller."""
 
@@ -127,7 +335,7 @@ class VMController:
     def _get_origin_repo(self) -> str:
         """Get the origin repository URL or path."""
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 ["git", "remote", "get-url", "origin"],
                 capture_output=True,
                 text=True,
@@ -136,7 +344,7 @@ class VMController:
             return result.stdout.strip()
         except subprocess.CalledProcessError:
             # Fallback to git root directory
-            result = subprocess.run(
+            result = run_subprocess(
                 ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True,
                 text=True,
@@ -148,7 +356,7 @@ class VMController:
         """Clean up any stale VM processes."""
         try:
             # Find stale QEMU processes
-            result = subprocess.run(
+            result = run_subprocess(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
                 capture_output=True, text=True
             )
@@ -169,7 +377,7 @@ class VMController:
     def _get_current_branch(self) -> str:
         """Get the current git branch name."""
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 ["git", "branch", "--show-current"],
                 capture_output=True,
                 text=True,
@@ -178,7 +386,7 @@ class VMController:
             branch = result.stdout.strip()
             if not branch:
                 # Detached HEAD state, use commit hash
-                result = subprocess.run(
+                result = run_subprocess(
                     ["git", "rev-parse", "--short", "HEAD"],
                     capture_output=True,
                     text=True,
@@ -216,7 +424,7 @@ class VMController:
         ssh_private_key = ssh_dir / "id_ed25519"
         ssh_public_key = ssh_dir / "id_ed25519.pub"
 
-        subprocess.run([
+        run_subprocess([
             "ssh-keygen", "-t", "ed25519", "-f", str(ssh_private_key),
             "-N", "", "-C", f"vm-key-{branch}"
         ], capture_output=True, check=True)
@@ -229,12 +437,12 @@ class VMController:
         current_branch = self._get_current_branch()
 
         try:
-            repo_root = subprocess.run(
+            repo_root = run_subprocess(
                 ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True, text=True, check=True
             ).stdout.strip()
 
-            subprocess.run([
+            run_subprocess([
                 "git", "clone", "--branch", current_branch, repo_root, str(workspace_dir)
             ], check=True)
         except subprocess.CalledProcessError as e:
@@ -256,12 +464,12 @@ class VMController:
             # Remote URL, use as-is
             origin_url = self.origin_repo
 
-        subprocess.run(["git", "remote", "set-url", "origin", origin_url], check=True)
+        run_subprocess(["git", "remote", "set-url", "origin", origin_url], check=True)
 
         # Add upstream remote if different from origin
         try:
             os.chdir(repo_root)
-            upstream_result = subprocess.run(
+            upstream_result = run_subprocess(
                 ["git", "remote", "get-url", "origin"],
                 capture_output=True, text=True
             )
@@ -269,7 +477,7 @@ class VMController:
 
             if upstream_url and upstream_url != self.origin_repo:
                 os.chdir(workspace_dir)
-                subprocess.run(["git", "remote", "add", "upstream", upstream_url])
+                run_subprocess(["git", "remote", "add", "upstream", upstream_url])
         except subprocess.CalledProcessError:
             upstream_url = ""
 
@@ -333,7 +541,7 @@ class VMController:
 
         # Get the original flake directory before changing to workspace
         try:
-            original_flake_dir = subprocess.run(
+            original_flake_dir = run_subprocess(
                 ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True, text=True, check=True
             ).stdout.strip()
@@ -389,7 +597,7 @@ class VMController:
                 in vm.config.system.build.vm'''
             ]
 
-            result = subprocess.run(vm_build_cmd, capture_output=True, text=True, cwd=workspace_dir)
+            result = run_subprocess(vm_build_cmd, capture_output=True, text=True, cwd=workspace_dir)
             if result.returncode != 0:
                 logger.error(f"VM build failed: {result.stderr}")
                 logger.error(f"VM build stdout: {result.stdout}")
@@ -413,7 +621,7 @@ class VMController:
         env = os.environ.copy()
         env["QEMU_OPTS"] = f"-name {vm_name}"
 
-        vm_process = subprocess.Popen(vm_cmd, env=env)
+        vm_process = ProcessWithOutput(vm_cmd, env=env)
 
         # Store PID
         pid_file = vm_config_dir / "vm.pid"
@@ -528,13 +736,14 @@ class VMController:
 
         logger.info(f"Opening shell in VM for branch: {branch}")
 
-        # SSH into VM
+        # SSH into VM (interactive, don't capture output)
         ssh_cmd = [
             "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
             "-p", "2222", "dev@localhost"
         ]
 
+        # For interactive SSH, use subprocess.run directly without capture
         subprocess.run(ssh_cmd)
 
     def list_vms(self) -> None:
@@ -622,13 +831,14 @@ class VMController:
         if self._is_vm_running(vm_name):
             logger.info("VM is running. Checking agent service logs via SSH...")
             try:
-                # Check agent service logs in VM
+                # Check agent service logs in VM (interactive, don't capture output)
                 ssh_cmd = [
                     "ssh", "-o", "ConnectTimeout=10", "-o", "StrictHostKeyChecking=no",
                     "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                     "-p", "2222", "dev@localhost",
                     "journalctl -f --no-pager -n 50 -u agent-mcp"
                 ]
+                # For interactive logs viewing, use subprocess.run directly without capture
                 subprocess.run(ssh_cmd)
             except subprocess.CalledProcessError:
                 logger.info("Could not access agent service logs. SSH into VM to check manually:")
@@ -640,7 +850,7 @@ class VMController:
     def _is_vm_running(self, vm_name: str) -> bool:
         """Check if VM is running by process name."""
         try:
-            subprocess.run(
+            run_subprocess(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
                 capture_output=True, check=True
             )
@@ -671,7 +881,7 @@ class VMController:
                 if attempt == 0 or attempt % 10 == 0:  # Log command details periodically
                     logger.debug(f"🔍 SSH attempt {attempt + 1}: {' '.join(ssh_cmd)}")
 
-                result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
+                result = run_subprocess(ssh_cmd, capture_output=True, timeout=10)
 
                 if attempt % 10 == 0:  # Log results periodically for debugging
                     logger.debug(f"🔍 SSH attempt {attempt + 1} exit code: {result.returncode}")
@@ -730,7 +940,7 @@ class VMController:
         ]
 
         try:
-            status_result = subprocess.run(status_check_cmd, capture_output=True, text=True, timeout=15)
+            status_result = run_subprocess(status_check_cmd, capture_output=True, text=True, timeout=15)
             logger.debug(f"🔍 Service status check exit code: {status_result.returncode}")
             logger.debug(f"🔍 Service status output: {status_result.stdout.strip()}")
             logger.debug(f"🔍 Service status stderr: {status_result.stderr.strip()}")
@@ -755,7 +965,7 @@ class VMController:
         logger.debug(f"🔍 Running start command: {' '.join(ssh_cmd)}")
 
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30, check=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, text=True, timeout=30, check=True)
             logger.debug(f"🔍 Start command exit code: {result.returncode}")
             logger.debug(f"🔍 Start command stdout: {result.stdout.strip()}")
             logger.debug(f"🔍 Start command stderr: {result.stderr.strip()}")
@@ -802,7 +1012,7 @@ class VMController:
                     "-p", "2222", "dev@localhost",
                     "curl -f http://localhost:8000/health"
                 ]
-                result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
+                result = run_subprocess(ssh_cmd, capture_output=True, timeout=10)
                 if result.returncode == 0:
                     # Clear progress line
                     print("\r" + " " * 60 + "\r", end="", flush=True)
@@ -872,7 +1082,7 @@ class VMController:
             with (vm_config_dir / "config.json").open() as f:
                 config_data = json.load(f)
             vm_name = config_data["vm_name"]
-            subprocess.run(["pkill", "-f", f"qemu.*{vm_name}"], capture_output=True)
+            run_subprocess(["pkill", "-f", f"qemu.*{vm_name}"], capture_output=True)
         except (FileNotFoundError, json.JSONDecodeError, subprocess.CalledProcessError):
             pass
 
@@ -956,7 +1166,7 @@ class VMController:
     def _get_vm_pid(self, vm_name: str) -> Optional[int]:
         """Get the PID of the running VM process."""
         try:
-            result = subprocess.run(
+            result = run_subprocess(
                 ["pgrep", "-f", f"qemu.*{vm_name}"],
                 capture_output=True, text=True
             )
@@ -971,7 +1181,7 @@ class VMController:
         resources = {}
         try:
             # Get CPU and memory usage from ps
-            result = subprocess.run(
+            result = run_subprocess(
                 ["ps", "-p", str(pid), "-o", "pid,ppid,pcpu,pmem,etime,comm"],
                 capture_output=True, text=True
             )
@@ -1005,7 +1215,7 @@ class VMController:
             ]
 
             logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
 
             logger.debug(f"🔍 SSH command exit code: {result.returncode}")
             logger.debug(f"🔍 SSH stdout: {result.stdout.strip()}")
@@ -1040,7 +1250,7 @@ class VMController:
                 "-p", "2222", "dev@localhost",
                 "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
             if result.returncode == 0:
                 properties = {}
                 for line in result.stdout.strip().split('\n'):
@@ -1091,7 +1301,7 @@ class VMController:
                 "-p", "2222", "dev@localhost",
                 f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
 
             response_time = int((time.time() - start_time) * 1000)
             mcp_status['response_time'] = response_time
@@ -1114,7 +1324,7 @@ class VMController:
                 "-p", "2222", "dev@localhost",
                 f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
             ]
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10, text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=10, text=True)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
                 if len(lines) >= 2:
