@@ -38,6 +38,7 @@ import Protolude
     Generic,
     IO,
     Int,
+    Integer,
     Monad,
     MonadIO,
     Ord,
@@ -113,6 +114,8 @@ traceLevel traceEvent = case traceEvent of
   AgentServiceFailed {} -> Critical traceEvent
   -- Error events - failures that should be investigated
   ProcessError {} -> Error traceEvent
+  ProcessTimeout {} -> Error traceEvent
+  ProcessSigKilled {} -> Error traceEvent
   SSHFailed {} -> Error traceEvent
   NixBuildFailed {} -> Error traceEvent
   -- Info events - normal operational events
@@ -130,6 +133,10 @@ traceLevel traceEvent = case traceEvent of
   VMStopping {} -> Debug traceEvent
   ProcessSpawned {} -> Debug traceEvent
   ProcessExited {} -> Debug traceEvent
+  ProcessStopped {} -> Debug traceEvent
+  ProcessWaitingForExit {} -> Debug traceEvent
+  ProcessIOWaiting {} -> Debug traceEvent
+  ProcessGracefulStop {} -> Debug traceEvent
   SSHKeyGenerated {} -> Debug traceEvent
   SSHConnecting {} -> Debug traceEvent
   SSHCommandExecuted {} -> Debug traceEvent
@@ -161,6 +168,12 @@ data AgentVmTrace
   | ProcessExited Text Int
   | ProcessOutput Text Text
   | ProcessError Text Text
+  | ProcessStopped Text -- Process gracefully stopped
+  | ProcessSigKilled Text Int -- Process force killed with signal
+  | ProcessTimeout Text Integer -- Process timed out after N microseconds
+  | ProcessWaitingForExit Text -- Waiting for process to exit
+  | ProcessIOWaiting Text -- Waiting for IO threads to complete
+  | ProcessGracefulStop Text Integer -- Attempting graceful stop with timeout
   | -- SSH Operations
     SSHKeyGenerated FilePath
   | SSHConnecting Text Int
@@ -206,6 +219,12 @@ renderTrace = \case
   ProcessExited c e -> "📤 Process exited: " <> c <> " (code: " <> T.pack (show e) <> ")"
   ProcessOutput c o -> "📝 Process output from " <> c <> ": " <> T.take 80 o
   ProcessError c e -> "❌ Process error from " <> c <> ": " <> e
+  ProcessStopped c -> "⏹️  Process stopped gracefully: " <> c
+  ProcessSigKilled c sig -> "🔪 Process force killed: " <> c <> " (signal: " <> T.pack (show sig) <> ")"
+  ProcessTimeout c timeout -> "⏰ Process timed out: " <> c <> " (after: " <> T.pack (show timeout) <> "μs)"
+  ProcessWaitingForExit c -> "⏳ Waiting for process exit: " <> c
+  ProcessIOWaiting c -> "📡 Waiting for IO threads: " <> c
+  ProcessGracefulStop c timeout -> "🛑 Attempting graceful stop: " <> c <> " (timeout: " <> T.pack (show timeout) <> "μs)"
   SSHKeyGenerated p -> "🔑 Generated SSH key: " <> T.pack p
   SSHConnecting h p -> "🔗 Connecting to SSH " <> h <> ":" <> T.pack (show p)
   SSHConnected h p -> "✅ SSH connected to " <> h <> ":" <> T.pack (show p)

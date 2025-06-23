@@ -13,7 +13,7 @@ module AgentVM.ProcessSpec (spec) where
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log hiding (ProcessExited)
 import AgentVM.Monad (runVMT)
-import AgentVM.Process (ProcessState (..), VMProcess (..), VMProcessWithCapture (..), checkVMProcess, stopVMProcess, stopVMProcessCaptured, waitForProcessCaptured, withVMProcessCaptured)
+import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, stopVMProcess, stopVMProcessCaptured, waitForProcessCaptured, withVMProcessCaptured)
 import qualified AgentVM.Process as P
 import Control.Concurrent.Thread.Delay (delay)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
@@ -312,7 +312,7 @@ spec = describe "AgentVM.Process" $ do
       (result, stdout, stderr) <- runVMT @IO testEnv $
         withVMProcessCaptured (fixturePath "echo_both.sh") [] defTimeout $ \process -> do
           -- Wait for completion
-          void $ P.waitForProcess defWait (P.VMProcess (P.getProcessCapture process) (P.waitIOThreadsCapture process))
+          void $ P.waitForProcess defWait process
           pure "test result"
 
       -- Check result and captured output
