@@ -1,4 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 -- | Process management for VMs
@@ -27,6 +31,7 @@ import Protolude
     FilePath,
     Functor,
     IO,
+    IOException,
     Int,
     Integer,
     Maybe (..),
@@ -46,9 +51,9 @@ import Protolude
     ($),
     (&),
     (<$),
+    (<*),
     (>>=),
   )
-import System.IO (Handle)
 import System.Posix.Signals (sigKILL, signalProcess)
 import System.Process.Typed
   ( ExitCode (..),
@@ -67,8 +72,16 @@ import System.Process.Typed
     stopProcess,
     waitExitCode,
   )
-import UnliftIO (MonadUnliftIO, bracket, catchAny, tryAny)
-import UnliftIO.Async (async, cancel, withAsync)
+import UnliftIO
+  ( BufferMode (LineBuffering),
+    Handle,
+    MonadUnliftIO,
+    bracket,
+    catchAny,
+    hSetBuffering,
+    try,
+  )
+import UnliftIO.Async (async, cancel, wait, withAsync)
 
 -- | State of a VM process
 data ProcessState
@@ -76,7 +89,10 @@ data ProcessState
   | ProcessExited ExitCode
   deriving (Eq, Show)
 
-newtype VMProcess = VMProcess {unVMProcess :: Process () Handle Handle}
+data VMProcess = VMProcess
+  { getProcess :: Process () Handle Handle,
+    waitIOThreads :: IO ()
+  }
 
 startLoggedProcess ::
   ( MonadTrace AgentVmTrace m,
@@ -84,7 +100,7 @@ startLoggedProcess ::
   ) =>
   FilePath ->
   [Text] ->
-  m (Process () Handle Handle)
+  m (Process () Handle Handle, IO ())
 startLoggedProcess scriptPath args = do
   -- Trace the process spawn event
   trace $ ProcessSpawned (toS scriptPath) args
@@ -100,23 +116,26 @@ startLoggedProcess scriptPath args = do
 
   -- Spawn async tasks to read and trace output
   let processName = toS scriptPath :: Text
-  _ <- async $ traceHandleOutput processName ProcessOutput (getStdout process)
-  _ <- async $ traceHandleOutput processName ProcessError (getStderr process)
+  tOut <- async $ traceHandleOutput processName ProcessOutput (getStdout process)
+  tErr <- async $ traceHandleOutput processName ProcessError (getStderr process)
 
-  pure process
+  pure (process, mapM_ wait [tOut, tErr])
   where
     -- Helper to trace output from a handle line by line
     traceHandleOutput :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => Text -> (Text -> Text -> AgentVmTrace) -> Handle -> m ()
     traceHandleOutput name constructor handle = do
       let loop = do
-            eitherLine <- liftIO $ tryAny $ BS.hGetLine handle
+            eitherLine <- liftIO $ try $ BS.hGetLine handle
             case eitherLine of
-              Left _ -> pure () -- EOF or error
+              Left (_ :: IOException) -> pure () -- EOF or error
               Right line -> do
                 -- Always trace the line, even if it's empty
                 let lineText = TE.decodeUtf8Lenient line
                 trace (constructor name lineText)
                 loop
+      try (hSetBuffering handle LineBuffering) >>= \case
+        Left (_ :: IOException) -> pure () -- process failed to start
+        Right () -> pure ()
       loop
 
 -- | Start a VM process
@@ -129,8 +148,8 @@ startVMProcess ::
   m VMProcess
 startVMProcess scriptPath args = do
   -- Use startLoggedProcess to start the process with logging
-  process <- startLoggedProcess scriptPath args
-  pure $ VMProcess process
+  (getProcess, waitIOThreads) <- startLoggedProcess scriptPath args
+  pure $ VMProcess {getProcess, waitIOThreads}
 
 type Timeout = Integer
 
@@ -142,15 +161,17 @@ stopVMProcess ::
   Maybe Timeout ->
   VMProcess ->
   m ExitCode
-stopVMProcess mTimeout (VMProcess process) = do
+stopVMProcess mTimeout vmProcess = do
   -- Stop the process
   withAsync processKiller $ \killer -> do
     result <- liftIO $ do
       stopProcess process
       waitExitCode process
     cancel killer
+    liftIO $ waitIOThreads vmProcess
     pure result
   where
+    process = getProcess vmProcess
     processKiller = case mTimeout of
       Just t -> do
         liftIO $ delay t
@@ -176,12 +197,12 @@ withVMProcess scriptPath args mTimeout =
 -- | Check if VM process is still running
 checkVMProcess :: (MonadIO m) => VMProcess -> m ProcessState
 checkVMProcess process = liftIO $ do
-  exitCode <- getExitCode (unVMProcess process)
+  exitCode <- getExitCode (getProcess process)
   pure $ maybe ProcessRunning ProcessExited exitCode
 
 -- | Wait for a process with timeout
 waitForProcess :: (MonadIO m) => Int -> VMProcess -> m (Maybe ExitCode)
-waitForProcess timeoutMicros (VMProcess process) = do
+waitForProcess timeoutMicros (getProcess -> process) = do
   -- Convert microseconds to Integer for unbounded-delays
   let timeoutMicrosInteger = fromIntegral timeoutMicros :: Integer
   liftIO $ timeout timeoutMicrosInteger (waitExitCode process)
