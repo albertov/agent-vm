@@ -17,6 +17,7 @@
 module AgentVM.Log
   ( AgentVmTrace (..),
     MonadTrace (..),
+    PlowLogging (..),
     LogLevel (..),
     traceToMessage,
     renderTrace,
