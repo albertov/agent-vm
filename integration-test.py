@@ -26,84 +26,11 @@ import pytest
 import typer
 
 
-# Color codes for terminal output
-class Colors:
-    """ANSI color codes for terminal output."""
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-
-    # Standard colors
-    RED = '\033[31m'
-    GREEN = '\033[32m'
-    YELLOW = '\033[33m'
-    BLUE = '\033[34m'
-    MAGENTA = '\033[35m'
-    CYAN = '\033[36m'
-    WHITE = '\033[37m'
-
-    # Bright colors
-    BRIGHT_RED = '\033[91m'
-    BRIGHT_GREEN = '\033[92m'
-    BRIGHT_YELLOW = '\033[93m'
-    BRIGHT_BLUE = '\033[94m'
-    BRIGHT_MAGENTA = '\033[95m'
-    BRIGHT_CYAN = '\033[96m'
-
-
-class IntegrationTestFormatter(logging.Formatter):
-    """Custom formatter with color support for integration tests."""
-
-    # Color mapping for different log levels
-    COLORS = {
-        logging.DEBUG: Colors.DIM + Colors.WHITE,
-        logging.INFO: Colors.BRIGHT_BLUE,
-        logging.WARNING: Colors.BRIGHT_YELLOW,
-        logging.ERROR: Colors.BRIGHT_RED,
-        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
-    }
-
-    def format(self, record):
-        # Apply color based on log level
-        color = self.COLORS.get(record.levelno, Colors.RESET)
-
-        # Format the message
-        formatted = super().format(record)
-
-        # Add colors if output is a TTY
-        if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
-            # Color the level name
-            level_color = color + record.levelname + Colors.RESET
-            formatted = formatted.replace(record.levelname, level_color)
-
-            # Add colored prefix based on message content
-            if "✅" in record.msg or "PASS" in record.msg.upper():
-                formatted = Colors.BRIGHT_GREEN + "✅ " + Colors.RESET + formatted
-            elif "❌" in record.msg or "FAIL" in record.msg.upper():
-                formatted = Colors.BRIGHT_RED + "❌ " + Colors.RESET + formatted
-            elif "⚠️" in record.msg or "SKIP" in record.msg.upper():
-                formatted = Colors.BRIGHT_YELLOW + "⚠️ " + Colors.RESET + formatted
-            elif "🧪" in record.msg or "TEST" in record.msg.upper():
-                formatted = Colors.BRIGHT_CYAN + "🧪 " + Colors.RESET + formatted
-            elif "🔧" in record.msg or "SETUP" in record.msg.upper():
-                formatted = Colors.BRIGHT_MAGENTA + "🔧 " + Colors.RESET + formatted
-
-        return formatted
-
-
 def setup_logging(verbose: bool = False):
     """Set up colored logging configuration for integration tests."""
     level = logging.DEBUG if verbose else logging.INFO
 
-    # Create formatter
-    formatter = IntegrationTestFormatter(
-        fmt="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S"
-    )
-
-    # Create handler
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
 
     # Configure root logger
     logging.basicConfig(

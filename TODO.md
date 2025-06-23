@@ -284,9 +284,18 @@ class VMController:
   - ✅ Maintain CLI interface but use pytest test execution internally
 
 **🔄 IN PROGRESS:**
-- **Step 29**: Add specific agent service startup integration test
-  - Create test that validates agent-mcp systemd service starts correctly in VM
-  - Verify service is active and healthy after VM startup
+- **Step 29**: Debug agent service status reporting in integration tests
+  - ✅ **MAJOR PROGRESS**: Fixed VM building and startup with agent service
+    - ✅ Fixed VM configuration to use existing vm-config.nix with agent service
+    - ✅ Fixed Nix expression syntax issues in VM build command
+    - ✅ Fixed configuration conflicts using lib.mkForce for port overrides
+    - ✅ VM now builds successfully with agent service enabled
+    - ✅ test_vm_start_stop_cycle now PASSES - VM starts and stops correctly
+  - 🔍 **REMAINING ISSUE**: Agent service status unclear in test output
+    - VM starts successfully and agent service is configured
+    - test_agent_service_startup still fails due to status reporting
+    - Integration test can't determine agent service health from VM status output
+    - Next: Debug agent service status reporting in _show_vm_status method
   - Test MCP proxy endpoint accessibility and functionality
   - Ensure service restarts properly after failure
 - **Step 16**: VM security hardening
