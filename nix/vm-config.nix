@@ -109,6 +109,22 @@ in
   ];
   nix.settings.trusted-users = [ "mcp-proxy" ];
 
+  # Configure host nix store as binary cache
+  nix.settings.substituters = [
+    "file:///nix/store"  # Use mounted host store as primary cache
+    "https://cache.nixos.org/"  # Fallback to public cache
+    "https://cache.iog.io"  # Additional cache from flake config
+    "https://nixcache.plowtech.net:9876/"  # Additional cache from flake config
+  ];
+  # Trust the host store implicitly since it's mounted from host
+  nix.settings.trusted-substituters = [
+    "file:///nix/store"
+  ];
+  nix.settings.trusted-public-keys = [
+    "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+    "jenkins.plowtech.net-1:7MnrDY0TzJTvmaSlRT25noN7qbvqRnLoLOqaxMBNckI="
+  ];
+
   services.selenium-server.enable = true;
 
   # Enable and configure the agent service
