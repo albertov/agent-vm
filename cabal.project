@@ -1,6 +1,9 @@
 write-ghc-environment-files: never
 packages:
   ./.
+tests: True
+benchmarks: True
+
 allow-newer: all
 
 constraints:

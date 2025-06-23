@@ -9,7 +9,7 @@ import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, startVMProcess)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
-import System.Process.Typed (ExitCode (..), proc, startProcess, stopProcess)
+import System.Process.Typed (ExitCode (..), createPipe, proc, setStderr, setStdout, startProcess, stopProcess)
 import Test.Hspec (Spec, describe, it, pending, shouldBe, shouldReturn, shouldSatisfy)
 import UnliftIO.Exception (finally)
 
@@ -38,8 +38,12 @@ spec = describe "AgentVM.Process" $ do
       pending
 
     it "checks if process is running" $ do
-      -- Start a simple process
-      process <- startProcess (proc "sleep" ["1"])
+      -- Start a simple process with pipes
+      process <-
+        startProcess $
+          proc "sleep" ["1"]
+            & setStdout createPipe
+            & setStderr createPipe
 
       -- Create a VMProcess wrapper
       let vmProcess = VMProcess process
@@ -51,8 +55,12 @@ spec = describe "AgentVM.Process" $ do
       stopProcess process
 
     it "detects when process has exited" $ do
-      -- Start a process that exits immediately
-      process <- startProcess (proc "true" [])
+      -- Start a process that exits immediately with pipes
+      process <-
+        startProcess $
+          proc "true" []
+            & setStdout createPipe
+            & setStderr createPipe
 
       -- Create a VMProcess wrapper
       let vmProcess = VMProcess process
@@ -68,8 +76,12 @@ spec = describe "AgentVM.Process" $ do
         ProcessRunning -> panic "Process should have exited"
 
     it "detects when process has exited with failure" $ do
-      -- Start a process that exits with error code
-      process <- startProcess (proc "false" [])
+      -- Start a process that exits with error code with pipes
+      process <-
+        startProcess $
+          proc "false" []
+            & setStdout createPipe
+            & setStderr createPipe
 
       -- Create a VMProcess wrapper
       let vmProcess = VMProcess process
