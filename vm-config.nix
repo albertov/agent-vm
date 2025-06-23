@@ -37,7 +37,9 @@
   users.users.dev = {
     isNormalUser = true;
     group = "dev";
-    extraGroups = [ "wheel" ]; #TODO: Assess if necessary
+    extraGroups = [ "wheel" ];
+    home = "/workspace";
+    #TODO: The home directory should be
     shell = pkgs.bash;
     # SSH key will be injected dynamically during VM startup
     openssh.authorizedKeys.keys = [
