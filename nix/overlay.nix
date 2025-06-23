@@ -60,7 +60,7 @@ inputs: final: prev: {
   agent-vm-py = final.python3.pkgs.buildPythonApplication {
     pname = "agent-vm-py";
     version = "1.0.0";
-    src = ./agent-vm-py;
+    src = ../agent-vm-py;
     format = "pyproject";
 
     # Runtime dependencies
