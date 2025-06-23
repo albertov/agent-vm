@@ -18,7 +18,8 @@ ByteString instead
 have left a commit after yours to help you out, inspect it and take it into
 account.
 
-## You can use the 'hls' server and the 'hoogle' command to search for documentation about symbols in
+## You can use the 'haskell-language-server' server's tools and the 'hoogle'
+command to search for documentation about symbols in
 any external dependency we have available. You should implement functionality
 using existing dependencies when possible.
 
