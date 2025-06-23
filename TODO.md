@@ -1,14 +1,8 @@
 # TODO: Agent Isolation using QEMU VMs
 
-## 🎯 Current Status: Planning QEMU VM Implementation
+## 🎯 Current Status: CLI Refactor Completed ✅
 
-**Goal:** Implement QEMU VM-based agent isolation for enhanced security while maintaining development workflow compatibility.
-
-Read README.md for specs
-
-# TODO: Agent Isolation using QEMU VMs
-
-## 🎯 Current Status: Planning QEMU VM Implementation
+**Recent Achievement:** Successfully completed CLI refactor - separated concerns between main.py (CLI interface) and vm_controller.py (core functionality).
 
 **Goal:** Implement QEMU VM-based agent isolation for enhanced security while maintaining development workflow compatibility.
 
@@ -19,6 +13,15 @@ Read README.md for specs
 ### URGENT - ALL COMPLETED ✅
 
 All urgent tasks have been successfully completed:
+
+- [x] **CLI Code Refactor** ✅
+  - Moved all typer CLI commands from vm_controller.py to main.py
+  - vm_controller.py now contains only core VM management functionality (VMController class)
+  - main.py now contains all CLI command definitions and main entry point
+  - Updated timeout handling to be passed from CLI to VMController constructor
+  - Fixed pyproject.toml entry point and package structure
+  - Updated Nix build configuration to match new package structure
+  - All tests passing, integration tests show refactor is working correctly
 
 - [ ] All integration-tests MUST pass
 

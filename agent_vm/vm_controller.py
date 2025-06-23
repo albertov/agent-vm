@@ -2,13 +2,10 @@
 """
 VM control command for managing development VMs.
 
-This tool provides comprehensive VM lifecycle management including creation,
+This module provides the core VM lifecycle management functionality including creation,
 startup, shutdown, and workspace management for agent development environments.
-
-Usage: agent-vm <command> [options]
 """
 
-import typer
 import atexit
 import json
 import logging
@@ -460,7 +457,7 @@ def _find_free_port(start_port: int = 2222, max_attempts: int = 100) -> int:
 class VMController:
     """VM lifecycle management controller."""
 
-    def __init__(self, state_dir: Optional[str] = None) -> None:
+    def __init__(self, state_dir: Optional[str] = None, timeout: int = 120) -> None:
         """Initialize VM controller with configuration paths."""
         self.home_dir = Path.home()
         if state_dir:
@@ -470,6 +467,9 @@ class VMController:
 
         # Store for subprocess logging
         self.state_dir = self.base_dir
+
+        # Store timeout for VM operations
+        self.timeout = timeout
 
         # Clean up old log files
         _cleanup_old_logs(self.state_dir)
@@ -805,7 +805,7 @@ in
                 capture_output=True,
                 text=True,
                 cwd=workspace_dir,
-                timeout=_get_global_timeout()
+                timeout=self.timeout
             )
 
             if result.returncode != 0:
@@ -914,7 +914,7 @@ in
                         capture_output=True,
                         text=True,
                         cwd=workspace_dir,
-                        timeout=_get_global_timeout()
+                        timeout=self.timeout
                     )
 
                     if result.returncode == 0 and result.stdout.strip():
@@ -958,7 +958,7 @@ in
                         capture_output=True,
                         text=True,
                         cwd=workspace_dir,
-                        timeout=_get_global_timeout()
+                        timeout=self.timeout
                     )
 
                     if result.returncode != 0:
@@ -1265,11 +1265,11 @@ in
     def _wait_for_vm_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: Optional[int] = None) -> bool:
         """Wait for VM to be ready for SSH connections."""
         if max_attempts is None:
-            # Calculate reasonable max_attempts based on global timeout
+            # Calculate reasonable max_attempts based on timeout
             # Each attempt takes ~2 seconds, so divide timeout by 2
-            max_attempts = max(1, _get_global_timeout() // 2)
+            max_attempts = max(1, self.timeout // 2)
 
-        timeout_per_attempt = min(10, _get_global_timeout() // max_attempts) if max_attempts > 0 else 10
+        timeout_per_attempt = min(10, self.timeout // max_attempts) if max_attempts > 0 else 10
 
         logger.info("🚀 Waiting for VM to be ready...")
         logger.debug(f"🔍 Using SSH key: {ssh_key_path}")
@@ -1340,7 +1340,7 @@ in
         # Clear progress line and show error
         print("\r" + " " * 50 + "\r", end="", flush=True)
         total_time = max_attempts * 2  # Approximate total time spent
-        logger.error(f"❌ VM failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {_get_global_timeout()}s)")
+        logger.error(f"❌ VM failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {self.timeout}s)")
         logger.error("🔧 VM startup troubleshooting:")
         logger.error("  • Check if VM process is still running: ps aux | grep qemu")
         logger.error(f"  • Try connecting manually: ssh -i <key> -p {ssh_port} dev@localhost")
@@ -1363,7 +1363,7 @@ in
         ]
 
         try:
-            service_result = run_subprocess(service_check_cmd, capture_output=True, text=True, timeout=min(15, _get_global_timeout()))
+            service_result = run_subprocess(service_check_cmd, capture_output=True, text=True, timeout=min(15, self.timeout))
             logger.debug(f"🔍 Service list exit code: {service_result.returncode}")
             logger.debug(f"🔍 Service list output: {service_result.stdout.strip()}")
 
@@ -1389,7 +1389,7 @@ in
         ]
 
         try:
-            status_result = run_subprocess(status_check_cmd, capture_output=True, text=True, timeout=min(15, _get_global_timeout()))
+            status_result = run_subprocess(status_check_cmd, capture_output=True, text=True, timeout=min(15, self.timeout))
             logger.debug(f"🔍 Service status check exit code: {status_result.returncode}")
             logger.debug(f"🔍 Service status output: {status_result.stdout.strip()}")
             logger.debug(f"🔍 Service status stderr: {status_result.stderr.strip()}")
@@ -1414,7 +1414,7 @@ in
         logger.debug(f"🔍 Running start command: {' '.join(ssh_cmd)}")
 
         try:
-            result = run_subprocess(ssh_cmd, capture_output=True, text=True, timeout=min(30, _get_global_timeout()), check=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, text=True, timeout=min(30, self.timeout), check=True)
             logger.debug(f"🔍 Start command exit code: {result.returncode}")
             logger.debug(f"🔍 Start command stdout: {result.stdout.strip()}")
             logger.debug(f"🔍 Start command stderr: {result.stderr.strip()}")
@@ -1449,11 +1449,11 @@ in
     def _wait_for_agent_ready(self, ssh_key_path: Path, ssh_port: int = 2222, max_attempts: Optional[int] = None) -> bool:
         """Wait for agent service to be ready."""
         if max_attempts is None:
-            # Calculate reasonable max_attempts based on global timeout
+            # Calculate reasonable max_attempts based on timeout
             # Each attempt takes ~2 seconds, so divide timeout by 2
-            max_attempts = max(1, _get_global_timeout() // 2)
+            max_attempts = max(1, self.timeout // 2)
 
-        timeout_per_attempt = min(10, _get_global_timeout() // max_attempts) if max_attempts > 0 else 10
+        timeout_per_attempt = min(10, self.timeout // max_attempts) if max_attempts > 0 else 10
 
         logger.info("🔧 Waiting for agent service to be ready...")
 
@@ -1499,7 +1499,7 @@ in
         # Clear progress line and show error
         print("\r" + " " * 60 + "\r", end="", flush=True)
         total_time = max_attempts * 2  # Approximate total time spent
-        logger.error(f"❌ Agent service failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {_get_global_timeout()}s)")
+        logger.error(f"❌ Agent service failed to become ready after {max_attempts} attempts (~{total_time} seconds, timeout: {self.timeout}s)")
         return False
 
     def _stop_vm_by_pid(self, vm_config_dir: Path) -> None:
@@ -1696,7 +1696,7 @@ in
 
         try:
             ssh_cmd = [
-                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}",
+                "ssh", "-o", f"ConnectTimeout={min(5, self.timeout // 4)}",
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null",
                 "-o", "BatchMode=yes",  # Non-interactive
@@ -1708,7 +1708,7 @@ in
             logger.debug(f"🔍 Running SSH command: {' '.join(ssh_cmd)}")
 
             start_time = time.time()
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, self.timeout // 2), text=True)
             duration = time.time() - start_time
 
             logger.debug(f"🔍 SSH Command Duration: {duration:.2f}s")
@@ -1773,12 +1773,12 @@ in
         try:
             # Check if service is active
             ssh_cmd = [
-                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, self.timeout // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 "systemctl show agent-mcp --property=ActiveState,SubState,MainPID,ExecMainStartTimestamp,NRestarts,MemoryCurrent"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, self.timeout // 2), text=True)
             if result.returncode == 0:
                 properties = {}
                 for line in result.stdout.strip().split('\n'):
@@ -1823,12 +1823,12 @@ in
             start_time = time.time()
 
             ssh_cmd = [
-                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, self.timeout // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 f"curl -s -f -m 5 http://localhost:{port}/health || curl -s -f -m 5 http://localhost:{port}/ || echo 'PROXY_DOWN'"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, self.timeout // 2), text=True)
 
             response_time = int((time.time() - start_time) * 1000)
             mcp_status['response_time'] = response_time
@@ -1846,12 +1846,12 @@ in
         workspace_status = {'accessible': False}
         try:
             ssh_cmd = [
-                "ssh", "-o", f"ConnectTimeout={min(5, _get_global_timeout() // 4)}", "-o", "StrictHostKeyChecking=no",
+                "ssh", "-o", f"ConnectTimeout={min(5, self.timeout // 4)}", "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null", "-i", str(ssh_key_path),
                 "-p", str(ssh_port), "dev@localhost",
                 f"cd {workspace_path} && pwd && du -sh . 2>/dev/null && git status --porcelain 2>/dev/null | wc -l || echo 'GIT_ERROR'"
             ]
-            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, _get_global_timeout() // 2), text=True)
+            result = run_subprocess(ssh_cmd, capture_output=True, timeout=min(10, self.timeout // 2), text=True)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
                 if len(lines) >= 2:
@@ -1869,252 +1869,3 @@ in
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             workspace_status['error'] = f"Workspace check failed: {e}"
         return workspace_status
-
-
-# Global state for options
-_global_state = {
-    "state_dir": None,
-    "verbose": False,
-    "debug": False,
-    "timeout": 120  # Default timeout in seconds
-}
-
-# Initialize typer app
-app = typer.Typer(
-    name="agent-vm",
-    help="VM control command for managing development VMs",
-    epilog="""
-Examples:
-  agent-vm create --branch=feature-x --port=8001
-  agent-vm start feature-x
-  agent-vm restart feature-x
-  agent-vm shell feature-x
-  agent-vm list
-  agent-vm destroy feature-x
-    """
-)
-
-
-def _setup_global_options(
-    state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
-    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging (more verbose than --verbose)"),
-    timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
-) -> None:
-    """Set up global options that apply to all commands."""
-    global _global_debug
-
-    _global_state["state_dir"] = state_dir
-    _global_state["verbose"] = verbose
-    _global_state["debug"] = debug
-    _global_state["timeout"] = timeout
-
-    # Set global debug flag for subprocess logging
-    _global_debug = debug
-
-    # Debug takes precedence over verbose
-    if debug:
-        setup_logging(verbose=True)
-        logger.debug("Debug mode enabled - maximum verbosity for all commands")
-    elif verbose:
-        setup_logging(verbose=True)
-        logger.debug("Verbose mode enabled for all commands")
-    else:
-        setup_logging(verbose=False)
-
-
-def _get_global_timeout() -> int:
-    """Get the global timeout value."""
-    return _global_state["timeout"]
-
-
-@app.callback()
-def main_callback(
-    state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
-    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging (more verbose than --verbose)"),
-    timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
-) -> None:
-    """Main callback to handle global options."""
-    _setup_global_options(state_dir, verbose, debug, timeout)
-
-
-@app.command()
-def create(
-    host: str = typer.Option("localhost", help="Host to bind VM ports to"),
-    port: int = typer.Option(8000, help="Port for MCP proxy forwarding"),
-    branch: Optional[str] = typer.Option(None, help="Branch name for VM (default: current branch)"),
-    config: str = typer.Option("vm-config.nix", help="Path to VM NixOS config")
-) -> None:
-    """Create a new VM configuration."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.create_vm(host, port, branch, config)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def start(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Start VM for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.start_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def stop(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Stop VM for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.stop_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def restart(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Restart VM for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.restart_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def status(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Show VM status for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.vm_status(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def shell(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Open SSH shell in VM for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.vm_shell(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def logs(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Show VM logs for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.vm_logs(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command("list")
-def list_vms() -> None:
-    """List all VM configurations."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.list_vms()
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)
-
-
-@app.command()
-def destroy(
-    branch: Optional[str] = typer.Argument(None, help="Branch name (default: current branch)")
-) -> None:
-    """Destroy VM configuration for branch."""
-    controller = VMController(state_dir=_global_state["state_dir"])
-
-    try:
-        controller.destroy_vm(branch)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed with exit code {e.returncode}")
-        raise typer.Exit(e.returncode)
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        raise typer.Exit(130)
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise typer.Exit(1)

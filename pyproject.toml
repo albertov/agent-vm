@@ -42,7 +42,7 @@ test = [
 ]
 
 [project.scripts]
-agent-vm = "main:main"
+agent-vm = "agent_vm.main:main"
 
 [project.urls]
 Homepage = "https://github.com/example/agent-vm"
@@ -51,7 +51,7 @@ Repository = "https://github.com/example/agent-vm.git"
 "Bug Tracker" = "https://github.com/example/agent-vm/issues"
 
 [tool.setuptools]
-py-modules = ["vm_controller", "main"]
+packages = ["agent_vm"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"

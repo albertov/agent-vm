@@ -3,3 +3,4 @@ rescript_sys.sh
 *.sw?
 result*
 *.log
+__pycache__
