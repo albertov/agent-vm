@@ -5,3 +5,4 @@ result*
 *.log
 __pycache__
 *.py?
+run_hoogle.sh
