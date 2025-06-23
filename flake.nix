@@ -71,6 +71,115 @@
               exec hoogle "$@"
             '';
           };
+          agent-vm-sh = final.writeShellApplication {
+            name = "agent-vm";
+            runtimeInputs = [
+              final.nix
+              final.git
+            ];
+            text = ''
+              # Parse command line arguments
+              CONFIG=""
+              FLAKE=""
+              DEVSHELL="default"
+              PORT=8000
+              WORKSPACE="$(pwd)"
+              MEMORY_SIZE=4
+              CORES=2
+              DISK_SIZE=4
+
+              # Show usage
+              usage() {
+                echo "Usage: $0 [OPTIONS]"
+                echo ""
+                echo "Options:"
+                echo "  --config PATH      VM configuration file (optional)"
+                echo "  --flake FLAKE      Flake to use (default: current git repo)"
+                echo "  --devshell NAME    Development shell to use (default: $DEVSHELL)"
+                echo "  --port PORT        Port for the VM (default: $PORT)"
+                echo "  --workspace PATH   Workspace directory (default: current directory)"
+                echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
+                echo "  --cores NUM        Number of CPU cores (default: $CORES)"
+                echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
+                echo "  -h, --help         Show this help message"
+                exit 0
+              }
+
+              # Parse arguments
+              while [[ $# -gt 0 ]]; do
+                case $1 in
+                  --config)
+                    CONFIG="$2"
+                    shift 2
+                    ;;
+                  --flake)
+                    FLAKE="$2"
+                    shift 2
+                    ;;
+                  --devshell)
+                    DEVSHELL="$2"
+                    shift 2
+                    ;;
+                  --port)
+                    PORT="$2"
+                    shift 2
+                    ;;
+                  --workspace)
+                    WORKSPACE="$2"
+                    shift 2
+                    ;;
+                  --memory)
+                    MEMORY_SIZE="$2"
+                    shift 2
+                    ;;
+                  --cores)
+                    CORES="$2"
+                    shift 2
+                    ;;
+                  --disk)
+                    DISK_SIZE="$2"
+                    shift 2
+                    ;;
+                  -h|--help)
+                    usage
+                    ;;
+                  *)
+                    echo "Unknown option: $1"
+                    usage
+                    ;;
+                esac
+              done
+
+              # If FLAKE is not provided, use the current git repo
+              if [ "$FLAKE" == "" ]; then
+                REPO_ROOT="$(git rev-parse --show-toplevel)"
+                BRANCH=$(git branch --show-current)
+                FLAKE="git+file://$REPO_ROOT?ref=$BRANCH"
+              fi
+
+              SYSTEM="$(nix eval --impure --expr builtins.currentSystem)"
+              exec nix run --impure --show-trace --expr "
+                let self = builtins.getFlake \"${self}\";
+                    flake = builtins.getFlake \"$FLAKE\";
+                    shell = flake.devShells.$SYSTEM.$DEVSHELL;
+                    mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mod).config.system.build.vmWithVirtioFS;
+                in mkVM
+                    [$CONFIG
+                      { agent-vm = {
+                          inherit shell;
+                          port=$PORT;
+                          memorySize=1024 * $MEMORY_SIZE;
+                          diskSize=1024 * $DISK_SIZE;
+                          cores=$CORES;
+                          uid=$(id -u);
+                          group=\"$(id -n -g)\";
+                          workspace=\"$WORKSPACE\";
+                        };
+                      }
+                    ]
+                "
+            '';
+          };
           # statically-linked exes
           agent-vm = final.projectStatic.getComponent "agent-vm:exe:agent-vm";
           agent-vm-test = final.projectStatic.getComponent "agent-vm:exe:agent-vm-test";
@@ -150,122 +259,15 @@
                 }
                 ./nix/modules/vm-base.nix
               ] ++ mods;
-            }).config.system.build.vmWithVirtioFS;
+            });
         };
 
         # Apps for running the agent
         apps = rec {
           # Haskell agent-vm app (new implementation)
           agent-vm = flake-utils.lib.mkApp {
-            drv = pkgs.writeShellApplication {
-              name = "agent-vm";
-              runtimeInputs = [
-                pkgs.nix
-                pkgs.git
-              ];
-              text = ''
-                # Parse command line arguments
-                CONFIG=""
-                FLAKE=""
-                DEVSHELL="default"
-                PORT=8000
-                WORKSPACE="$(pwd)"
-                MEMORY_SIZE=4
-                CORES=2
-                DISK_SIZE=4
+            drv = pkgs.agent-vm-sh;
 
-                # Show usage
-                usage() {
-                  echo "Usage: $0 [OPTIONS]"
-                  echo ""
-                  echo "Options:"
-                  echo "  --config PATH      VM configuration file (optional)"
-                  echo "  --flake FLAKE      Flake to use (default: current git repo)"
-                  echo "  --devshell NAME    Development shell to use (default: $DEVSHELL)"
-                  echo "  --port PORT        Port for the VM (default: $PORT)"
-                  echo "  --workspace PATH   Workspace directory (default: current directory)"
-                  echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
-                  echo "  --cores NUM        Number of CPU cores (default: $CORES)"
-                  echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
-                  echo "  -h, --help         Show this help message"
-                  exit 0
-                }
-
-                # Parse arguments
-                while [[ $# -gt 0 ]]; do
-                  case $1 in
-                    --config)
-                      CONFIG="$2"
-                      shift 2
-                      ;;
-                    --flake)
-                      FLAKE="$2"
-                      shift 2
-                      ;;
-                    --devshell)
-                      DEVSHELL="$2"
-                      shift 2
-                      ;;
-                    --port)
-                      PORT="$2"
-                      shift 2
-                      ;;
-                    --workspace)
-                      WORKSPACE="$2"
-                      shift 2
-                      ;;
-                    --memory)
-                      MEMORY_SIZE="$2"
-                      shift 2
-                      ;;
-                    --cores)
-                      CORES="$2"
-                      shift 2
-                      ;;
-                    --disk)
-                      DISK_SIZE="$2"
-                      shift 2
-                      ;;
-                    -h|--help)
-                      usage
-                      ;;
-                    *)
-                      echo "Unknown option: $1"
-                      usage
-                      ;;
-                  esac
-                done
-
-                # If FLAKE is not provided, use the current git repo
-                if [ "$FLAKE" == "" ]; then
-                  REPO_ROOT="$(git rev-parse --show-toplevel)"
-                  BRANCH=$(git branch --show-current)
-                  FLAKE="git+file://$REPO_ROOT?ref=$BRANCH"
-                fi
-
-                SYSTEM="$(nix eval --impure --expr builtins.currentSystem)"
-                exec nix run --impure --show-trace --expr "
-                  let self = builtins.getFlake \"${self}\";
-                      flake = builtins.getFlake \"$FLAKE\";
-                      shell = flake.devShells.$SYSTEM.$DEVSHELL;
-                      mkVM = self.lib.$SYSTEM.mk-agent-vm;
-                  in mkVM
-                      [$CONFIG
-                        { agent-vm = {
-                            inherit shell;
-                            port=$PORT;
-                            memorySize=1024 * $MEMORY_SIZE;
-                            diskSize=1024 * $DISK_SIZE;
-                            cores=$CORES;
-                            uid=$(id -u);
-                            group=\"$(id -n -g)\";
-                            workspace=\"$WORKSPACE\";
-                          };
-                        }
-                      ]
-                  "
-              '';
-            };
           };
 
           # Haskell integration test stub (to be implemented)

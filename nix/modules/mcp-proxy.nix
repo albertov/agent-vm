@@ -407,8 +407,7 @@ in
           RemoveIPC = true;
 
           # Working directory
-          WorkingDirectory =
-            "${config.users.users."${cfg.user}".home}/workspace";
+          WorkingDirectory = "${config.users.users."${cfg.user}".home}/workspace";
 
           # === CAPABILITY RESTRICTION ===
 
