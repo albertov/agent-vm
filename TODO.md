@@ -299,7 +299,14 @@ class VMController:
   - ✅ Fix integration test framework to properly pass debug flag to agent-vm commands
   - ✅ Add comprehensive integration test to verify options work correctly
 
-**🔄 IN PROGRESS:**
+**✅ COMPLETED:**
+- **Step 32**: Add --config CLI argument for vm-config.nix location
+  - ✅ Add --config argument to specify the location of vm-config.nix
+  - ✅ Make it default to the flake location, not the workspace_dir
+  - ✅ Update VM creation and startup to use the specified config path
+  - ✅ Ensure config path is stored in VM metadata and used consistently
+  - ✅ Fix Nix expression to properly access nixosSystem from flake inputs
+  - ✅ Update integration tests to handle VM creation conflicts
 - **Step 29**: Debug agent service status reporting in integration tests
   - ✅ **MAJOR PROGRESS**: Fixed VM building and startup with agent service
     - ✅ Fixed VM configuration to use existing vm-config.nix with agent service

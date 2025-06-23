@@ -464,7 +464,22 @@ class VMController:
             logger.info(f"Use 'agent-vm destroy {branch}' to remove it first")
             sys.exit(1)
 
+        # Resolve config path relative to flake location (original repo)
+        if not Path(config).is_absolute():
+            # If config is relative, resolve it relative to the flake location
+            flake_config_path = Path(self.origin_repo) / config
+        else:
+            # If config is absolute, use it as-is
+            flake_config_path = Path(config)
+
+        # Verify config file exists
+        if not flake_config_path.exists():
+            logger.error(f"VM config file not found: {flake_config_path}")
+            logger.info("Ensure the config file exists at the specified location")
+            sys.exit(1)
+
         logger.info(f"Creating VM configuration directory: {vm_config_dir}")
+        logger.info(f"Using VM config: {flake_config_path}")
         vm_config_dir.mkdir(parents=True, exist_ok=True)
 
         # Create SSH keypair for this VM
@@ -571,7 +586,7 @@ class VMController:
             "host": host,
             "port": port,
             "ssh_port": ssh_port,  # Store the dynamically allocated SSH port
-            "config_path": config,
+            "config_path": str(flake_config_path),  # Store the resolved absolute path
             "workspace_path": str(workspace_dir),
             "ssh_key_path": str(ssh_private_key),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -612,6 +627,7 @@ class VMController:
         ssh_key_path = Path(config_data["ssh_key_path"])
         ssh_port = config_data.get("ssh_port", 2222)  # Use stored SSH port or fallback to 2222
         vm_name = config_data["vm_name"]
+        vm_config_path = config_data["config_path"]  # Get the stored config path
 
         # Check if VM is already running
         if self._is_vm_running(vm_name):
@@ -648,12 +664,13 @@ class VMController:
 let
   flake = builtins.getFlake "{workspace_dir}";
   pkgs = flake.legacyPackages.${{builtins.currentSystem}};
+  nixpkgs = flake.inputs.nixpkgs;
 in
-  (pkgs.lib.nixosSystem {{
+  (nixpkgs.lib.nixosSystem {{
     inherit pkgs;
     inherit (pkgs) system;
     modules = [
-      "${{flake}}/vm-config.nix"
+      "{vm_config_path}"
       {{
         # Override SSH key and ports for this specific VM instance
         users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];

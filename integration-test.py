@@ -373,6 +373,7 @@ def test_vm_start_stop_cycle(test_vm_config):
     """Test VM start and stop functionality."""
     test_state_dir = test_vm_config["test_state_dir"]
     test_branch = test_vm_config["test_branch"]
+    test_port = test_vm_config["test_port"]
     config = get_test_config()
 
     logger.info("🧪 TEST: VM start/stop cycle")
@@ -380,6 +381,29 @@ def test_vm_start_stop_cycle(test_vm_config):
     # Skip this test if we can't run VMs (e.g., in CI without nested virtualization)
     if not can_run_vms():
         pytest.skip("Nested virtualization not available")
+
+    # First check if VM exists, create only if needed (for test isolation)
+    logger.info("Checking if VM exists...")
+    try:
+        # Try to check status to see if VM exists
+        status_result = run_agent_vm_command(["status", test_branch], test_state_dir, check=False)
+        vm_exists = status_result.returncode == 0
+    except Exception:
+        vm_exists = False
+
+    if not vm_exists:
+        logger.info("Creating VM for start/stop test...")
+        create_result = run_agent_vm_command([
+            "create",
+            "--branch", test_branch,
+            "--port", str(test_port),
+            "--host", "localhost"
+        ], test_state_dir)
+
+        if config.debug:
+            logger.debug(f"VM creation result: {create_result.stdout}")
+    else:
+        logger.info("Using existing VM for start/stop test...")
 
     # Test starting VM
     logger.info("Starting VM...")
