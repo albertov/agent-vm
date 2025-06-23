@@ -40,10 +40,10 @@ fixturePath :: FilePath -> FilePath
 fixturePath script = "test/fixtures/ProcessSpec" </> script
 
 defTimeout :: Maybe Integer
-defTimeout = Just 2_000_000
+defTimeout = Just 1_000_000
 
-defWait :: Int
-defWait = 2_000_000
+defWait :: Integer
+defWait = 500_000
 
 spec :: Spec
 spec = describe "AgentVM.Process" $ do
