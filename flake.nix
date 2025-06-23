@@ -137,7 +137,7 @@
         legacyPackages = pkgs;
 
         lib = {
-          mk-agent-vm = cfg: inputs.nixpkgs.lib.nixosSystem {
+          mk-agent-vm = mods: (inputs.nixpkgs.lib.nixosSystem {
             modules = [
               "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
               {
@@ -148,9 +148,8 @@
                 };
               }
               ./nix/modules/vm-base.nix
-              cfg
-            ];
-          };
+            ] ++ mods;
+          }).config.system.build.vmWithVirtioFS;
         };
 
         # Apps for running the agent
@@ -159,9 +158,36 @@
           agent-vm = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "agent-vm";
-              runtimeInputs = [ pkgs.agent-vm ];
+              runtimeInputs = [ pkgs.nix pkgs.git ];
               text = ''
-                exec agent-vm "$@"
+                CONFIG="./nix/vm-config.nix"
+                FLAKE="''${FLAKE:-}"
+                if [ "$FLAKE" == "" ]; then
+                  REPO_ROOT="$(git rev-parse --show-toplevel)"
+                  BRANCH=$(git branch --show-current)
+                  FLAKE="git+file://$REPO_ROOT?ref=$BRANCH"
+                fi
+                DEVSHELL="''${DEVSHELL:-default}"
+                PORT=8000
+                WORKSPACE="$(pwd)"
+                SYSTEM="$(nix eval --impure --expr builtins.currentSystem)"
+                exec nix run --impure --show-trace --expr "
+                  let self = builtins.getFlake \"${self}\";
+                      flake = builtins.getFlake \"$FLAKE\";
+                      shell = flake.devShells.$SYSTEM.$DEVSHELL;
+                      mkVM = self.lib.$SYSTEM.mk-agent-vm;
+                  in mkVM
+                      [$CONFIG
+                        { agent-vm = {
+                            inherit shell;
+                            port=$PORT;
+                            uid=$(id -u);
+                            group=\"$(id -n -g)\";
+                            workspace=\"$WORKSPACE\";
+                          };
+                        }
+                      ]
+                  "
               '';
             };
           };

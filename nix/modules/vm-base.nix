@@ -50,7 +50,7 @@ in
         description = "Additional paths to make available in the VM";
       };
 
-      workspaceSource = lib.mkOption {
+      workspace = lib.mkOption {
         type = lib.types.str;
         description = "Source path for workspace shared directory";
       };
@@ -76,10 +76,17 @@ in
         description = "UID for MCP proxy user";
       };
 
+      gid = lib.mkOption {
+        type = lib.types.int;
+        default = 100;
+        description = "GID for MCP proxy user";
+      };
+
       group = lib.mkOption {
         type = lib.types.str;
-        default = "users";
-        description = "Group for MCP proxy user";
+        default = null;
+        description = "Overrides group of mcp-proxy user. Useful when gid can't
+        be used because of conflics";
       };
 
       shell = lib.mkOption {
@@ -124,7 +131,7 @@ in
 
       sharedDirectoriesVIO = {
         workspace = {
-          source = config.agent-vm.workspaceSource;
+          source = config.agent-vm.workspace;
           target = "/var/lib/mcp-proxy/workspace";
         };
       };
@@ -175,6 +182,7 @@ in
       host = "0.0.0.0";
       port = 8000;
       uid = config.agent-vm.uid;
+      gid = config.agent-vm.gid;
       group = config.agent-vm.group;
       shell = lib.mkDefault config.agent-vm.shell;
       namedServers.codemcp = {

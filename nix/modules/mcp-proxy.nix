@@ -198,7 +198,7 @@ in
     gid = mkOption {
       type = types.int;
       default = 1000;
-      description = "GID for the mcp-proxy group. Ignored then group is overriden";
+      description = "GID for the mcp-proxy group";
     };
 
     uid = mkOption {
