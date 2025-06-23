@@ -12,7 +12,7 @@
 ### URGENT
 
 - [x] Run the fix build issues
-- [ ] Add NoImplicitPrelude extension to cabal file
+- [x] Add NoImplicitPrelude extension to cabal file
       and use protolude instead
 
 ### Phase 1: Core Infrastructure (Weeks 1-2)

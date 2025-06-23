@@ -6,23 +6,22 @@ module AgentVM.SSH
   , trySSHConnect
   ) where
 
-import Protolude
+import Protolude (IO, FilePath, Text, Int, Bool, Either, notImplemented)
 
-import AgentVM.Log
-import Data.Text (Text)
+import AgentVM.Log (AgentVmTrace, LogAction)
 
 -- | Generate SSH keypair
 generateSSHKey :: FilePath -> IO ()
-generateSSHKey = error "generateSSHKey has not been implemented yet"
+generateSSHKey = notImplemented
 
 -- | Wait for SSH to become available
 waitForSSH :: LogAction IO AgentVmTrace -> Text -> Int -> FilePath -> Int -> IO Bool
-waitForSSH = error "waitForSSH has not been implemented yet"
+waitForSSH = notImplemented
 
 -- | Execute command over SSH
 sshExec :: Text -> Int -> FilePath -> Text -> IO (Either Text Text)
-sshExec = error "sshExec has not been implemented yet"
+sshExec = notImplemented
 
 -- | Try to establish SSH connection
 trySSHConnect :: Text -> Int -> FilePath -> IO (Either Text ())
-trySSHConnect = error "trySSHConnect has not been implemented yet"
+trySSHConnect = notImplemented

@@ -52,7 +52,7 @@ module AgentVM
   , saveVMConfig
   ) where
 
-import Protolude
+import Protolude ()
 
 import AgentVM.Types
 import AgentVM.State

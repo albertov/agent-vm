@@ -6,11 +6,11 @@ module AgentVM.Nix
   , runVMScript
   ) where
 
-import Protolude
+import Protolude (IO, FilePath, Either, ($), (<>), pure)
 
-import AgentVM.Types
-import AgentVM.Log
-import System.Process.Typed
+import AgentVM.Types (BranchName, VMError)
+import AgentVM.Log (AgentVmTrace, LogAction)
+import System.Process.Typed (proc, readProcess, ExitCode(..))
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Control.Concurrent.STM (atomically)
