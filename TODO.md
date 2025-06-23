@@ -371,7 +371,7 @@ class VMController:
 - Research and specification complete
 - Architecture design finalized
 - Implementation plan documented
-- **ARCHITECTURE.md**: Comprehensive architecture documentation created
+- **README.md**: Comprehensive architecture documentation created
 - VM configuration specification updated with:
   - Dynamic firewall configuration using service port
   - User package inheritance from agent service
