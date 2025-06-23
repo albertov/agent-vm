@@ -105,11 +105,15 @@ command = ["nix", "flake", "check"]
 
 [commands.cabal_build]
 command = ["cabal", "build"]
-doc = "Runs cabal build. Accepts the name of a single package as an argument to run their specific tests"
+doc = "Runs cabal build"
+
+[commands.cabal_clean]
+command = ["cabal", "clean"]
+doc = "Runs cabal clean."
 
 [commands.cabal_test]
 command = ["timeout", "60s", "cabal", "test"]
-doc = "Runs cabal test. Accepts the name of a single package as an argument to run their specific tests"
+doc = "Runs cabal test."
 
 [commands.lynx]
 command = ["lynx", "-dump"]
