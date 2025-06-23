@@ -14,27 +14,29 @@
   ];
   # VM-specific configuration
   virtualisation = {
-    memorySize = 1024*16; # 16GB RAM for development work
+    memorySize = 1024 * 16; # 16GB RAM for development work
     cores = 8; # 4 CPU cores
-    diskSize = 1024*32; # 32GB disk
+    diskSize = 1024 * 32; # 32GB disk
     graphics = false; # Headless for better performance
     mountHostNixStore = true;
-    additionalPaths = 
+    additionalPaths =
       let
         shell = config.services.mcp-proxy.shell;
-        systemChecks = self.checks.${pkgs.system} or {};
-        allItems = [
-          config.system.build.toplevel
-          shell
-        ] ++ (shell.buildInputs or [])
-          ++ (shell.nativeBuildInputs or []) 
-          ++ (shell.propagatedBuildInputs or [])
-          ++ (shell.propagatedNativeBuildInputs or [])
-          ++ (pkgs.lib.attrValues systemChecks);
-        
+        systemChecks = self.checks.${pkgs.system} or { };
+        allItems =
+          [
+            config.system.build.toplevel
+            shell
+          ]
+          ++ (shell.buildInputs or [ ])
+          ++ (shell.nativeBuildInputs or [ ])
+          ++ (shell.propagatedBuildInputs or [ ])
+          ++ (shell.propagatedNativeBuildInputs or [ ])
+          ++ (pkgs.lib.concatMap (x: x.propagatedNativeBuildInputs) (pkgs.lib.attrValues systemChecks));
+
         closure = pkgs.closureInfo { rootPaths = allItems; };
-        storePaths = pkgs.lib.splitString "\n" (builtins.readFile "${closure}/store-paths");
-      in pkgs.lib.filter (path: path != "") storePaths;
+      in
+      [ closure ];
     writableStore = true;
     writableStoreUseTmpfs = false;
     useNixStoreImage = false;
@@ -45,7 +47,7 @@
         # source gets injected by agent-vm
         source = "/home/alberto/src/agent-vm";
         target = "/var/lib/mcp-proxy/workspace";
-        securityModel = "mapped-xattr";
+        securityModel = "none";
       };
     };
 
@@ -86,7 +88,10 @@
 
   # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
   nix.settings.sandbox = false;
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
   nix.settings.trusted-users = [ "mcp-proxy" ];
 
   services.selenium-server.enable = true;

@@ -309,9 +309,7 @@ in
               ];
             };
         hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-        shellInputs =
-          shell.buildInputs or [ ] ++
-          shell.nativeBuildInputs or [ ];
+        shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
         startService = pkgs.writeShellApplication {
           name = "start";
           runtimeInputs =
@@ -428,8 +426,9 @@ in
           ];
 
           # Network access (currently enabled for MCP proxy functionality)
-          PrivateNetwork = false; # Ensure network access is available so the
-                                  # agent can do dev work
+          PrivateNetwork = false;
+          # Ensure network access is available so the
+          # agent can do dev work
 
           # === ADDITIONAL HARDENING RECOMMENDATIONS (COMMENTED OUT) ===
           # These options would provide even stronger security but may impact functionality
