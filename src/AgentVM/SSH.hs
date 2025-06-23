@@ -10,8 +10,7 @@ module AgentVM.SSH
   )
 where
 
-import AgentVM.Log (AgentVmTrace, MonadTrace)
-import Protolude
+import Protolude (Bool, Either, FilePath, IO, Int, Text, notImplemented)
 
 -- | Generate SSH keypair
 generateSSHKey :: FilePath -> IO ()
@@ -19,9 +18,6 @@ generateSSHKey = notImplemented
 
 -- | Wait for SSH to become available
 waitForSSH ::
-  ( MonadTrace AgentVmTrace m,
-    MonadIO m
-  ) =>
   Text ->
   Int ->
   FilePath ->

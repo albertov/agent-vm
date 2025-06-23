@@ -22,6 +22,7 @@ common warnings
                  -Wredundant-constraints
                  -Wunused-packages
                  -Wmissing-import-lists
+                 -fforce-recomp
 
 library
     import:           warnings

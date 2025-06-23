@@ -20,10 +20,10 @@ import AgentVM.Types (BranchName, VM, VMError (PortAllocationFailed), vmId, vmId
 import Control.Concurrent.STM (TVar, modifyTVar', newTVar, readTVar, retry, writeTVar)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Network.Socket (SockAddr (SockAddrInet), Socket, SocketType (Stream), bind, close, defaultProtocol, socket)
+import Network.Socket (SockAddr (SockAddrInet), SocketType (Stream), bind, close, defaultProtocol, socket)
 import qualified Network.Socket as Socket
 import Protolude (Bool (False, True), Either (Left, Right), IO, Int, Maybe (Just, Nothing), STM, atomically, fromIntegral, otherwise, return, when, ($), (+), (.), (<$>), (<*>), (=<<), (>))
-import UnliftIO.Exception (bracket, finally, throwString, tryAny)
+import UnliftIO.Exception (bracket, finally, tryAny)
 
 -- | Thread-safe VM registry
 data VMRegistry = VMRegistry

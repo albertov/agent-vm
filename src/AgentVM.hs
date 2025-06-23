@@ -96,7 +96,7 @@ import AgentVM.Process
 import AgentVM.SSH
 import AgentVM.State
 import AgentVM.Types
-import Protolude
+import Protolude (Either (Left, Right), IO, MonadIO, return, ($))
 
 -- | Instance of MonadVM for VMT IO
 instance MonadVM (VMT IO) where

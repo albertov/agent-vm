@@ -25,31 +25,23 @@ module AgentVM.Process
   )
 where
 
-import AgentVM.Log (AgentVmTrace (ProcessError, ProcessOutput, ProcessSpawned), MonadTrace (..))
-import Control.Concurrent.Thread.Delay (delay)
+import AgentVM.Log (AgentVmTrace (ProcessError, ProcessOutput, ProcessSpawned), MonadTrace (trace))
 import Control.Concurrent.Timeout (timeout)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 import Data.List (reverse)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Protolude
-  ( Applicative,
-    Either (..),
+  ( Either (Left, Right),
     Eq,
     FilePath,
-    Functor,
     IO,
     IOException,
-    Int,
     Integer,
-    Maybe (..),
-    Monad,
+    Maybe (Just, Nothing),
     MonadIO,
-    MonadReader,
     Show,
     Text,
-    fromIntegral,
     fromMaybe,
     isJust,
     liftIO,
@@ -57,18 +49,14 @@ import Protolude
     mapM_,
     maybe,
     pure,
-    putStrLn,
     toS,
     ($),
     (&),
-    (<$),
-    (<*),
-    (<>),
     (>>=),
   )
 import System.Posix.Signals (sigKILL, signalProcess)
 import System.Process.Typed
-  ( ExitCode (..),
+  ( ExitCode,
     Process,
     createPipe,
     getExitCode,
@@ -95,9 +83,8 @@ import UnliftIO
     throwIO,
     try,
   )
-import UnliftIO.Async (async, cancel, wait, withAsync)
+import UnliftIO.Async (async, wait)
 import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
-import UnliftIO.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
 
 -- | State of a VM process
 data ProcessState
@@ -339,7 +326,7 @@ withVMProcessCaptured scriptPath args mTimeout action = do
   result <- try $ action vmProcess
 
   -- Stop the process and get captured output
-  (exitCode, stdout, stderr) <- stopVMProcessCaptured mTimeout vmProcess
+  (_, stdout, stderr) <- stopVMProcessCaptured mTimeout vmProcess
 
   -- Re-throw any exception from the action after cleanup
   case result of

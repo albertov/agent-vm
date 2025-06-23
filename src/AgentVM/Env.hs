@@ -9,7 +9,7 @@ where
 
 import AgentVM.Log (AgentVmTrace)
 import Plow.Logging (IOTracer)
-import Protolude
+import Protolude (Generic)
 
 -- | Environment for agent VM operations
 {-# ANN AgentVmEnv "HLint: ignore Use newtype instead of data" #-}

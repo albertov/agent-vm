@@ -11,14 +11,11 @@ module AgentVM.Monad
   )
 where
 
-import AgentVM.Class (MonadVM (..))
-import AgentVM.Env (AgentVmEnv (..))
-import AgentVM.Log (AgentVmTrace, MonadTrace (..))
-import AgentVM.Types (VMConfig, VMError (..), VMHandle, VMState)
-import Control.Monad.Reader (ReaderT (..))
+import AgentVM.Env (AgentVmEnv (tracer))
+import AgentVM.Log (AgentVmTrace, MonadTrace (trace))
+import Control.Monad.Reader (ReaderT (runReaderT))
 import Control.Monad.Trans (MonadTrans)
-import Data.Generics.Product (HasType)
-import Plow.Logging (IOTracer, traceWith)
+import Plow.Logging (traceWith)
 import Protolude (Applicative, Functor, Monad, MonadIO, MonadReader, ask, liftIO, ($))
 import UnliftIO (MonadUnliftIO)
 

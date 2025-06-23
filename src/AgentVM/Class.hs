@@ -8,7 +8,7 @@ module AgentVM.Class
 where
 
 import AgentVM.Types (VMConfig, VMError, VMHandle, VMState)
-import Protolude
+import Protolude (Either, Monad)
 
 -- | Typeclass for VM operations
 class (Monad m) => MonadVM m where

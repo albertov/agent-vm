@@ -4,7 +4,7 @@ module AgentVM.NixSpec (spec) where
 
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log (vmLogger)
-import Protolude
+import Protolude (($))
 import Test.Hspec (Spec, describe, it, pending)
 
 -- | Test environment with tracer

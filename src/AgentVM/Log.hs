@@ -29,33 +29,27 @@ where
 
 import AgentVM.Types (BranchName, VMConfig, unBranchName)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Generics.Product (HasType, the)
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
-import Lens.Micro.Mtl (view)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), traceWith)
 import Protolude
-  ( Applicative,
-    Eq,
+  ( Eq,
     FilePath,
-    Functor,
     Generic,
     IO,
     Int,
     Monad,
     MonadIO,
-    MonadReader,
     Ord,
     Show,
     Text,
-    Type,
     pure,
     show,
     ($),
     (.),
     (<>),
   )
-import System.Console.ANSI (Color (Blue, Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleIntensity (BoldIntensity), ConsoleLayer (Foreground), SGR (Reset, SetColor, SetConsoleIntensity))
+import System.Console.ANSI (Color (Blue, Cyan, Green, Red), ColorIntensity (Dull, Vivid), ConsoleIntensity (BoldIntensity), ConsoleLayer (Foreground), SGR (Reset, SetColor, SetConsoleIntensity))
 import qualified System.Console.ANSI as ANSI
 import System.IO (Handle, stderr)
 import UnliftIO (liftIO)
@@ -113,42 +107,42 @@ renderLogLevel render level =
 
 -- | Tag an AgentVmTrace with its appropriate LogLevel
 traceLevel :: AgentVmTrace -> LogLevel AgentVmTrace
-traceLevel trace = case trace of
+traceLevel traceEvent = case traceEvent of
   -- Critical events - system failures that need immediate attention
-  VMFailed {} -> Critical trace
-  AgentServiceFailed {} -> Critical trace
+  VMFailed {} -> Critical traceEvent
+  AgentServiceFailed {} -> Critical traceEvent
   -- Error events - failures that should be investigated
-  ProcessError {} -> Error trace
-  SSHFailed {} -> Error trace
-  NixBuildFailed {} -> Error trace
+  ProcessError {} -> Error traceEvent
+  SSHFailed {} -> Error traceEvent
+  NixBuildFailed {} -> Error traceEvent
   -- Info events - normal operational events
-  VMCreated {} -> Info trace
-  VMStarted {} -> Info trace
-  VMStopped {} -> Info trace
-  VMDestroyed {} -> Info trace
-  SSHConnected {} -> Info trace
-  NixBuildCompleted {} -> Info trace
-  PortAllocated {} -> Info trace
-  WorkspaceCreated {} -> Info trace
-  AgentServiceHealthy {} -> Info trace
+  VMCreated {} -> Info traceEvent
+  VMStarted {} -> Info traceEvent
+  VMStopped {} -> Info traceEvent
+  VMDestroyed {} -> Info traceEvent
+  SSHConnected {} -> Info traceEvent
+  NixBuildCompleted {} -> Info traceEvent
+  PortAllocated {} -> Info traceEvent
+  WorkspaceCreated {} -> Info traceEvent
+  AgentServiceHealthy {} -> Info traceEvent
   -- Debug events - detailed operational info
-  VMStarting {} -> Debug trace
-  VMStopping {} -> Debug trace
-  ProcessSpawned {} -> Debug trace
-  ProcessExited {} -> Debug trace
-  SSHKeyGenerated {} -> Debug trace
-  SSHConnecting {} -> Debug trace
-  SSHCommandExecuted {} -> Debug trace
-  NixBuildStarted {} -> Debug trace
-  PortScanning {} -> Debug trace
-  PortReleased {} -> Debug trace
-  WorkspaceCloned {} -> Debug trace
-  WorkspaceSynced {} -> Debug trace
-  WorkspaceRemoved {} -> Debug trace
-  AgentServiceStarting {} -> Debug trace
+  VMStarting {} -> Debug traceEvent
+  VMStopping {} -> Debug traceEvent
+  ProcessSpawned {} -> Debug traceEvent
+  ProcessExited {} -> Debug traceEvent
+  SSHKeyGenerated {} -> Debug traceEvent
+  SSHConnecting {} -> Debug traceEvent
+  SSHCommandExecuted {} -> Debug traceEvent
+  NixBuildStarted {} -> Debug traceEvent
+  PortScanning {} -> Debug traceEvent
+  PortReleased {} -> Debug traceEvent
+  WorkspaceCloned {} -> Debug traceEvent
+  WorkspaceSynced {} -> Debug traceEvent
+  WorkspaceRemoved {} -> Debug traceEvent
+  AgentServiceStarting {} -> Debug traceEvent
   -- Trace events - very detailed output
-  ProcessOutput {} -> Trace trace
-  NixBuildProgress {} -> Trace trace
+  ProcessOutput {} -> Trace traceEvent
+  NixBuildProgress {} -> Trace traceEvent
 
 -- | All possible log events in the system
 -- FIXME: I want much more context in the constructors
