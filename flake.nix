@@ -5,11 +5,9 @@
     bash-prompt = "agent-vm \\[\\e[0m\\]\\w \\[\\e[0;1m\\]λ \\[\\e[0m\\]";
     extra-substituters = [
       "https://cache.iog.io"
-      "https://nixcache.plowtech.net:9876/"
     ];
     extra-trusted-public-keys = [
       "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
-      "jenkins.plowtech.net-1:7MnrDY0TzJTvmaSlRT25noN7qbvqRnLoLOqaxMBNckI="
     ];
     allow-import-from-derivation = true;
   };

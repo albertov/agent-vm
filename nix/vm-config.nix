@@ -7,8 +7,9 @@
   ...
 }:
 let
-  allInputs = p:
-       (p.buildInputs or [ ])
+  allInputs =
+    p:
+    (p.buildInputs or [ ])
     ++ (p.nativeBuildInputs or [ ])
     ++ (p.propagatedBuildInputs or [ ])
     ++ (p.propagatedNativeBuildInputs or [ ]);
@@ -19,6 +20,15 @@ in
     ./modules/mcp-proxy.nix
     ./modules/selenium-server.nix
   ];
+  services.nix-serve = {
+    enable = true;
+    port = 5000;
+    bindAddress = "127.0.0.1";
+    # No signing needed for local use since we trust the host
+    # store
+    secretKeyFile = null;
+  };
+
   # VM-specific configuration
   virtualisation = {
     memorySize = 1024 * 16; # 16GB RAM for development work
@@ -26,32 +36,32 @@ in
     diskSize = 1024 * 32; # 32GB disk
     graphics = false; # Headless for better performance
     mountHostNixStore = true;
-    additionalPaths =
-      let
-        shell = config.services.mcp-proxy.shell;
-        systemChecks = self.checks.${pkgs.system} or { };
-        packages = self.packages.${pkgs.system} or { };
-        apps = self.apps.${pkgs.system} or { };
-        allItems =
-          [
-            config.system.build.toplevel
-            self
-          ]
-          ++ allInputs shell
-          ++ (if pkgs?hixProject
-            then [
-              pkgs.hixProject.roots
-              pkgs.hixProject.plan-nix
+      additionalPaths =
+        let
+          shell = config.services.mcp-proxy.shell;
+          systemChecks = self.checks.${pkgs.system} or { };
+          packages = self.packages.${pkgs.system} or { };
+          apps = self.apps.${pkgs.system} or { };
+          allItems =
+            [
+              config.system.build.toplevel
+              self
             ]
-            else [])
-          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
-          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
-          ++ (map (x: x.program) (pkgs.lib.attrValues apps))
-          ;
+            ++ allInputs shell
+            ++ (if pkgs?hixProject
+              then [
+                pkgs.hixProject.roots
+                pkgs.hixProject.plan-nix
+              ]
+              else [])
+            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
+            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
+            ++ (map (x: x.program) (pkgs.lib.attrValues apps))
+            ;
 
-        closure = pkgs.closureInfo { rootPaths = allItems; };
-      in
-      [ closure ];
+          closure = pkgs.closureInfo { rootPaths = allItems; };
+        in
+        [ closure ];
     writableStore = true;
     writableStoreUseTmpfs = false;
     useNixStoreImage = false;
@@ -111,18 +121,15 @@ in
 
   # Configure host nix store as binary cache
   nix.settings.substituters = [
-    "file:///nix/store"  # Use mounted host store as primary cache
-    "https://cache.nixos.org/"  # Fallback to public cache
-    "https://cache.iog.io"  # Additional cache from flake config
-    "https://nixcache.plowtech.net:9876/"  # Additional cache from flake config
+    "http://127.0.0.1:5000"
+    "https://cache.iog.io" # Additional cache from flake config
   ];
   # Trust the host store implicitly since it's mounted from host
   nix.settings.trusted-substituters = [
-    "file:///nix/store"
+    "http://127.0.0.1:5000"
   ];
   nix.settings.trusted-public-keys = [
     "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
-    "jenkins.plowtech.net-1:7MnrDY0TzJTvmaSlRT25noN7qbvqRnLoLOqaxMBNckI="
   ];
 
   services.selenium-server.enable = true;

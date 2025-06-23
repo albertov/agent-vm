@@ -296,8 +296,9 @@ in
 
     systemd.services.mcp-proxy =
       let
-        allInputs = p:
-             (p.buildInputs or [ ])
+        allInputs =
+          p:
+          (p.buildInputs or [ ])
           ++ (p.nativeBuildInputs or [ ])
           ++ (p.propagatedBuildInputs or [ ])
           ++ (p.propagatedNativeBuildInputs or [ ]);
