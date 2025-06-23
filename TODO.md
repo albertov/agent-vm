@@ -12,12 +12,8 @@ Read README.md for specs
 
 ### URGENT
 
-- [x] Address the TODO in the utils.py module. It will help you with your future
+- [ ] Address the TODO in the utils.py module. It will help you with your future
   endeavours
-  - Added comprehensive type annotations to ProcessWithOutput class
-  - Added member variable type hints
-  - Added return type annotations to all methods
-  - Added missing Any type import
 
 - [ ] Integration tests are not passing. They should ALL pass, no excuses!!!
   - Fixed vm-config.nix path resolution to use git root instead of origin URL
