@@ -4,12 +4,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -17,7 +15,6 @@
 module AgentVM.Log
   ( AgentVmTrace (..),
     MonadTrace (..),
-    PlowLogging (..),
     LogLevel (..),
     traceToMessage,
     renderTrace,
@@ -68,18 +65,6 @@ import UnliftIO (liftIO)
 
 class (Monad m) => MonadTrace trace m | m -> trace where
   trace :: trace -> m ()
-
--- | For DerivingVia
-newtype PlowLogging t m a = PlowLogging (m a)
-  deriving newtype (Functor, Applicative, Monad)
-
-instance
-  (MonadIO m, MonadReader r m, MonadTrace t m, HasType (IOTracer t) r) =>
-  MonadTrace t (PlowLogging t m)
-  where
-  trace msg = PlowLogging $ do
-    tracer <- view (the @(IOTracer t))
-    traceWith tracer msg
 
 -- | MonadIO version of setSGR
 setSGR :: (MonadIO m) => [SGR] -> m ()
