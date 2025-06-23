@@ -642,27 +642,18 @@ class VMController:
         ssh_public_key = (ssh_key_path.parent / "id_ed25519.pub").read_text().strip()
 
         try:
-            # Use the project's flake to build VM with agent service
             vm_build_cmd = [
-                "nix", "build", "--no-link", "--print-out-paths", "--impure",
-                f"{workspace_dir}#nixosConfigurations.vm.config.system.build.vm"
-            ]
-
-            # If that doesn't work, try the direct approach with the existing vm-config.nix
-            if True:  # Always use fallback for now
-                vm_build_cmd = [
                     "nix", "build", "--no-link", "--print-out-paths", "--impure",
                     "--expr", f'''
 let
   flake = builtins.getFlake "{workspace_dir}";
-  nixpkgs = flake.inputs.nixpkgs;
   pkgs = flake.legacyPackages.${{builtins.currentSystem}};
 in
-  (nixpkgs.lib.nixosSystem {{
-    system = builtins.currentSystem;
-    pkgs = pkgs;
+  (pkgs.lib.nixosSystem {{
+    inherit pkgs;
+    inherit (pkgs) system;
     modules = [
-      {workspace_dir}/vm-config.nix
+      "${{flake}}/vm-config.nix"
       {{
         # Override SSH key and ports for this specific VM instance
         users.users.dev.openssh.authorizedKeys.keys = pkgs.lib.mkForce [ "{ssh_public_key}" ];
