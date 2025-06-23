@@ -5,6 +5,7 @@
 module AgentVM.Process
   ( startVMProcess,
     stopVMProcess,
+    withVMProcess,
     checkVMProcess,
     waitForProcess,
     ProcessState (..),
@@ -14,15 +15,60 @@ module AgentVM.Process
 where
 
 import AgentVM.Log (AgentVmTrace (ProcessError, ProcessOutput, ProcessSpawned), MonadTrace (..))
+import Control.Concurrent.Thread.Delay (delay)
 import Control.Concurrent.Timeout (timeout)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as TE
-import Protolude hiding (async, atomically, trace)
+import Protolude
+  ( Applicative,
+    Either (..),
+    Eq,
+    FilePath,
+    Functor,
+    IO,
+    Int,
+    Integer,
+    Maybe (..),
+    Monad,
+    MonadIO,
+    MonadReader,
+    Show,
+    Text,
+    fromIntegral,
+    liftIO,
+    map,
+    mapM_,
+    maybe,
+    pure,
+    putStrLn,
+    toS,
+    ($),
+    (&),
+    (<$),
+    (>>=),
+  )
 import System.IO (Handle)
-import System.Process.Typed (ExitCode (..), Process, createPipe, getExitCode, getStderr, getStdout, proc, setStderr, setStdout, startProcess, stopProcess, waitExitCode)
-import UnliftIO (MonadUnliftIO, catchAny, tryAny)
-import UnliftIO.Async (async)
+import System.Posix.Signals (sigKILL, signalProcess)
+import System.Process.Typed
+  ( ExitCode (..),
+    Process,
+    createPipe,
+    getExitCode,
+    getPid,
+    getStderr,
+    getStdout,
+    nullStream,
+    proc,
+    setStderr,
+    setStdin,
+    setStdout,
+    startProcess,
+    stopProcess,
+    waitExitCode,
+  )
+import UnliftIO (MonadUnliftIO, bracket, catchAny, tryAny)
+import UnliftIO.Async (async, cancel, withAsync)
 
 -- | State of a VM process
 data ProcessState
@@ -48,6 +94,7 @@ startLoggedProcess scriptPath args = do
         proc scriptPath (map toS args)
           & setStdout createPipe
           & setStderr createPipe
+          & setStdin nullStream
 
   process <- liftIO $ startProcess processConfig
 
@@ -56,7 +103,7 @@ startLoggedProcess scriptPath args = do
   _ <- async $ traceHandleOutput processName ProcessOutput (getStdout process)
   _ <- async $ traceHandleOutput processName ProcessError (getStderr process)
 
-  return process
+  pure process
   where
     -- Helper to trace output from a handle line by line
     traceHandleOutput :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => Text -> (Text -> Text -> AgentVmTrace) -> Handle -> m ()
@@ -64,7 +111,7 @@ startLoggedProcess scriptPath args = do
       let loop = do
             eitherLine <- liftIO $ tryAny $ BS.hGetLine handle
             case eitherLine of
-              Left _ -> return () -- EOF or error
+              Left _ -> pure () -- EOF or error
               Right line -> do
                 -- Always trace the line, even if it's empty
                 let lineText = TE.decodeUtf8Lenient line
@@ -78,32 +125,63 @@ startVMProcess ::
     MonadUnliftIO m
   ) =>
   FilePath ->
+  [Text] ->
   m VMProcess
-startVMProcess scriptPath = do
+startVMProcess scriptPath args = do
   -- Use startLoggedProcess to start the process with logging
   process <- startLoggedProcess scriptPath []
-  return $ VMProcess process
+  pure $ VMProcess process
+
+type Timeout = Integer
 
 -- | Stop a VM process gracefully
 stopVMProcess ::
   ( MonadTrace AgentVmTrace m,
-    MonadIO m
+    MonadUnliftIO m
   ) =>
+  Maybe Timeout ->
   VMProcess ->
-  m ()
-stopVMProcess (VMProcess process) = do
+  m ExitCode
+stopVMProcess mTimeout (VMProcess process) = do
   -- Stop the process
-  liftIO $ stopProcess process
+  withAsync processKiller $ \killer -> do
+    result <- liftIO $ do
+      stopProcess process
+      waitExitCode process
+    cancel killer
+    pure result
+  where
+    processKiller = case mTimeout of
+      Just t -> do
+        liftIO $ delay t
+        liftIO $ getPid process >>= mapM_ (signalProcess sigKILL)
+      Nothing -> pure ()
+
+-- | Start a VM process and ensures that it is killed when
+-- then continuation exits
+withVMProcess ::
+  ( MonadTrace AgentVmTrace m,
+    MonadUnliftIO m
+  ) =>
+  FilePath ->
+  [Text] ->
+  Maybe Timeout ->
+  (VMProcess -> m a) ->
+  m a
+withVMProcess scriptPath args mTimeout =
+  bracket
+    (startVMProcess scriptPath args)
+    (stopVMProcess mTimeout)
 
 -- | Check if VM process is still running
-checkVMProcess :: VMProcess -> IO ProcessState
-checkVMProcess process = do
+checkVMProcess :: (MonadIO m) => VMProcess -> m ProcessState
+checkVMProcess process = liftIO $ do
   exitCode <- getExitCode (unVMProcess process)
-  return $ maybe ProcessRunning ProcessExited exitCode
+  pure $ maybe ProcessRunning ProcessExited exitCode
 
 -- | Wait for a process with timeout
-waitForProcess :: Int -> Process a b c -> IO (Maybe ExitCode)
-waitForProcess timeoutMicros process = do
+waitForProcess :: (MonadIO m) => Int -> VMProcess -> m (Maybe ExitCode)
+waitForProcess timeoutMicros (VMProcess process) = do
   -- Convert microseconds to Integer for unbounded-delays
   let timeoutMicrosInteger = fromIntegral timeoutMicros :: Integer
-  timeout timeoutMicrosInteger (waitExitCode process)
+  liftIO $ timeout timeoutMicrosInteger (waitExitCode process)
