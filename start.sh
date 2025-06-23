@@ -15,5 +15,6 @@ mcp-proxy \
   --port "${MCP_PROXY_PORT}" \
   --host "${MCP_PROXY_HOST}" \
   --allow-origin="${ALLOW_ORIGIN}" \
-  --named-server codemcp codemcp
+  --named-server codemcp codemcp \
+  --named-server hls ./mcp_language_haskell.sh
 
