@@ -2,8 +2,8 @@
 set -eu -o pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 MCP_PROXY_PORT="${MCP_PROXY_PORT:-8000}"
-MCP_PROXY_HOST="${PORT:-localhost}"
-ALLOW_ORIGIN="${PORT:-https://claude.ai}"
+MCP_PROXY_HOST="${MCP_PROXY_HOST:-localhost}"
+ALLOW_ORIGIN="${ALLOW_ORIGIN:-https://claude.ai}"
 trap "git config --global --unset core.hooksPath" EXIT
 # Disable pre-commit hooks because they format the source whenever the agent
 # commits stuff and confuses it. Me no like getting throttled because of
@@ -18,8 +18,6 @@ mcp-proxy \
   --named-server codemcp \
     codemcp \
   --named-server selenium \
-    "${REPO_ROOT}/mcp_selenium.sh"
-  #--named-server rescript-lsp \
-    #"${REPO_ROOT}/mcp_rescript_lsp.sh" \
-  #--named-server mcp-nixos \
-    #mcp-nixos \
+    "${REPO_ROOT}/mcp_selenium.sh" \
+  --named-server rescript-lsp \
+    "${REPO_ROOT}/mcp_rescript_lsp.sh"

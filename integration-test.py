@@ -116,10 +116,12 @@ logger = logging.getLogger(__name__)
 class AgentVMIntegrationTest:
     """Integration test runner for agent-vm using CLI calls only."""
 
-    def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False):
+    def __init__(self, agent_vm_cmd: str = "agent-vm", verbose: bool = False,
+                 timeout: int = 60):
         """Initialize integration test runner."""
         self.agent_vm_cmd = agent_vm_cmd
         self.verbose = verbose
+        self.timeout = timeout
         self.test_state_dir = None
         self.test_branch = f"integration-test-{int(time.time())}"
         self.test_port = 8001  # Use different port to avoid conflicts
@@ -128,7 +130,7 @@ class AgentVMIntegrationTest:
         self.tests_skipped = 0
 
     def run_agent_vm_command(self, args: List[str], check: bool = True,
-                           timeout: Optional[int] = 60) -> subprocess.CompletedProcess:
+                           timeout: Optional[int] = None) -> subprocess.CompletedProcess:
         """Run agent-vm command with test state directory."""
         cmd = [self.agent_vm_cmd]
         if self.test_state_dir:
@@ -136,6 +138,10 @@ class AgentVMIntegrationTest:
         if self.verbose:
             cmd.append("--verbose")
         cmd.extend(args)
+
+        # Use instance timeout if none specified
+        if timeout is None:
+            timeout = self.timeout
 
         logger.debug(f"Running command: {' '.join(cmd)}")
 
@@ -289,7 +295,7 @@ class AgentVMIntegrationTest:
         try:
             # Test starting VM
             logger.info("Starting VM...")
-            result = self.run_agent_vm_command(["start", self.test_branch], timeout=300)
+            result = self.run_agent_vm_command(["start", self.test_branch])
 
             # Give it a moment to fully start
             time.sleep(5)
@@ -448,6 +454,7 @@ Examples:
   integration-test                    # Run all tests with agent-vm in PATH
   integration-test --agent-vm ./agent-vm  # Use specific agent-vm executable
   integration-test --verbose         # Enable verbose output
+  integration-test --timeout 120     # Set custom timeout to 120 seconds
         """
     )
 
@@ -455,6 +462,8 @@ Examples:
                        help='Path to agent-vm executable (default: agent-vm in PATH)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging and debugging')
+    parser.add_argument('--timeout', '-t', type=int, default=60,
+                       help='Timeout in seconds for VM operations (default: 60)')
 
     args = parser.parse_args()
 
@@ -464,7 +473,8 @@ Examples:
     # Run integration tests
     test_runner = AgentVMIntegrationTest(
         agent_vm_cmd=args.agent_vm,
-        verbose=args.verbose
+        verbose=args.verbose,
+        timeout=args.timeout
     )
 
     try:

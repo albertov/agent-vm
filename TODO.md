@@ -341,6 +341,23 @@ class VMController:
 - Provide clear documentation and troubleshooting guides
 - Implement comprehensive error handling and recovery
 
+## Critical Issues to Fix
+
+- [x] **Issue 1**: Add configurable timeout to integration test (default 60s)
+  - ✅ Updated integration-test.py to accept --timeout parameter
+  - ✅ Changed VM start test to use configurable timeout instead of hardcoded 300s
+  - ✅ Updated help text and argument parsing
+
+- [x] **Issue 2**: Fix agent service startup failures in VM
+  - ✅ **Root cause**: Several configuration and script issues preventing agent-mcp service from starting
+  - ✅ **Fixed Sub-issues**:
+    - ✅ Fixed start.sh variable assignment bugs (lines 5-6 used wrong variable names)
+    - ✅ Added missing MCP tools to agent service shell environment
+    - ✅ Fixed user/group configuration mismatch between vm-config.nix and agent-service.nix
+    - ✅ Removed circular dependency in shell configuration in agent-service.nix
+    - ✅ Completed MCP server configuration in start.sh (enabled rescript-lsp)
+    - ✅ Fixed user group creation logic to avoid conflicts with existing dev user
+
 ## Current Implementation Status
 
 **✅ COMPLETED:**
