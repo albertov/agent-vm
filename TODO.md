@@ -11,6 +11,18 @@
 
 ### URGENT
 
+- [ ] - The log systems should be using a type like
+        ```haskell
+        data LogLevel a = Critical a | Error a | Info a | Debug a | Trace a
+           deriving via stock (Show, Ord, Eq, Generic, ToJSON, FromJSON, ...)
+        
+        So we can tag the importance of the trace and filter them via a level
+        specified on config
+      - The handlers should not change signature but we should use contravariant
+      on a `traceLevel :: AgentVmTrace -> LogLevel AgentVmTrace` at Main.hs to tag them
+      appropiately.
+      - Implement a helper to do this: renderLogLevel :: (a -> Text) -> LogLevel a -> Text
+
 - [x] Run the fix build issues
 - [x] Add NoImplicitPrelude extension to cabal file
       and use protolude instead
