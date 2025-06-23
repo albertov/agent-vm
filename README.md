@@ -326,13 +326,13 @@ Run comprehensive integration tests that validate end-to-end workflows:
 pytest -m integration
 
 # Run standalone integration test executable
-./integration-test.py
+nix run .#integration-test
 
 # Run with debug output for troubleshooting
-./integration-test.py --debug --verbose
+nix run .#integration-test -- --debug --verbose
 
 # Use custom timeout and agent-vm executable
-./integration-test.py --timeout 120 --agent-vm /path/to/agent-vm
+nix run .#integration-test -- --timeout 120 --agent-vm /path/to/agent-vm
 ```
 
 ### Test Categories

@@ -62,8 +62,12 @@ inputs: final: prev:
     format = "pyproject";
 
     # Runtime dependencies
-    propagatedBuildInputs = [
-      final.python3.pkgs.typer
+    propagatedBuildInputs = with final; [
+      python3.pkgs.typer
+      git
+      openssh
+      qemu
+      curl
     ];
 
     # Test dependencies for build-time testing
@@ -123,10 +127,6 @@ inputs: final: prev:
         pytest-cov
       ]))
       agent-vm
-      git
-      openssh
-      qemu
-      curl
     ];
     text = ''
       exec ${./integration-test.py} "$@"

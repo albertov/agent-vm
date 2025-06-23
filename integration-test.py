@@ -66,9 +66,6 @@ test_config: Optional[IntegrationTestConfig] = None
 def get_test_config() -> IntegrationTestConfig:
     """Get test configuration, creating default if not set."""
     global test_config
-    if test_config is None:
-        # Create default configuration if not set by CLI
-        test_config = IntegrationTestConfig()
     return test_config
 
 
