@@ -110,7 +110,6 @@
         mono-traversable.revision = import ./cabal-files/mono-traversable.nix;
         indexed-traversable.revision = import ./cabal-files/indexed-traversable.nix;
         hashable.revision = import ./cabal-files/hashable.nix;
-        hashable.flags.integer-gmp = true;
         hashable.flags.random-initial-seed = false;
         hashable.flags.arch-native = false;
         character-ps.revision = import ./cabal-files/character-ps.nix;
@@ -132,6 +131,8 @@
         hsc2hs.flags.in-ghc-tree = false;
         colour.revision = import ./cabal-files/colour.nix;
         exceptions.revision = hackage.exceptions."0.10.9".revisions.default;
+        retry.revision = import ./cabal-files/retry.nix;
+        retry.flags.lib-werror = false;
         bytestring.revision = hackage.bytestring."0.12.2.0".revisions.default;
         witherable.revision = import ./cabal-files/witherable.nix;
         stm-conduit.revision = import ./cabal-files/stm-conduit.nix;
@@ -284,6 +285,7 @@
           "exceptions".components.library.planned = lib.mkOverride 900 true;
           "unliftio".components.library.planned = lib.mkOverride 900 true;
           "plow-log".components.library.planned = lib.mkOverride 900 true;
+          "retry".components.library.planned = lib.mkOverride 900 true;
           "directory".components.library.planned = lib.mkOverride 900 true;
           "HUnit".components.library.planned = lib.mkOverride 900 true;
           "semigroupoids".components.library.planned = lib.mkOverride 900 true;
