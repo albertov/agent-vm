@@ -10,7 +10,7 @@ Read README.md for specs
 
 ### URGENT
 
-- [ ] Make integration tests pass
+- [ ] Make agent service run properly inside the VM
 
 ### Phase 4: Security and Performance
 

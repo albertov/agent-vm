@@ -59,38 +59,6 @@
         # Legacy packages for compatibility
         legacyPackages = pkgs;
 
-        # Main packages
-        packages = rec {
-          # Agent VM management tool
-          agent-vm = pkgs.agent-vm;
-
-          # Integration test executable (separate from normal test suite)
-          integration-test = pkgs.integration-test;
-
-          # MCP packages
-          codemcp = pkgs.codemcp;
-          mcp-proxy = pkgs.mcp-proxy;
-          mcp-language-server = pkgs.mcp-language-server;
-          rescript-language-server = inputs.rescript-lsp.packages.${system}.default;
-
-          # Python packages
-          python3Packages-agno = pkgs.python3.pkgs.agno;
-          python3Packages-mcp = pkgs.python3.pkgs.mcp;
-
-          # MCP servers from external inputs
-          mcp-selenium = inputs.mcp-selenium.packages.${system}.default;
-          mcp-nixos = inputs.mcp-nixos.packages.${system}.default;
-
-          # Create an agent development servers package
-          agent-servers = pkgs.mkMCPDevServers {
-            name = "agent-vm-servers";
-            shell = defaultShell;
-          };
-
-          # Default package is the agent-vm tool
-          default = agent-vm;
-        };
-
         # Apps for running the agent
         apps = rec {
           # Main agent VM app - this is the primary interface
