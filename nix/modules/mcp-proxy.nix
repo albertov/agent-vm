@@ -328,6 +328,14 @@ in {
         ReadWritePaths = [
           config.users.users."${cfg.user}".home
         ];
+        ReadOnlyPaths = [ 
+          "/etc/resolv.conf"  # DNS resolution
+          "/etc/hosts"        # Host name resolution
+          "/etc/nsswitch.conf" # Name service switch
+          "/etc/ssl"          # SSL certificates
+          "/etc/ca-certificates" # CA certificates
+	];
+        PrivateNetwork = false;  # Ensure network access is available
       };
 
       environment = mkEnvironment;

@@ -17,4 +17,8 @@ rec {
     hoogle # This one has our local packages!
     gh # GitHub CLI for PR automation
   ];
+  shell.shellHook = ''
+    cabal update
+  '';
+
 }
