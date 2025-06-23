@@ -58,16 +58,20 @@ inputs: final: prev:
   agent-vm = final.python3.pkgs.buildPythonApplication {
     pname = "agent-vm";
     version = "1.0.0";
-    src = ./.;
+    src = ./agent-vm;
     format = "pyproject";
 
     # Runtime dependencies
-    propagatedBuildInputs = with final; [
-      python3.pkgs.typer
+    propagatedBuildInputs = with final; with final.python3.pkgs; [
       git
       openssh
       qemu
       curl
+      typer
+      # For agent-vm-tests
+      pytest
+      pytest-timeout
+      pytest-cov
     ];
 
     # Test dependencies for build-time testing
@@ -112,24 +116,17 @@ inputs: final: prev:
       license = licenses.mit;
       maintainers = [ ];
       platforms = platforms.linux;
+      mainProgram = "agent-vm";
     };
   };
 
-  # Integration test executable (separate from normal test suite)
   integration-test = final.writeShellApplication {
     name = "integration-test";
     runtimeInputs = with final; [
-      (python3.withPackages (ps: with ps; [
-        typer
-        pytest
-        pytest-mock
-        pytest-timeout
-        pytest-cov
-      ]))
       agent-vm
     ];
     text = ''
-      exec ${./integration-test.py} "$@"
+      exec agent-vm-tests "$@"
     '';
   };
 }
