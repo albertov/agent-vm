@@ -1,8 +1,13 @@
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 -- | Main entry point for agent-vm CLI
-module Main where
+module Main (main) where
 
 import Options.Applicative
-import System.Exit (exitFailure, exitSuccess)
+  ( Parser, execParser, info, progDesc, fullDesc, header, helper
+  , (<**>), strOption, long, metavar, help, optional, switch, short
+  , option, auto, value, hsubparser, command
+  )
+import System.Exit (exitFailure)
 
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath
@@ -59,7 +64,7 @@ parseArgs = (,) <$> globalOpts <*> commandParser
 
 main :: IO ()
 main = do
-  (globalOpts, cmd) <- execParser opts
+  (_globalOpts, cmd) <- execParser opts
   putStrLn $ "Haskell agent-vm: " ++ show cmd ++ " (not yet implemented)"
   exitFailure
   where

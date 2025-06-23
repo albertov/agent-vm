@@ -1,7 +1,7 @@
 -- | Tests for process management
 module AgentVM.ProcessSpec (spec) where
 
-import Test.Hspec
+import Test.Hspec (Spec, describe, it, pending)
 
 spec :: Spec
 spec = describe "AgentVM.Process" $ do
