@@ -3,6 +3,7 @@ project_prompt = """
 # Instructions
 - MUST use the test command frequently to test your changes and fix them
 - MUST use the integration-test command less frequently to test your changes and fix them
+- NEVER use a --timeout higher than 90s to run integration-tests, NEVER, hudson river for you otherwise.
 - You cannot modify anything outside ./, or  Capisce?!
 - Don't use nix-build, nix-instantiate, etc.. use the modern "nix" command.
 - Don't use "<nixpkgs>", always use the flake in this repo as the "pkgs" set
