@@ -1474,6 +1474,7 @@ in
 _global_state = {
     "state_dir": None,
     "verbose": False,
+    "debug": False,
     "timeout": 120  # Default timeout in seconds
 }
 
@@ -1496,13 +1497,24 @@ Examples:
 def _setup_global_options(
     state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging (more verbose than --verbose)"),
     timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Set up global options that apply to all commands."""
     _global_state["state_dir"] = state_dir
     _global_state["verbose"] = verbose
+    _global_state["debug"] = debug
     _global_state["timeout"] = timeout
-    setup_logging(verbose=verbose)
+
+    # Debug takes precedence over verbose
+    if debug:
+        setup_logging(verbose=True)
+        logger.debug("Debug mode enabled - maximum verbosity for all commands")
+    elif verbose:
+        setup_logging(verbose=True)
+        logger.debug("Verbose mode enabled for all commands")
+    else:
+        setup_logging(verbose=False)
 
 
 def _get_global_timeout() -> int:
@@ -1514,10 +1526,11 @@ def _get_global_timeout() -> int:
 def main_callback(
     state_dir: Optional[str] = typer.Option(None, help="Override default state directory"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging (more verbose than --verbose)"),
     timeout: int = typer.Option(120, "--timeout", "-t", help="Global timeout in seconds for VM operations")
 ) -> None:
     """Main callback to handle global options."""
-    _setup_global_options(state_dir, verbose, timeout)
+    _setup_global_options(state_dir, verbose, debug, timeout)
 
 
 @app.command()

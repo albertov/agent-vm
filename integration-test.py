@@ -98,7 +98,9 @@ def run_agent_vm_command(
     cmd = [config.agent_vm_cmd]
     if test_state_dir:
         cmd.extend(["--state-dir", str(test_state_dir)])
-    if config.verbose:
+    if config.debug:
+        cmd.append("--debug")
+    elif config.verbose:
         cmd.append("--verbose")
     # Always pass the timeout to agent-vm to ensure it honors it
     cmd.extend(["--timeout", str(config.timeout)])
@@ -293,6 +295,39 @@ def test_vm_creation(test_vm_config):
     assert (workspace_dir / ".git").exists(), "Workspace is not a git repository"
 
     logger.info("✅ PASS: VM creation successful")
+
+
+@pytest.mark.integration
+@pytest.mark.basic
+def test_debug_and_verbose_options(test_vm_config):
+    """Test that --debug and --verbose options are recognized and work correctly."""
+    test_state_dir = test_vm_config["test_state_dir"]
+
+    logger.info("🧪 TEST: Debug and verbose options")
+
+    # Test that main help command shows --debug and --verbose options
+    result = run_agent_vm_command(["--help"], test_state_dir, check=False)
+    assert result.returncode == 0, "Help command should work"
+    assert "--debug" in result.stdout, "Help should show --debug option"
+    assert "--verbose" in result.stdout, "Help should show --verbose option"
+
+    # Test that commands work with --debug option (the original failing case)
+    result = run_agent_vm_command(["--debug", "list"], test_state_dir, check=False)
+    assert result.returncode == 0, "list command should work with --debug"
+
+    # Test that commands work with --verbose option
+    result = run_agent_vm_command(["--verbose", "list"], test_state_dir, check=False)
+    assert result.returncode == 0, "list command should work with --verbose"
+
+    # Test the originally failing command: --debug with create --help
+    result = run_agent_vm_command(["--debug", "create", "--help"], test_state_dir, check=False)
+    assert result.returncode == 0, "create help should work with --debug"
+
+    # Test the originally failing command: --verbose with create --help
+    result = run_agent_vm_command(["--verbose", "create", "--help"], test_state_dir, check=False)
+    assert result.returncode == 0, "create help should work with --verbose"
+
+    logger.info("✅ PASS: Debug and verbose options work correctly")
 
 
 @pytest.mark.integration
