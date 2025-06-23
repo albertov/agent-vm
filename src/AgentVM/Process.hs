@@ -1,8 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 -- | Process management for VMs
@@ -114,10 +112,19 @@ startLoggedProcess scriptPath args = do
 
   process <- liftIO $ startProcess processConfig
 
+  -- Get handles and set buffering BEFORE starting async readers
+  let stdoutHandle = getStdout process
+      stderrHandle = getStderr process
+
+  -- Set line buffering on handles to ensure we read line by line
+  liftIO $ do
+    catchAny (hSetBuffering stdoutHandle LineBuffering) (\_ -> pure ())
+    catchAny (hSetBuffering stderrHandle LineBuffering) (\_ -> pure ())
+
   -- Spawn async tasks to read and trace output
   let processName = toS scriptPath :: Text
-  tOut <- async $ traceHandleOutput processName ProcessOutput (getStdout process)
-  tErr <- async $ traceHandleOutput processName ProcessError (getStderr process)
+  tOut <- async $ traceHandleOutput processName ProcessOutput stdoutHandle
+  tErr <- async $ traceHandleOutput processName ProcessError stderrHandle
 
   pure (process, mapM_ wait [tOut, tErr])
   where
@@ -133,9 +140,6 @@ startLoggedProcess scriptPath args = do
                 let lineText = TE.decodeUtf8Lenient line
                 trace (constructor name lineText)
                 loop
-      try (hSetBuffering handle LineBuffering) >>= \case
-        Left (_ :: IOException) -> pure () -- process failed to start
-        Right () -> pure ()
       loop
 
 -- | Start a VM process
@@ -202,7 +206,11 @@ checkVMProcess process = liftIO $ do
 
 -- | Wait for a process with timeout
 waitForProcess :: (MonadIO m) => Int -> VMProcess -> m (Maybe ExitCode)
-waitForProcess timeoutMicros (getProcess -> process) = do
+waitForProcess timeoutMicros vmProcess = do
   -- Convert microseconds to Integer for unbounded-delays
   let timeoutMicrosInteger = fromIntegral timeoutMicros :: Integer
-  liftIO $ timeout timeoutMicrosInteger (waitExitCode process)
+  liftIO $ timeout timeoutMicrosInteger $ do
+    exitCode <- waitExitCode (getProcess vmProcess)
+    -- IMPORTANT: Wait for IO threads to complete to ensure all output is captured
+    waitIOThreads vmProcess
+    pure exitCode
