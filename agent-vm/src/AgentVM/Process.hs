@@ -6,10 +6,8 @@ module AgentVM.Process
   , waitForProcess
   ) where
 
-import AgentVM.Types
 import AgentVM.Log
 import System.Process.Typed
-import Data.Text (Text)
 
 -- | Start a VM process
 startVMProcess :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())

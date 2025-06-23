@@ -2,8 +2,6 @@
 module AgentVM.ProcessSpec (spec) where
 
 import Test.Hspec
-import AgentVM.Process
-import AgentVM.Types
 
 spec :: Spec
 spec = describe "AgentVM.Process" $ do
