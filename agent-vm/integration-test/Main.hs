@@ -3,12 +3,10 @@
 
 module Main (main, withTempStateDir, testVMConfig) where
 
-import AgentVM.Log (vmLogger)
-import AgentVM.Nix (buildVMConfig)
-import AgentVM.Types (BranchName (BranchName), VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace))
-import Protolude
+import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace))
+import Protolude (FilePath, IO, ($))
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Hspec (Spec, describe, expectationFailure, hspec, it, pending, shouldStartWith)
+import Test.Hspec (Spec, describe, hspec, it, pending)
 
 spec :: Spec
 spec = describe "Agent VM Integration Tests" $ do
@@ -67,6 +65,8 @@ spec = describe "Agent VM Integration Tests" $ do
       pending -- TODO: Implement
     it "allocates unique ports for each VM" $ do
       pending -- TODO: Implement
+    it "checks actual system port availability before allocation" $ do
+      pending -- TODO: Implement with real VM infrastructure
     it "releases ports when VM is destroyed" $ do
       pending -- TODO: Implement
     it "configures SSH with proper timeouts" $ do
@@ -80,6 +80,14 @@ spec = describe "Agent VM Integration Tests" $ do
       pending -- TODO: Implement
     it "monitors VM process health" $ do
       pending -- TODO: Implement
+    it "returns correct ProcessState for running process" $ do
+      withTempStateDir $ \stateDir -> do
+        -- This would be implemented when we have full VM infrastructure
+        pending -- TODO: Implement with actual VM process
+    it "returns correct ProcessState for exited process" $ do
+      withTempStateDir $ \stateDir -> do
+        -- This would be implemented when we have full VM infrastructure
+        pending -- TODO: Implement with actual VM process
     it "handles process termination gracefully" $ do
       pending -- TODO: Implement
     it "cleans up zombie processes" $ do

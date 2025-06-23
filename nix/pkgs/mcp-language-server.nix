@@ -2,7 +2,6 @@
   inputs,
   lib,
   buildGoModule,
-  fetchFromGitHub,
 }:
 
 buildGoModule rec {

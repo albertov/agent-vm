@@ -1,4 +1,7 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -17,9 +20,10 @@ module AgentVM.Types
   )
 where
 
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Kind (Type)
 import Data.Time (UTCTime)
-import Protolude (Eq, FilePath, Int, Ord, Show, Text)
+import Protolude (Eq, FilePath, Generic, Int, Ord, Show, Text)
 import System.Process.Typed (Process)
 
 -- | VM states as type-level values
@@ -27,14 +31,16 @@ data VMState = Stopped | Starting | Running | Stopping | Failed
 
 -- | Branch name newtype for type safety
 newtype BranchName = BranchName {unBranchName :: Text}
-  deriving (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | VM identifier
 data VMId = VMId
   { vmIdBranch :: BranchName,
     vmIdHost :: Text
   }
-  deriving (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | VM configuration
 data VMConfig = VMConfig
@@ -46,7 +52,8 @@ data VMConfig = VMConfig
     vmConfigWorkspace :: FilePath,
     vmConfigNixPath :: FilePath
   }
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 -- | Type-safe VM with phantom state
 data VM (s :: VMState) = VM

@@ -12,6 +12,7 @@ module AgentVM.State
     unregisterVM,
     allocatePort,
     releasePort,
+    isPortAvailable,
   )
 where
 
@@ -19,8 +20,10 @@ import AgentVM.Types (BranchName, VM, VMError (PortAllocationFailed), vmId, vmId
 import Control.Concurrent.STM (TVar, modifyTVar', newTVar, readTVar, retry, writeTVar)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import Protolude (Either (Left, Right), IO, Int, Maybe (Just, Nothing), STM, atomically, otherwise, return, when, ($), (+), (<$>), (<*>), (>))
-import UnliftIO.Exception (finally, throwString)
+import Network.Socket (SockAddr (SockAddrInet), Socket, SocketType (Stream), bind, close, defaultProtocol, socket)
+import qualified Network.Socket as Socket
+import Protolude (Bool (False, True), Either (Left, Right), IO, Int, Maybe (Just, Nothing), STM, atomically, fromIntegral, otherwise, return, when, ($), (+), (.), (<$>), (<*>), (=<<), (>))
+import UnliftIO.Exception (bracket, finally, throwString, tryAny)
 
 -- | Thread-safe VM registry
 data VMRegistry = VMRegistry
@@ -73,21 +76,47 @@ unregisterVM :: VMRegistry -> BranchName -> STM ()
 unregisterVM registry branch =
   modifyTVar' (vmMap registry) (Map.delete branch)
 
+-- | Check if a port is available on the system
+isPortAvailable :: Int -> IO Bool
+isPortAvailable port = do
+  result <-
+    tryAny $
+      bracket
+        (socket Socket.AF_INET Stream defaultProtocol)
+        close
+        ( \sock -> do
+            Socket.setSocketOption sock Socket.ReuseAddr 1
+            bind sock (SockAddrInet (fromIntegral port) 0)
+        )
+  return $ case result of
+    Left _ -> False -- Port is in use
+    Right _ -> True -- Port is available
+
 -- | Allocate a free port
--- FIXME: This function should also be probing that the port is
--- actually free
-allocatePort :: VMRegistry -> Int -> STM (Either VMError Int)
+allocatePort :: VMRegistry -> Int -> IO (Either VMError Int)
 allocatePort registry startPort = do
-  ports <- readTVar (vmPorts registry)
-  let findFree p
-        | p > startPort + 100 = Left PortAllocationFailed
-        | p `Set.member` ports = findFree (p + 1)
-        | otherwise = Right p
-  case findFree startPort of
-    Right port -> do
-      writeTVar (vmPorts registry) (Set.insert port ports)
-      return (Right port)
+  -- First, find a port that's not in our registry
+  candidatePort <- atomically $ do
+    ports <- readTVar (vmPorts registry)
+    let findFree p
+          | p > startPort + 100 = Left PortAllocationFailed
+          | p `Set.member` ports = findFree (p + 1)
+          | otherwise = Right p
+    return $ findFree startPort
+
+  -- Then check if it's actually available on the system
+  case candidatePort of
     Left err -> return (Left err)
+    Right port -> do
+      available <- isPortAvailable port
+      if available
+        then do
+          -- Reserve it in our registry
+          atomically $ writeTVar (vmPorts registry) . Set.insert port =<< readTVar (vmPorts registry)
+          return (Right port)
+        else
+          -- Try the next port
+          allocatePort registry (port + 1)
 
 -- | Release a port
 releasePort :: VMRegistry -> Int -> STM ()
