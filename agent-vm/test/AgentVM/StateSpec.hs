@@ -6,7 +6,7 @@ import Control.Concurrent.STM (TVar, atomically, readTVarIO)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Protolude
-import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe)
+import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldSatisfy)
 
 spec :: Spec
 spec = describe "AgentVM.State" $ do
