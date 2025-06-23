@@ -25,7 +25,7 @@ in
       default = pkgs;
     };
 
-    allowedOrigin = lib.mkOption {
+    allowOrigin = lib.mkOption {
       type = lib.types.str;
       default = "https://claude.ai";
       description = "Allowed origin for mcp-proxy";

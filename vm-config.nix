@@ -6,7 +6,7 @@
     virtualisation = {
       memorySize = 4096; # 4GB RAM for development work
       cores = 4; # 4 CPU cores
-      diskSize = 20480; # 20GB disk
+      diskSize = 4096; # 4GB disk
       graphics = false; # Headless for better performance
 
       # High-performance workspace sharing via VirtioFS
@@ -42,13 +42,8 @@
     openssh.authorizedKeys.keys = [
       # Ephemeral SSH public key will be added here during VM creation
     ];
-    # Make basic development packages available to the user
-    packages = with pkgs; [
-      git
-      nix
-      curl
-      openssh
-    ];
+    # Make the packages available to the agent available to the user too
+    packages = config.services.agent-mcp.shell.buildInputs or [];
   };
 
   # SSH access for development with secure key-based authentication
