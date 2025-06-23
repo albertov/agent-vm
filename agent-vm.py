@@ -23,7 +23,8 @@ from typing import Dict, List, Optional, Tuple
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout  # Ensure output goes to stdout
 )
 logger = logging.getLogger(__name__)
 
@@ -57,15 +58,52 @@ class VMController:
             )
             return result.stdout.strip()
 
+    def _cleanup_stale_processes(self, vm_name: str) -> None:
+        """Clean up any stale VM processes."""
+        try:
+            # Find stale QEMU processes
+            result = subprocess.run(
+                ["pgrep", "-f", f"qemu.*{vm_name}"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    if pid.strip():
+                        try:
+                            logger.warning(f"Cleaning up stale VM process: {pid}")
+                            os.kill(int(pid), 15)  # SIGTERM
+                            time.sleep(1)
+                            os.kill(int(pid), 9)   # SIGKILL if still alive
+                        except (ProcessLookupError, ValueError):
+                            pass
+        except subprocess.CalledProcessError:
+            pass  # No stale processes found
+
     def _get_current_branch(self) -> str:
         """Get the current git branch name."""
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
+        try:
+            result = subprocess.run(
+                ["git", "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            branch = result.stdout.strip()
+            if not branch:
+                # Detached HEAD state, use commit hash
+                result = subprocess.run(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                branch = f"detached-{result.stdout.strip()}"
+            return branch
+        except subprocess.CalledProcessError:
+            # Not in a git repository or git not available
+            logger.warning("Not in a git repository or git not available, using 'default' as branch name")
+            return "default"
 
     def create_vm(self, host: str = "localhost", port: int = 8000,
                   branch: Optional[str] = None, config: str = "vm-config.nix") -> None:
@@ -103,14 +141,22 @@ class VMController:
         # Clone current repository at current branch
         logger.info("Cloning repository to workspace at current branch...")
         current_branch = self._get_current_branch()
-        repo_root = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, check=True
-        ).stdout.strip()
 
-        subprocess.run([
-            "git", "clone", "--branch", current_branch, repo_root, str(workspace_dir)
-        ], check=True)
+        try:
+            repo_root = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True
+            ).stdout.strip()
+
+            subprocess.run([
+                "git", "clone", "--branch", current_branch, repo_root, str(workspace_dir)
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to clone repository: {e}")
+            # Clean up partially created VM config
+            if vm_config_dir.exists():
+                shutil.rmtree(vm_config_dir)
+            sys.exit(1)
 
         # Set up git remotes in workspace
         logger.info("Setting up git remotes...")
@@ -194,7 +240,21 @@ class VMController:
             self._show_vm_status(vm_config_dir, config_data)
             return
 
+        # Clean up any stale processes first
+        self._cleanup_stale_processes(vm_name)
+
         logger.info(f"Starting VM for branch: {branch}")
+
+        # Get the original flake directory before changing to workspace
+        try:
+            original_flake_dir = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True
+            ).stdout.strip()
+        except subprocess.CalledProcessError:
+            logger.error("Could not determine original flake directory")
+            sys.exit(1)
+
         os.chdir(workspace_dir)
 
         # Build VM configuration
@@ -206,11 +266,23 @@ class VMController:
 # Temporary VM config with injected SSH key
 {{ config, pkgs, lib, ... }}:
 {{
-  imports = [ ./{config_data["config_path"]} ];
+  imports = [ {original_flake_dir}/{config_data["config_path"]} ];
 
   users.users.dev.openssh.authorizedKeys.keys = [ "{ssh_public_key}" ];
 
-  virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = "{workspace_dir}";
+  virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = lib.mkForce "{workspace_dir}";
+
+  # Override port configuration
+  services.agent-mcp.port = lib.mkForce {config_data["port"]};
+
+  # Override port forwarding
+  virtualisation.vmVariant.virtualisation.forwardPorts = lib.mkForce [
+    {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
+    {{ from = "host"; host.port = 2222; guest.port = 22; }}
+  ];
+
+  # Override firewall ports
+  networking.firewall.allowedTCPPorts = lib.mkForce [ 22 {config_data["port"]} ];
 }}
 '''
 
@@ -220,17 +292,26 @@ class VMController:
 
         try:
             vm_build_cmd = [
-                "nix", "build", "--no-link", "--print-out-paths",
+                "nix", "build", "--no-link", "--print-out-paths", "--impure",
                 "--expr", f'''
                 let
-                  flake = builtins.getFlake (toString ./.);
+                  flake = builtins.getFlake "{original_flake_dir}";
                   pkgs = flake.legacyPackages.${{builtins.currentSystem}};
-                  vm = pkgs.nixos {{ imports = [ ./temp-vm-config.nix ]; }};
+                  vm = pkgs.nixos {{
+                    imports = [ ./temp-vm-config.nix ];
+                  }};
                 in vm.config.system.build.vm'''
             ]
 
-            result = subprocess.run(vm_build_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(vm_build_cmd, capture_output=True, text=True, cwd=workspace_dir)
+            if result.returncode != 0:
+                logger.error(f"VM build failed: {result.stderr}")
+                logger.error(f"VM build stdout: {result.stdout}")
+                raise subprocess.CalledProcessError(result.returncode, vm_build_cmd)
             vm_path = result.stdout.strip()
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to build VM configuration: {e}")
+            sys.exit(1)
         finally:
             # Clean up temporary config file
             temp_config_path.unlink(missing_ok=True)
@@ -279,6 +360,33 @@ class VMController:
         logger.info(f"Stopping VM for branch: {branch}")
         self._stop_vm_by_pid(vm_config_dir)
 
+    def restart_vm(self, branch: Optional[str] = None) -> None:
+        """Restart VM (stop then start)."""
+        if branch is None:
+            branch = self._get_current_branch()
+
+        vm_config_dir = self.base_dir / branch
+        config_file = vm_config_dir / "config.json"
+
+        if not config_file.exists():
+            logger.error(f"No VM configuration found for branch: {branch}")
+            logger.info(f"Create one with: agent-vm create --branch={branch}")
+            sys.exit(1)
+
+        logger.info(f"Restarting VM for branch: {branch}")
+
+        # Stop VM if running
+        try:
+            self.stop_vm(branch)
+        except subprocess.CalledProcessError:
+            logger.warning("VM was already stopped or failed to stop cleanly")
+
+        # Wait a moment for cleanup
+        time.sleep(2)
+
+        # Start VM
+        self.start_vm(branch)
+
     def vm_status(self, branch: Optional[str] = None) -> None:
         """Get VM status."""
         if branch is None:
@@ -289,6 +397,7 @@ class VMController:
 
         if not config_file.exists():
             logger.info(f"No VM configuration found for branch: {branch}")
+            logger.info(f"Create one with: agent-vm create --branch={branch}")
             return
 
         with config_file.open() as f:
@@ -336,7 +445,7 @@ class VMController:
             logger.info("No VM configurations found")
             return
 
-        logger.info("Available VM configurations:")
+        vm_configs = []
         for config_dir in self.base_dir.iterdir():
             if config_dir.is_dir():
                 config_file = config_dir / "config.json"
@@ -345,9 +454,16 @@ class VMController:
                         with config_file.open() as f:
                             config_data = json.load(f)
                         created_at = config_data.get("created_at", "unknown")
-                        logger.info(f"  {config_dir.name} (created: {created_at})")
+                        vm_configs.append((config_dir.name, created_at))
                     except (json.JSONDecodeError, OSError):
-                        logger.info(f"  {config_dir.name} (invalid config)")
+                        vm_configs.append((config_dir.name, "invalid config"))
+
+        if vm_configs:
+            logger.info("Available VM configurations:")
+            for name, created_at in vm_configs:
+                logger.info(f"  {name} (created: {created_at})")
+        else:
+            logger.info("No VM configurations found")
 
     def destroy_vm(self, branch: Optional[str] = None) -> None:
         """Destroy VM configuration."""
@@ -360,17 +476,30 @@ class VMController:
             logger.error(f"No VM configuration found for branch: {branch}")
             sys.exit(1)
 
+        logger.info(f"Destroying VM configuration for branch: {branch}")
+
         # Stop VM if running
         config_file = vm_config_dir / "config.json"
         if config_file.exists():
             try:
-                self.stop_vm(branch)
-            except subprocess.CalledProcessError:
-                pass  # Ignore if already stopped
+                with config_file.open() as f:
+                    config_data = json.load(f)
+                vm_name = config_data.get("vm_name", f"agent-dev-{branch}")
 
-        logger.info(f"Destroying VM configuration for branch: {branch}")
-        shutil.rmtree(vm_config_dir)
-        logger.info(f"VM configuration destroyed: {vm_config_dir}")
+                if self._is_vm_running(vm_name):
+                    logger.info("Stopping running VM before destroying configuration...")
+                    self.stop_vm(branch)
+                else:
+                    logger.info("VM is not running")
+            except (json.JSONDecodeError, subprocess.CalledProcessError):
+                logger.warning("Could not check VM status before destruction")
+
+        try:
+            shutil.rmtree(vm_config_dir)
+            logger.info(f"VM configuration destroyed: {vm_config_dir}")
+        except OSError as e:
+            logger.error(f"Failed to destroy VM configuration: {e}")
+            sys.exit(1)
 
     def vm_logs(self, branch: Optional[str] = None) -> None:
         """Show VM logs."""
@@ -574,6 +703,7 @@ def main() -> None:
 Examples:
   agent-vm create --branch=feature-x --port=8001
   agent-vm start feature-x
+  agent-vm restart feature-x
   agent-vm shell feature-x
   agent-vm list
   agent-vm destroy feature-x
@@ -596,6 +726,10 @@ Examples:
     # Stop command
     stop_parser = subparsers.add_parser('stop', help='Stop VM for branch')
     stop_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
+
+    # Restart command
+    restart_parser = subparsers.add_parser('restart', help='Restart VM for branch')
+    restart_parser.add_argument('branch', nargs='?', help='Branch name (default: current branch)')
 
     # Status command
     status_parser = subparsers.add_parser('status', help='Show VM status for branch')
@@ -631,6 +765,8 @@ Examples:
             controller.start_vm(args.branch)
         elif args.command == 'stop':
             controller.stop_vm(args.branch)
+        elif args.command == 'restart':
+            controller.restart_vm(args.branch)
         elif args.command == 'status':
             controller.vm_status(args.branch)
         elif args.command == 'shell':

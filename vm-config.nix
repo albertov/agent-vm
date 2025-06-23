@@ -36,6 +36,7 @@
   # Development user configuration
   users.users.dev = {
     isNormalUser = true;
+    group = "dev";
     extraGroups = [ "wheel" ]; #TODO: Assess if necessary
     shell = pkgs.bash;
     # SSH key will be injected dynamically during VM startup
@@ -45,6 +46,9 @@
     # Make the packages available to the agent available to the user too
     packages = config.services.agent-mcp.shell.buildInputs or [];
   };
+
+  # Define the dev group
+  users.groups.dev = {};
 
   # SSH access for development with secure key-based authentication
   services.openssh = {
@@ -73,15 +77,32 @@
     protectKernelImage = true;
   };
 
+  # Disable sandbox to avoid conflict with security.allowUserNamespaces = false
+  nix.settings.sandbox = false;
+
   # Import the agent service module
   imports = [ ./agent-service.nix ];
 
   # Enable and configure the agent service
   services.agent-mcp = {
     enable = true;
-    user = "dev";
-    group = "dev";
+    user = "agent-mcp";
+    group = "agent-mcp";
     workspaceDir = "/workspace";
+    # Pass the development shell with all MCP tools
+    shell = pkgs.mkShell {
+      buildInputs = with pkgs; [
+        git
+        nix
+        openssh
+        qemu
+        curl
+        python3
+      ];
+      shellHook = ''
+        echo "🚀 Agent MCP Development Environment in VM"
+      '';
+    };
     # These would be overrided in a module added by the create admin command
     # which imports this base config
     port = 8000;

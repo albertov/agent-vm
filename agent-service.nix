@@ -107,7 +107,6 @@ in
           # Restart policy
           Restart = "always";
           RestartSec = "5s";
-          StartLimitInterval = "60s";
           StartLimitBurst = 3;
 
           # Environment
@@ -161,7 +160,7 @@ in
       };
     };
 
-    users.groups = lib.mkIf (cfg.group != "root" && cfg.group != cfg.user) {
+    users.groups = lib.mkIf (cfg.group != "root") {
       ${cfg.group} = { };
     };
   };
