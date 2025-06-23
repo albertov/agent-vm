@@ -9,7 +9,7 @@ format_file() {
     local file="$1"
     
     case "$file" in
-        *.nix|*.py|*.sh)
+        *.nix|*.py|*.sh|*.hs)
             echo "Formatting file with nix fmt: $file"
             nix fmt "$file"
             ;;

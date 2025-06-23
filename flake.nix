@@ -2,12 +2,10 @@
   description = "Agent VM - Isolated MCP agent development environment using QEMU VMs";
 
   nixConfig = {
-    bash-prompt = "\\[\\e[0;37m\\](\\[\\e[0m\\]nix) \\[\\e[0;1;94m\\]agent-vm \\[\\e[0m\\]\\w \\[\\e[0;1m\\]λ \\[\\e[0m\\]";
+    bash-prompt = "\\[\\e[0;1;94m\\]agent-vm \\[\\e[0m\\]\\w \\[\\e[0;1m\\]λ \\[\\e[0m\\]";
     extra-substituters = [
-      "https://mcp-selenium-haskell.cachix.org"
     ];
     extra-trusted-public-keys = [
-      "mcp-selenium-haskell.cachix.org-1:C+mSRd39ugTt5+QWvgPRVmGYnHBMFu0+8HW0oW8uA+Y="
     ];
   };
 
@@ -52,16 +50,40 @@
           overlays = [
             # Haskell.nix overlay
             haskellNix.overlay
+            (final: _prev: {
+              inherit hoogle;
+              hixProject = final.haskell-nix.hix.project {
+                src = builtins.path {
+                  path = ./agent-vm;
+                  name = "source";
+                };
+                evalSystem = "x86_64-linux";
+              };
+            })
             # Agent overlay
-            (import ./overlay.nix inputs)
+            (import ./nix/overlay.nix inputs)
           ];
+        };
+        flake = pkgs.hixProject.flake { };
+        hoogleEnv = pkgs.hixProject.ghcWithHoogle (
+          _:
+          builtins.attrValues (
+            pkgs.lib.filterAttrs (_: p: p.isLocal or false && p.components ? library) pkgs.hixProject.hsPkgs
+          )
+        );
+        hoogle = pkgs.writeShellApplication {
+          name = "hoogle";
+          runtimeInputs = [ hoogleEnv ];
+          text = ''
+            exec hoogle "$@"
+          '';
         };
 
         # Default shell for development
         defaultShell = self.outputs.devShells.${system}.default;
 
       in
-      {
+      (pkgs.lib.recursiveUpdate flake {
         # Legacy packages for compatibility
         legacyPackages = pkgs;
 
@@ -102,7 +124,7 @@
           };
 
           # Default app is the agent-vm-py tool (for now)
-          default = agent-vm-py;
+          default = agent-vm;
 
           # Convenience aliases for VM management
           create-vm = flake-utils.lib.mkApp {
@@ -111,6 +133,79 @@
               runtimeInputs = [ pkgs.agent-vm-py ];
               text = "exec agent-vm-py create \"$@\"";
             };
+          };
+          update-materialization = flake-utils.lib.mkApp {
+            drv = pkgs.writeShellApplication {
+              name = "update-materialization";
+              runtimeInputs = with pkgs; [
+                nix
+                git
+                rsync
+              ];
+              text = ''
+                set -euo pipefail
+
+                echo "🔄 Updating Nix materialization..."
+
+                PLAN_RESULT="$(mktemp -d)/plan"
+
+                # Backup the original hix.nix
+                cp nix/hix.nix nix/hix.nix.backup
+                trap 'mv nix/hix.nix.backup nix/hix.nix; rm $PLAN_RESULT' EXIT
+
+                # Step 1: Temporarily disable materialization by commenting out the line
+                echo "📝 Temporarily disabling materialization..."
+                sed -i 's/materialized = \.\/materialized;/# materialized = \.\/materialized; # Temporarily disabled/' nix/hix.nix
+
+                # Step 2: Try to build the plan-nix (this will use IFD but generate what we need)
+                echo "🏗️ Building project plan..."
+                nix build .#hixProject.plan-nix -o "$PLAN_RESULT"
+
+                # Step 3: Remove old materialized files and copy new ones
+                echo "📁 Updating materialized files..."
+                rm -rf nix/materialized
+                mkdir -p nix/materialized
+                rsync -a "$PLAN_RESULT"/ nix/materialized/
+                chmod -R u+w nix/materialized
+
+                # Step 4: Restore the original hix.nix (re-enable materialization)
+                echo "🔧 Re-enabling materialization..."
+                mv nix/hix.nix.backup nix/hix.nix
+                trap - EXIT
+
+                # Step 5: Test that it works
+                echo "🧪 Testing materialization..."
+                git add -f nix/materialized
+                if nix flake check; then
+                  echo "✅ Flake check passed"
+                  # Step 6: Commit the materialized files
+                  echo "📝 Committing materialized files..."
+                else
+                  git restore --staged nix/materialized
+                  git checkout nix/materialized
+                  echo "⚠️ Flake check had issues"
+                fi
+
+
+                if git diff --cached --quiet; then
+                  echo "ℹ️ No changes to commit - materialization was already up to date"
+                else
+                  git commit -m "feat: update materialized nix files
+
+                This updates the materialized files to match the current project
+                dependencies, eliminating the need for import-from-derivation (IFD)
+                during evaluation."
+                  echo "✅ Committed materialized files"
+                fi
+
+                echo "🎉 Materialization updated successfully!"
+                echo ""
+                echo "The materialized files contain pre-computed Nix expressions that represent"
+                echo "your Haskell dependencies, eliminating the need for import-from-derivation"
+                echo "during evaluation."
+              '';
+            };
+
           };
 
           start-vm = flake-utils.lib.mkApp {
@@ -138,90 +233,6 @@
           };
         };
 
-        # Development shells
-        devShells = {
-          default = pkgs.mkShell {
-            inputsFrom = [ pkgs.agent-vm-py ];
-            buildInputs = with pkgs; [
-
-              # Runtime tools
-              curl
-              python3
-              python3.pkgs.pytest
-
-              # Integration testing
-              py-integration-test
-            ];
-
-            shellHook = ''
-              echo "🚀 Agent VM Development Environment"
-              echo ""
-              echo "📦 Available commands:"
-              echo "  agent-vm-py create  - Create a new VM configuration (Python)"
-              echo "  agent-vm-py start   - Start VM for current branch"
-              echo "  agent-vm-py stop    - Stop VM"
-              echo "  agent-vm-py shell   - Open shell in VM"
-              echo "  agent-vm-py status  - Show VM status"
-              echo "  agent-vm-py list    - List all VM configurations"
-              echo "  agent-vm-py destroy - Destroy VM configuration"
-              echo ""
-              echo "  agent-vm           - Haskell version (in development)"
-              echo ""
-              echo "🧪 Testing:"
-              echo "  py-integration-test - Run Python integration tests"
-              echo "  integration-test    - Run Haskell integration tests (stub)"
-              echo "  pytest tests/       - Run unit tests"
-              echo ""
-              echo "🛠️ Development shells:"
-              echo "  nix develop .#haskell - Enter Haskell development environment"
-              echo "  nix develop          - This shell (default)"
-              echo ""
-              echo "📖 Documentation: ./AGENT_ISOLATION.md"
-              echo "📋 Task list: ./TODO.md"
-            '';
-          };
-
-          # Minimal shell with just agent-vm-py
-          minimal = pkgs.mkShell {
-            buildInputs = with pkgs; [
-              agent-vm-py
-              git
-              openssh
-              qemu
-            ];
-          };
-
-          # Haskell development shell
-          haskell = pkgs.agent-vm.shellFor {
-            tools = {
-              cabal = {};
-              haskell-language-server = {};
-              hlint = {};
-              hoogle = {};
-            };
-            buildInputs = with pkgs; [
-              git
-              openssh
-              qemu
-              curl
-            ];
-            shellHook = ''
-              echo "🚀 Agent VM Haskell Development Environment"
-              echo "📦 Available tools:"
-              echo "  cabal              - Build tool"
-              echo "  haskell-language-server - LSP server"
-              echo "  hlint              - Linter"
-              echo "  hoogle             - API search"
-              echo ""
-              echo "🔨 Build commands:"
-              echo "  cabal build        - Build the project"
-              echo "  cabal test         - Run tests"
-              echo "  cabal run agent-vm - Run the executable"
-              echo ""
-              echo "📋 Task list: ./TODO.md"
-            '';
-          };
-        };
 
         # Checks for CI/testing
         checks = {
@@ -247,14 +258,17 @@
 
         # Formatter for the flake
         formatter = treefmt-nix.lib.mkWrapper pkgs {
+          settings.global.excludes = [ "nix/materialized/**" ];
           projectRootFile = "flake.nix";
           programs = {
-            nixpkgs-fmt.enable = true;
+            nixfmt.enable = true;
+            programs.ormolu.enable = true;
+            programs.hlint.enable = true;
             shellcheck.enable = true;
             deadnix.enable = true;
             ruff.enable = true;
           };
         };
-      }
+      })
     );
 }
