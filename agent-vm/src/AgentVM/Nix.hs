@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Nix integration for VM management
 module AgentVM.Nix
   ( buildVMConfig
@@ -8,11 +10,46 @@ import AgentVM.Types
 import AgentVM.Log
 import System.Process.Typed
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BSL8
+import System.Exit (ExitCode(..))
+import Control.Concurrent.STM (atomically)
 
 -- | Build VM configuration using Nix
 buildVMConfig :: LogAction IO AgentVmTrace -> BranchName -> FilePath -> IO (Either VMError FilePath)
-buildVMConfig = error "buildVMConfig has not been implemented yet"
+buildVMConfig logger branch workspace = do
+  logger <& NixBuildStarted flakeRef
+
+  let proc = setStdin closed
+           $ setStdout byteStringOutput
+           $ setStderr byteStringOutput
+           $ proc "nix" ["build", T.unpack flakeRef, "--no-link", "--print-out-paths"]
+
+  withProcessWait proc $ \p -> do
+    exitCode <- waitExitCode p
+    stdout <- atomically $ getStdout p
+    stderr <- atomically $ getStderr p
+
+    case exitCode of
+      ExitSuccess -> do
+        let storePath = T.strip $ T.pack $ BSL8.unpack stdout
+        logger <& NixBuildCompleted (T.unpack storePath)
+        return $ Right (T.unpack storePath)
+      ExitFailure _ -> do
+        let errorMsg = T.pack $ BSL8.unpack stderr
+        logger <& AgentVM.Log.NixBuildFailed errorMsg
+        return $ Left (AgentVM.Types.NixBuildFailed errorMsg)
+  where
+    flakeRef = "path:" <> T.pack workspace <> "#vm-config." <> unBranchName branch
 
 -- | Run Nix-generated VM script
 runVMScript :: LogAction IO AgentVmTrace -> FilePath -> IO (Process () () ())
-runVMScript = error "runVMScript has not been implemented yet"
+runVMScript logger scriptPath = do
+  let proc = setStdin closed
+           $ setStdout createPipe
+           $ setStderr createPipe
+           $ proc scriptPath []
+
+  logger <& ProcessSpawned (T.pack scriptPath) []
+  startProcess proc

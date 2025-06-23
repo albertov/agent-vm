@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- | VM state management with STM
 module AgentVM.State
@@ -34,28 +35,55 @@ data VMInfo = forall s. VMInfo (VM s)
 
 -- | Create a new VM registry
 newVMRegistry :: IO VMRegistry
-newVMRegistry = error "newVMRegistry has not been implemented yet"
+newVMRegistry = atomically $ VMRegistry
+  <$> newTVar Map.empty
+  <*> newTVar Set.empty
+  <*> newTVar Set.empty
 
 -- | Acquire exclusive lock on a branch
 withVMLock :: VMRegistry -> BranchName -> IO a -> IO a
-withVMLock = error "withVMLock has not been implemented yet"
+withVMLock registry branch action = do
+  atomically $ do
+    locks <- readTVar (vmLocks registry)
+    when (branch `Set.member` locks) retry
+    writeTVar (vmLocks registry) (Set.insert branch locks)
+
+  finally action $ atomically $
+    modifyTVar' (vmLocks registry) (Set.delete branch)
 
 -- | Register a new VM
 registerVM :: VMRegistry -> VM s -> STM ()
-registerVM = error "registerVM has not been implemented yet"
+registerVM registry vm = do
+  vms <- readTVar (vmMap registry)
+  case Map.lookup (vmIdBranch $ vmId vm) vms of
+    Just _ -> error $ "VM already exists: " ++ show (vmIdBranch $ vmId vm)
+    Nothing -> writeTVar (vmMap registry)
+                (Map.insert (vmIdBranch $ vmId vm) (VMInfo vm) vms)
 
 -- | Find a VM by branch name
 lookupVM :: VMRegistry -> BranchName -> STM (Maybe VMInfo)
-lookupVM = error "lookupVM has not been implemented yet"
+lookupVM registry branch = Map.lookup branch <$> readTVar (vmMap registry)
 
 -- | Remove a VM from registry
 unregisterVM :: VMRegistry -> BranchName -> STM ()
-unregisterVM = error "unregisterVM has not been implemented yet"
+unregisterVM registry branch =
+  modifyTVar' (vmMap registry) (Map.delete branch)
 
 -- | Allocate a free port
 allocatePort :: VMRegistry -> Int -> STM (Either VMError Int)
-allocatePort = error "allocatePort has not been implemented yet"
+allocatePort registry startPort = do
+  ports <- readTVar (vmPorts registry)
+  let findFree p
+        | p > startPort + 100 = Left PortAllocationFailed
+        | p `Set.member` ports = findFree (p + 1)
+        | otherwise = Right p
+  case findFree startPort of
+    Right port -> do
+      writeTVar (vmPorts registry) (Set.insert port ports)
+      return (Right port)
+    Left err -> return (Left err)
 
 -- | Release a port
 releasePort :: VMRegistry -> Int -> STM ()
-releasePort = error "releasePort has not been implemented yet"
+releasePort registry port =
+  modifyTVar' (vmPorts registry) (Set.delete port)
