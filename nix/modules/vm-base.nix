@@ -25,15 +25,20 @@ in
   };
   config = {
     services.qemuGuest.enable = true;
+    # TODO: Make configurable
     boot.tmp.useTmpfs = true;
 
     # VM-specific configuration
     virtualisation = {
+      # TODO: Make configurable
       memorySize = 1024 * 4;
+      # TODO: Make configurable
       cores = 8; # 4 CPU cores
+      # TODO: Make configurable
       diskSize = 1024 * 32; # 32GB disk
       graphics = false; # Headless for better performance
       mountHostNixStore = true;
+      # TODO: Allo extra paths from options but keep these
       additionalPaths =
         let
           shell = config.services.mcp-proxy.shell;
@@ -120,6 +125,13 @@ in
       enable = true;
       openFirewall = true;
       host = "0.0.0.0";
+      # TODO: Make configurable
+      port = 8000;
+      # TODO: Make configurable
+      uid = 1000;
+      # TODO: Make configurable
+      group = "users";
+      # TODO: Make configurable
       shell = lib.mkDefault self.devShells."${pkgs.system}".default;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;

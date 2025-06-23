@@ -13,9 +13,5 @@
   services.mcp-proxy = {
     # These would be overrided in a module added by the create admin command
     # which imports this base config
-    port = 8000;
-    uid = 1000;
-    group = "users";
-    #shell = self.devShells."${pkgs.system}".default;
   };
 }
