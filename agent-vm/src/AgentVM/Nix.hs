@@ -6,11 +6,11 @@ module AgentVM.Nix
   , runVMScript
   ) where
 
-import Protolude (IO, FilePath, Either, ($), (<>), pure)
+import Protolude (IO, FilePath, Either(Left, Right), return, ($), (<>), pure)
 
-import AgentVM.Types (BranchName, VMError)
-import AgentVM.Log (AgentVmTrace, LogAction)
-import System.Process.Typed (proc, readProcess, ExitCode(..))
+import AgentVM.Types (BranchName, unBranchName, VMError(NixBuildFailed))
+import AgentVM.Log (AgentVmTrace(NixBuildStarted, NixBuildProgress, NixBuildCompleted, NixBuildFailed, ProcessSpawned), LogAction, (<&))
+import System.Process.Typed (proc, readProcess, ExitCode(..), Process, setStdin, setStdout, setStderr, closed, byteStringOutput, nullStream, withProcessWait, waitExitCode, getStdout, getStderr, startProcess)
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import Control.Concurrent.STM (atomically)
