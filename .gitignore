@@ -4,3 +4,4 @@ rescript_sys.sh
 result*
 *.log
 __pycache__
+*.py?
