@@ -19,8 +19,10 @@ in
     "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
     ./modules/mcp-proxy.nix
     ./modules/selenium-server.nix
+    ./modules/virtiofs-qemu.nix
   ];
   services.qemuGuest.enable = true;
+  boot.tmpOnTmpfs = true;
 
   # VM-specific configuration
   virtualisation = {
@@ -29,43 +31,41 @@ in
     diskSize = 1024 * 32; # 32GB disk
     graphics = false; # Headless for better performance
     mountHostNixStore = true;
-      additionalPaths =
-        let
-          shell = config.services.mcp-proxy.shell;
-          systemChecks = self.checks.${pkgs.system} or { };
-          packages = self.packages.${pkgs.system} or { };
-          apps = self.apps.${pkgs.system} or { };
-          allItems =
-            [
-              config.system.build.toplevel
-              self
-            ]
-            ++ allInputs shell
-            ++ (if pkgs?hixProject
-              then [
+    additionalPaths =
+      let
+        shell = config.services.mcp-proxy.shell;
+        systemChecks = self.checks.${pkgs.system} or { };
+        packages = self.packages.${pkgs.system} or { };
+        apps = self.apps.${pkgs.system} or { };
+        allItems =
+          allInputs shell
+          ++ (
+            if pkgs ? hixProject then
+              [
                 pkgs.hixProject.roots
                 pkgs.hixProject.plan-nix
               ]
-              else [])
-            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
-            ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
-            ++ (map (x: x.program) (pkgs.lib.attrValues apps))
-            ;
+            else
+              [ ]
+          )
+          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues systemChecks))
+          ++ (pkgs.lib.concatMap allInputs (pkgs.lib.attrValues packages))
+          ++ (map (x: x.program) (pkgs.lib.attrValues apps));
 
-          closure = pkgs.closureInfo { rootPaths = allItems; };
-        in
-        [ closure ];
+        closure = pkgs.closureInfo { rootPaths = allItems; };
+      in
+      [ closure ];
     writableStore = true;
     writableStoreUseTmpfs = false;
     useNixStoreImage = false;
 
     # High-performance workspace sharing via VirtioFS
-    sharedDirectories = {
+    sharedDirectoriesVirtIO = {
       workspace = {
         # source gets injected by agent-vm
         source = "/home/alberto/src/agent-vm";
         target = "/var/lib/mcp-proxy/workspace";
-        securityModel = "none";
+        #sandbox = "namespace";
       };
     };
 
@@ -129,6 +129,8 @@ in
     # These would be overrided in a module added by the create admin command
     # which imports this base config
     port = 8000;
+    uid = 1000;
+    group = "users";
     host = "0.0.0.0";
     shell = self.devShells."${pkgs.system}".default;
     namedServers.codemcp = {
