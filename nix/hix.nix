@@ -1,10 +1,9 @@
 { pkgs, ... }:
 rec {
   name = "agent-vm";
-  compiler-nix-name = "ghc967"; # Version of GHC to use
-  index-state = "2025-06-16T20:56:04Z";
+  compiler-nix-name = "ghc910"; # Version of GHC to use
   checkMaterialization = false;
-  materialized = ./materialized;
+  #materialized = ./materialized;
 
   shell.withHoogle = false;
   # Tools to include in the development shell

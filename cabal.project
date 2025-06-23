@@ -8,6 +8,6 @@ benchmarks: True
 allow-newer: all
 
 constraints:
-  hashable < 1.5
+    hashable < 1.5
   , zlib +bundled-c-zlib
 
