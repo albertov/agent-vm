@@ -55,12 +55,16 @@ inputs: final: prev:
   agent-vm = final.python3.pkgs.buildPythonApplication {
     pname = "agent-vm";
     version = "1.0.0";
-    src = ./agent-vm.py;
-    format = "other";
-    dontUnpack = true;
+    src = ./agent-vm;
+    # TODO: Make this work
+    format = "pyproject";
 
     # Only Python stdlib - no dependencies
-    propagatedBuildInputs = [ ];
+    propagatedBuildInputs = [
+      #TODO: Add here the runtime dependencies the script needs!
+    ];
+
+    #TODO: Add pytest as a dependency for tests
 
     installPhase = ''
       mkdir -p $out/bin
@@ -68,6 +72,7 @@ inputs: final: prev:
       chmod +x $out/bin/agent-vm
     '';
 
+    # TODO: Make it run the tests too
     # Type checking during build
     checkPhase = ''
       ${final.python3}/bin/python -m py_compile $src
