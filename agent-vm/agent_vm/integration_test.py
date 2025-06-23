@@ -89,12 +89,21 @@ def get_test_config() -> IntegrationTestConfig:
 # --- Pytest Test Cases ---
 
 def build_agent_vm_cmd(base_cmd: List[str], config: IntegrationTestConfig) -> List[str]:
-    """Build agent-vm command with state directory option if configured."""
+    """Build agent-vm command with state directory and timeout options."""
     cmd = [config.agent_vm_cmd]
 
-    # First, add state-dir option if configured
+    # First, add global options
     if config.state_dir:
         cmd.extend(["--state-dir", config.state_dir])
+
+    # Add timeout option - this was missing!
+    cmd.extend(["--timeout", str(config.timeout)])
+
+    # Add debug/verbose flags if enabled
+    if config.debug:
+        cmd.append("--debug")
+    elif config.verbose:
+        cmd.append("--verbose")
 
     # Then add all the other arguments
     cmd.extend(base_cmd)
