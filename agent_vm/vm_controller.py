@@ -632,9 +632,6 @@ class VMController:
 
   virtualisation.vmVariant.virtualisation.sharedDirectories.workspace.source = lib.mkForce "{workspace_dir}";
 
-  # Disable the agent-mcp service for integration testing to avoid overlay dependencies
-  services.agent-mcp.enable = lib.mkForce false;
-
   # Override port forwarding (still forward the port even though service is disabled)
   virtualisation.vmVariant.virtualisation.forwardPorts = lib.mkForce [
     {{ from = "host"; host.port = {config_data["port"]}; guest.port = {config_data["port"]}; }}
