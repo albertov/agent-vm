@@ -114,7 +114,7 @@
     in
     {
       nixosConfigurations = {
-        agent-vm = self.lib.x86_64-linux.mk-agent-vm [./nix/vm-config.nix];
+        agent-vm = self.lib.x86_64-linux.mk-agent-vm [ ./nix/vm-config.nix ];
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -170,9 +170,9 @@
                 DEVSHELL="default"
                 PORT=8000
                 WORKSPACE="$(pwd)"
-                MEMORY_SIZE=4096
-                CORES=8
-                DISK_SIZE=32768
+                MEMORY_SIZE=4
+                CORES=2
+                DISK_SIZE=4
 
                 # Show usage
                 usage() {
@@ -181,12 +181,12 @@
                   echo "Options:"
                   echo "  --config PATH      VM configuration file (optional)"
                   echo "  --flake FLAKE      Flake to use (default: current git repo)"
-                  echo "  --devshell NAME    Development shell to use (default: default)"
-                  echo "  --port PORT        Port for the VM (default: 8000)"
+                  echo "  --devshell NAME    Development shell to use (default: $DEVSHELL)"
+                  echo "  --port PORT        Port for the VM (default: $PORT)"
                   echo "  --workspace PATH   Workspace directory (default: current directory)"
-                  echo "  --memory SIZE      VM memory size in MB (default: 4096)"
-                  echo "  --cores NUM        Number of CPU cores (default: 8)"
-                  echo "  --disk SIZE        VM disk size in MB (default: 32768)"
+                  echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
+                  echo "  --cores NUM        Number of CPU cores (default: $CORES)"
+                  echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
                   echo "  -h, --help         Show this help message"
                   exit 0
                 }
@@ -212,6 +212,18 @@
                       ;;
                     --workspace)
                       WORKSPACE="$2"
+                      shift 2
+                      ;;
+                    --memory)
+                      MEMORY_SIZE="$2"
+                      shift 2
+                      ;;
+                    --cores)
+                      CORES="$2"
+                      shift 2
+                      ;;
+                    --disk)
+                      DISK_SIZE="$2"
                       shift 2
                       ;;
                     -h|--help)
@@ -242,6 +254,9 @@
                         { agent-vm = {
                             inherit shell;
                             port=$PORT;
+                            memorySize=1024 * $MEMORY_SIZE;
+                            diskSize=1024 * $DISK_SIZE;
+                            cores=$CORES;
                             uid=$(id -u);
                             group=\"$(id -n -g)\";
                             workspace=\"$WORKSPACE\";

@@ -77,7 +77,7 @@ let
           )}
           
           # CRITICAL: Override the VM script's memory configuration for virtiofs
-          export QEMU_OPTS="-m ${toString cfg.memorySize},slots=32,maxmem=32G -object memory-backend-file,id=mem,size=${toString cfg.memorySize}M,mem-path=/dev/shm,share=on -machine memory-backend=mem $VIRTIOFS_OPTS ''${QEMU_OPTS:-}"
+          export QEMU_OPTS="-m ${toString cfg.memorySize},slots=32,maxmem=64G -object memory-backend-file,id=mem,size=${toString cfg.memorySize}M,mem-path=/dev/shm,share=on -machine memory-backend=mem $VIRTIOFS_OPTS ''${QEMU_OPTS:-}"
           
           exec ${config.system.build.vm}/bin/run-nixos-vm "$@"
     '';
