@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test script that writes to both stdout and stderr
 echo "Starting process..."
 >&2 echo "Warning: This is stderr"

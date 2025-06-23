@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test script with multiline output
 echo "Line 1"
 echo "Line 2"
