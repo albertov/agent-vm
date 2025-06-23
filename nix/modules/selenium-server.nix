@@ -91,8 +91,7 @@ in
         NoNewPrivileges = false;
 
         # Provide isolated temporary directories (/tmp, /var/tmp) - prevents tmp race attacks
-        # Disabled because browsers need access to the real /tmp and /var/tmp
-        PrivateTmp = false;
+        PrivateTmp = true; # Use private /tmp and /var/tmp
 
         # Hide other processes in /proc - equivalent to hidepid=2, improves process isolation
         # Relaxed for browsers which need to see other processes
@@ -100,8 +99,7 @@ in
         ProtectProc = "default"; # Normal /proc visibility
 
         # Filesystem protection - prevents tampering with system files
-        # DISABLED: Chrome needs more filesystem access than "full" allows
-        ProtectSystem = false;
+        ProtectSystem = "full"; # Makes /usr, /boot, /efi read-only - browsers shouldn't write there
         ProtectHome = true; # Block access to /home directories
 
         # Additional bind mounts for browser functionality
@@ -112,28 +110,25 @@ in
         # === KERNEL PROTECTION ===
 
         # Block access to kernel configuration and sensitive system information
-        # TEMPORARILY DISABLED for debugging
-        ProtectKernelTunables = false; # Prevents writes to /proc/sys, /sys
-        ProtectKernelLogs = false; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs
-        ProtectKernelModules = false; # Prevents loading/unloading kernel modules, blocks /proc/kallsyms
+        ProtectKernelTunables = true; # Prevents writes to /proc/sys, /sys - browsers shouldn't need this
+        ProtectKernelLogs = true; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs - browsers don't need kernel logs
+        ProtectKernelModules = true; # Prevents loading/unloading kernel modules - browsers don't load kernel modules
 
         # === MEMORY AND EXECUTION PROTECTION ===
 
         # Lock execution domain - prevents personality() syscall abuse
-        # DISABLED: Chrome might need to change execution domain
-        LockPersonality = false;
+        LockPersonality = true; # Browsers shouldn't need to change execution domain
 
         # Block realtime scheduling - prevents DoS via CPU monopolization
         RestrictRealtime = true; # Block realtime scheduling
 
         # Block SUID/SGID execution - prevents privilege escalation via setuid binaries
-        # DISABLED: Chrome sandbox helper might be setuid
-        RestrictSUIDSGID = false;
+        RestrictSUIDSGID = true;
 
         # === NAMESPACE AND IPC PROTECTION ===
 
         # Block control group modifications - prevents container escape via cgroup manipulation
-        ProtectControlGroups = false;
+        ProtectControlGroups = true; # Browsers only need read access via bind mount
 
         # Restrict network address families - only allow necessary network protocols
         RestrictAddressFamilies = [
@@ -164,8 +159,6 @@ in
         # Define exactly what paths the service can write to
         ReadWritePaths = [
           "/var/lib/selenium-server" # Service home directory for logs and temporary files
-          "/tmp" # Browsers need access to tmp for downloads and cache
-          "/var/tmp" # Additional temp space for browsers
           "/run/user" # Browser runtime directories
           "/dev/shm" # Chrome needs shared memory for rendering
         ];
@@ -188,47 +181,27 @@ in
         # === DEVICE ACCESS RESTRICTIONS ===
 
         # Provide minimal /dev with only essential devices for browser operation
-        # TEMPORARILY DISABLED: Chrome needs various devices
-        PrivateDevices = false;
-        # DevicePolicy = "closed"; # Block access to all devices by default
-        # DeviceAllow = [
-        #   # Explicitly allow only necessary devices for browser operation
-        #   "/dev/null rw" # Allow null device
-        #   "/dev/zero rw" # Allow zero device
-        #   "/dev/urandom r" # Allow random number generation
-        #   "/dev/shm rw" # Shared memory needed for browser rendering
-        #   "/dev/dri rw" # Direct Rendering Infrastructure for GPU acceleration
-        #   "/dev/pts rw" # Pseudo terminals for process communication
-        #   "/dev/ptmx rw" # PTY multiplexer for creating pseudo terminals
-        #   "char-usb_device rwm" # USB devices (for some WebDriver features)
-        # ];
+        PrivateDevices = true; # Create private /dev with minimal devices
+        DevicePolicy = "closed"; # Block access to all devices by default
+        DeviceAllow = [
+          # Explicitly allow only necessary devices for browser operation
+          "/dev/null rw" # Allow null device
+          "/dev/zero rw" # Allow zero device
+          "/dev/urandom r" # Allow random number generation
+          "/dev/shm rw" # Shared memory needed for browser rendering
+          "/dev/dri rw" # Direct Rendering Infrastructure for GPU acceleration
+          "/dev/pts rw" # Pseudo terminals for process communication
+          "/dev/ptmx rw" # PTY multiplexer for creating pseudo terminals
+          "char-usb_device rwm" # USB devices (for some WebDriver features)
+        ];
 
         # === SYSTEM CALL FILTERING ===
 
         # Block dangerous syscalls while allowing necessary ones for browser operation
-        # TEMPORARILY DISABLED: Chrome requires many syscalls that are hard to enumerate
-        # TODO: Re-enable with proper allowlist after testing
-        # SystemCallFilter = [
-        #   "@system-service" # Allow standard service syscalls
-        #   "@process" # Allow process-related syscalls for spawning browser processes
-        #   "@network-io" # Allow network I/O for WebDriver communication
-        #   "@ipc" # Allow IPC for browser process communication
-        #   "@file-system" # Allow filesystem operations
-        #   "@basic-io" # Allow basic I/O operations
-        #   "@timer" # Allow timer-related syscalls
-        #   "@sync" # Allow synchronization primitives
-        #   "@cpu-emulation" # Allow CPU emulation for JIT
-        #   "@memlock" # Allow memory locking operations
-        #   "ptrace" # Allow ptrace for Chrome crash handler
-        #   "pkey_alloc" # Allow memory protection keys for Chrome
-        #   "pkey_mprotect" # Allow memory protection key operations
-        #   "pkey_free" # Allow freeing memory protection keys
-        #   "~@debug" # Block debugging syscalls (except ptrace)
-        #   "~@mount" # Block mount operations
-        #   "~@reboot" # Block reboot/shutdown syscalls
-        #   "~@swap" # Block swap-related syscalls
-        #   "~@obsolete" # Block obsolete syscalls
-        # ];
+        # DISABLED: Chrome aborts internally with any SystemCallFilter
+        # Even with very permissive filters, Chrome crashes with SIGABRT
+        # This appears to be Chrome detecting the seccomp filter and refusing to run
+        # SystemCallFilter = [...];
 
         # === ADDITIONAL HARDENING ===
 

@@ -50,10 +50,32 @@ Chrome's sandbox requires user namespaces to create isolated processes. When the
 ## Security Considerations
 
 The configuration relaxes several security features for browser compatibility:
-- User namespaces enabled system-wide
+- User namespaces enabled system-wide (required for Chrome sandbox)
 - Reduced process isolation
 - Broader filesystem access
 - Disabled system call filtering
+
+### Re-enabled Security Features
+The following security features have been successfully re-enabled and tested:
+
+**Working features:**
+- `ProtectKernelTunables = true` - Browsers don't modify kernel parameters
+- `ProtectKernelLogs = true` - Browsers don't need kernel logs
+- `ProtectKernelModules = true` - Browsers don't load kernel modules
+- `LockPersonality = true` - Browsers don't change execution domain
+- `ProtectControlGroups = true` - Browsers only need read access (via bind mount)
+- `ProtectSystem = "full"` - Makes /usr, /boot, /efi read-only
+- `PrivateDevices = true` - Private /dev with only essential devices
+- `DevicePolicy = "closed"` - Explicit device allowlist for browser needs
+- `RestrictSUIDSGID = true` - Chrome uses namespace sandbox instead of setuid
+- `PrivateTmp = true` - Isolated /tmp and /var/tmp directories
+
+**Failed features:**
+- `SystemCallFilter` - Chrome aborts internally (SIGABRT) when any SystemCallFilter is present
+  - Even with very permissive filters, Chrome detects the seccomp filter and refuses to run
+  - This is a known Chrome behavior - it's extremely sensitive to its sandboxing environment
+  - Firefox also fails, likely for similar reasons
+  - Recommendation: Keep SystemCallFilter disabled for browser automation
 
 For production use, consider:
 1. Running in a dedicated VM or container
