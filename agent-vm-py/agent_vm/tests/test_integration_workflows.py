@@ -5,14 +5,11 @@ These tests verify end-to-end workflows and component interactions.
 """
 
 import json
-import os
 import subprocess
-import tempfile
-import time
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 import pytest
-from agent_vm.vm_controller import VMController, main
+from agent_vm.vm_controller import main
 
 
 @pytest.mark.integration

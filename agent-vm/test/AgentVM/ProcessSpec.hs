@@ -2,7 +2,6 @@
 module AgentVM.ProcessSpec (spec) where
 
 import Protolude
-
 import Test.Hspec (Spec, describe, it, pending)
 
 spec :: Spec

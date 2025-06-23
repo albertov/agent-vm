@@ -6,23 +6,20 @@ This module provides the core VM lifecycle management functionality including cr
 startup, shutdown, and workspace management for agent development environments.
 """
 
-import atexit
 import json
-import logging
 import os
 import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 # Import common utilities
 from .utils import (
-    Colors, ColorFormatter, setup_logging, cleanup_old_logs,
-    get_last_lines, ProcessWithOutput, run_subprocess
+    Colors, setup_logging, cleanup_old_logs,
+    ProcessWithOutput, run_subprocess
 )
 
 

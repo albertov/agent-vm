@@ -1,5 +1,5 @@
 # vm-config.nix
-{ config, pkgs, lib, ... }:
+{ config, pkgs, ... }:
 {
   # VM-specific configuration
   virtualisation.vmVariant = {
@@ -20,8 +20,16 @@
 
       # Port forwarding for MCP proxy
       forwardPorts = [
-        { from = "host"; host.port = 8000; guest.port = 8000; } # MCP proxy
-        { from = "host"; host.port = 2222; guest.port = 22; } # SSH access
+        {
+          from = "host";
+          host.port = 8000;
+          guest.port = 8000;
+        } # MCP proxy
+        {
+          from = "host";
+          host.port = 2222;
+          guest.port = 22;
+        } # SSH access
       ];
 
       # Optimized QEMU options for VirtioFS performance
@@ -31,7 +39,6 @@
       ];
     };
   };
-
 
   # Development user configuration
   users.users.dev = {
@@ -61,20 +68,20 @@
   };
 
   # Define the dev group
-  users.groups.dev = {};
+  users.groups.dev = { };
 
   # Agent user for running MCP services
   users.users.agent = {
     isNormalUser = true;
     group = "agent";
     home = "/workspace";
-    createHome = false;  # Don't create home directory since it's a shared mount
+    createHome = false; # Don't create home directory since it's a shared mount
     shell = pkgs.bash;
     # uid will be set by the VM generation to match host user
   };
 
   # Define the agent group
-  users.groups.agent = {};
+  users.groups.agent = { };
   # gid will be set by the VM generation to match host user
 
   # SSH access for development with secure key-based authentication
@@ -91,7 +98,10 @@
   # Firewall configuration
   networking.firewall = {
     enable = true;
-    allowedTCPPorts = [ 22 config.services.agent-mcp.port ]; # SSH and MCP proxy
+    allowedTCPPorts = [
+      22
+      config.services.agent-mcp.port
+    ]; # SSH and MCP proxy
   };
 
   # Optimize for VM environment

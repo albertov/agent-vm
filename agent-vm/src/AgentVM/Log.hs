@@ -4,30 +4,31 @@
 
 -- | Logging infrastructure for agent-vm
 module AgentVM.Log
-  ( AgentVmTrace(..)
-  , LogAction(..)
-  , Severity(..)
-  , traceToMessage
-  , traceSeverity
-  , renderTrace
-  , vmLogger
-  , (<&)
-  ) where
+  ( AgentVmTrace (..),
+    LogAction (..),
+    Severity (..),
+    traceToMessage,
+    traceSeverity,
+    renderTrace,
+    vmLogger,
+    (<&),
+  )
+where
 
-import Protolude (Text, Generic, IO, show, FilePath, Show, Eq, Ord, ($), (<>), Int)
-
-import AgentVM.Types (BranchName, unBranchName, VMConfig)
+import AgentVM.Types (BranchName, VMConfig, unBranchName)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import System.Console.ANSI (Color(Red, Green, Yellow, Cyan), ColorIntensity(Dull, Vivid), ConsoleLayer(Foreground), SGR(SetColor, Reset), setSGR)
+import Protolude (Eq, FilePath, Generic, IO, Int, Ord, Show, Text, show, ($), (<>))
+import System.Console.ANSI (Color (Cyan, Green, Red, Yellow), ColorIntensity (Dull, Vivid), ConsoleLayer (Foreground), SGR (Reset, SetColor), setSGR)
 import System.IO (stderr)
 
 -- | LogAction type for plow-log compatibility
-newtype LogAction m a = LogAction { unLogAction :: a -> m () }
+newtype LogAction m a = LogAction {unLogAction :: a -> m ()}
 
 -- | Convenience operator for logging
 (<&) :: LogAction m a -> a -> m ()
 (<&) = unLogAction
+
 infixr 1 <&
 
 -- | Severity levels for logging
@@ -48,33 +49,33 @@ data AgentVmTrace
   | VMStopped BranchName
   | VMDestroyed BranchName
   | VMFailed BranchName Text
-  -- Process Management
-  | ProcessSpawned Text [Text]
+  | -- Process Management
+    ProcessSpawned Text [Text]
   | ProcessExited Text Int
   | ProcessOutput Text Text
   | ProcessError Text Text
-  -- SSH Operations
-  | SSHKeyGenerated FilePath
+  | -- SSH Operations
+    SSHKeyGenerated FilePath
   | SSHConnecting Text Int
   | SSHConnected Text Int
   | SSHCommandExecuted Text
   | SSHFailed Text
-  -- Nix Operations
-  | NixBuildStarted Text
+  | -- Nix Operations
+    NixBuildStarted Text
   | NixBuildProgress Text
   | NixBuildCompleted FilePath
   | NixBuildFailed Text
-  -- Network Operations
-  | PortScanning Int
+  | -- Network Operations
+    PortScanning Int
   | PortAllocated Int
   | PortReleased Int
-  -- Workspace Operations
-  | WorkspaceCreated FilePath
+  | -- Workspace Operations
+    WorkspaceCreated FilePath
   | WorkspaceCloned Text FilePath
   | WorkspaceSynced FilePath
   | WorkspaceRemoved FilePath
-  -- Agent Service
-  | AgentServiceStarting BranchName
+  | -- Agent Service
+    AgentServiceStarting BranchName
   | AgentServiceHealthy BranchName Text
   | AgentServiceFailed BranchName Text
   deriving (Show, Eq, Generic)
@@ -91,7 +92,6 @@ traceSeverity = \case
   SSHFailed {} -> Error
   AgentVM.Log.NixBuildFailed {} -> Error
   AgentServiceFailed {} -> Error
-
   VMCreated {} -> Info
   VMStarted {} -> Info
   VMStopped {} -> Info
@@ -100,7 +100,6 @@ traceSeverity = \case
   PortAllocated {} -> Info
   WorkspaceCreated {} -> Info
   AgentServiceHealthy {} -> Info
-
   _ -> Debug
 
 -- | Render trace as formatted text
@@ -113,32 +112,26 @@ renderTrace = \case
   VMStopped b -> "🛑 Stopped VM for " <> unBranchName b
   VMDestroyed b -> "🗑️  Destroyed VM for " <> unBranchName b
   VMFailed b r -> "❌ VM failed for " <> unBranchName b <> ": " <> r
-
   ProcessSpawned c a -> "🔧 Spawned process: " <> c <> " " <> T.unwords a
   ProcessExited c e -> "📤 Process exited: " <> c <> " (code: " <> T.pack (show e) <> ")"
   ProcessOutput c o -> "📝 Process output from " <> c <> ": " <> T.take 80 o
   ProcessError c e -> "❌ Process error from " <> c <> ": " <> e
-
   SSHKeyGenerated p -> "🔑 Generated SSH key: " <> T.pack p
   SSHConnecting h p -> "🔗 Connecting to SSH " <> h <> ":" <> T.pack (show p)
   SSHConnected h p -> "✅ SSH connected to " <> h <> ":" <> T.pack (show p)
   SSHCommandExecuted c -> "⚡ SSH command executed: " <> c
   SSHFailed r -> "❌ SSH failed: " <> r
-
   NixBuildStarted f -> "🔨 Building " <> f
   NixBuildProgress m -> "📊 Build progress: " <> m
   NixBuildCompleted p -> "✅ Built " <> T.pack p
   AgentVM.Log.NixBuildFailed e -> "❌ Build failed: " <> e
-
   PortScanning p -> "🔍 Scanning ports from " <> T.pack (show p)
   PortAllocated p -> "🔌 Allocated port " <> T.pack (show p)
   PortReleased p -> "🔓 Released port " <> T.pack (show p)
-
   WorkspaceCreated p -> "📁 Created workspace: " <> T.pack p
   WorkspaceCloned o d -> "📋 Cloned " <> o <> " to " <> T.pack d
   WorkspaceSynced p -> "🔄 Synced workspace: " <> T.pack p
   WorkspaceRemoved p -> "🗑️  Removed workspace: " <> T.pack p
-
   AgentServiceStarting b -> "🚀 Starting agent service for " <> unBranchName b
   AgentServiceHealthy b u -> "💚 Agent healthy on " <> unBranchName b <> " (up " <> u <> ")"
   AgentServiceFailed b e -> "❌ Agent failed on " <> unBranchName b <> ": " <> e

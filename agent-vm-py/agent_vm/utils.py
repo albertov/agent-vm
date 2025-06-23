@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
+from typing import List, Optional, Union
 
 
 # Color codes for terminal output

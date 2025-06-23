@@ -6,61 +6,63 @@
 -- | Core type definitions for agent-vm
 module AgentVM.Types
   ( -- * VM States
-    VMState(..)
-  , BranchName(..)
-  , VMId(..)
-  , VMConfig(..)
-  , VM(..)
-  , VMStateData(..)
-  , VMOp(..)
-  , VMError(..)
-  ) where
+    VMState (..),
+    BranchName (..),
+    VMId (..),
+    VMConfig (..),
+    VM (..),
+    VMStateData (..),
+    VMOp (..),
+    VMError (..),
+  )
+where
 
-import Protolude (Eq, Ord, Show, Text, FilePath, Int)
-
-import Data.Time (UTCTime)
-import System.Process.Typed (Process)
 import Data.Kind (Type)
+import Data.Time (UTCTime)
+import Protolude (Eq, FilePath, Int, Ord, Show, Text)
+import System.Process.Typed (Process)
 
 -- | VM states as type-level values
 data VMState = Stopped | Starting | Running | Stopping | Failed
 
 -- | Branch name newtype for type safety
-newtype BranchName = BranchName { unBranchName :: Text }
+newtype BranchName = BranchName {unBranchName :: Text}
   deriving (Eq, Ord, Show)
 
 -- | VM identifier
 data VMId = VMId
-  { vmIdBranch :: BranchName
-  , vmIdHost :: Text
-  } deriving (Eq, Ord, Show)
+  { vmIdBranch :: BranchName,
+    vmIdHost :: Text
+  }
+  deriving (Eq, Ord, Show)
 
 -- | VM configuration
 data VMConfig = VMConfig
-  { vmConfigHost :: Text
-  , vmConfigPort :: Int
-  , vmConfigSshPort :: Int
-  , vmConfigMemory :: Int
-  , vmConfigCores :: Int
-  , vmConfigWorkspace :: FilePath
-  , vmConfigNixPath :: FilePath
-  } deriving (Eq, Show)
+  { vmConfigHost :: Text,
+    vmConfigPort :: Int,
+    vmConfigSshPort :: Int,
+    vmConfigMemory :: Int,
+    vmConfigCores :: Int,
+    vmConfigWorkspace :: FilePath,
+    vmConfigNixPath :: FilePath
+  }
+  deriving (Eq, Show)
 
 -- | Type-safe VM with phantom state
 data VM (s :: VMState) = VM
-  { vmId :: VMId
-  , vmConfig :: VMConfig
-  , vmCreatedAt :: UTCTime
-  , vmStateData :: VMStateData s
+  { vmId :: VMId,
+    vmConfig :: VMConfig,
+    vmCreatedAt :: UTCTime,
+    vmStateData :: VMStateData s
   }
 
 -- | State-specific data
 data VMStateData (s :: VMState) where
   StoppedData :: VMStateData 'Stopped
-  StartingData :: { startingPid :: Int } -> VMStateData 'Starting
-  RunningData :: { runningPid :: Int, runningProcess :: Process () () () } -> VMStateData 'Running
-  StoppingData :: { stoppingPid :: Int } -> VMStateData 'Stopping
-  FailedData :: { failureReason :: Text } -> VMStateData 'Failed
+  StartingData :: {startingPid :: Int} -> VMStateData 'Starting
+  RunningData :: {runningPid :: Int, runningProcess :: Process () () ()} -> VMStateData 'Running
+  StoppingData :: {stoppingPid :: Int} -> VMStateData 'Stopping
+  FailedData :: {failureReason :: Text} -> VMStateData 'Failed
 
 deriving instance Show (VMStateData s)
 

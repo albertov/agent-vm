@@ -3,61 +3,83 @@
 -- | Main entry point for the agent-vm library
 module AgentVM
   ( -- * Types
-    VMState(..)
-  , BranchName(..)
-  , VMId(..)
-  , VMConfig(..)
-  , VM(..)
-  , VMStateData(..)
-  , VMOp(..)
-  , VMError(..)
+    VMState (..),
+    BranchName (..),
+    VMId (..),
+    VMConfig (..),
+    VM (..),
+    VMStateData (..),
+    VMOp (..),
+    VMError (..),
+
     -- * State
-  , VMRegistry(..)
-  , VMInfo(..)
-  , newVMRegistry
-  , withVMLock
-  , registerVM
-  , lookupVM
-  , unregisterVM
-  , allocatePort
-  , releasePort
+    VMRegistry (..),
+    VMInfo (..),
+    newVMRegistry,
+    withVMLock,
+    registerVM,
+    lookupVM,
+    unregisterVM,
+    allocatePort,
+    releasePort,
+
     -- * Process
-  , startVMProcess
-  , stopVMProcess
-  , checkVMProcess
-  , waitForProcess
+    startVMProcess,
+    stopVMProcess,
+    checkVMProcess,
+    waitForProcess,
+
     -- * SSH
-  , generateSSHKey
-  , waitForSSH
-  , sshExec
-  , trySSHConnect
+    generateSSHKey,
+    waitForSSH,
+    sshExec,
+    trySSHConnect,
+
     -- * Nix
-  , buildVMConfig
-  , runVMScript
+    buildVMConfig,
+    runVMScript,
+
     -- * Logging
-  , AgentVmTrace( VMCreated, VMStarting, VMStarted, VMStopping, VMStopped
-                , VMDestroyed, VMFailed, ProcessSpawned, ProcessExited
-                , ProcessOutput, ProcessError, SSHKeyGenerated, SSHConnecting
-                , SSHConnected, SSHCommandExecuted, SSHFailed, NixBuildStarted
-                , NixBuildProgress, NixBuildCompleted )
-  , LogAction(..)
-  , Severity(..)
-  , traceToMessage
-  , traceSeverity
-  , renderTrace
-  , vmLogger
+    AgentVmTrace
+      ( VMCreated,
+        VMStarting,
+        VMStarted,
+        VMStopping,
+        VMStopped,
+        VMDestroyed,
+        VMFailed,
+        ProcessSpawned,
+        ProcessExited,
+        ProcessOutput,
+        ProcessError,
+        SSHKeyGenerated,
+        SSHConnecting,
+        SSHConnected,
+        SSHCommandExecuted,
+        SSHFailed,
+        NixBuildStarted,
+        NixBuildProgress,
+        NixBuildCompleted
+      ),
+    LogAction (..),
+    Severity (..),
+    traceToMessage,
+    traceSeverity,
+    renderTrace,
+    vmLogger,
+
     -- * Config
-  , VMConfigJson(..)
-  , loadVMConfig
-  , saveVMConfig
-  ) where
+    VMConfigJson (..),
+    loadVMConfig,
+    saveVMConfig,
+  )
+where
 
-import Protolude ()
-
-import AgentVM.Types
-import AgentVM.State
+import AgentVM.Config
+import AgentVM.Log
+import AgentVM.Nix
 import AgentVM.Process
 import AgentVM.SSH
-import AgentVM.Nix
-import AgentVM.Log
-import AgentVM.Config
+import AgentVM.State
+import AgentVM.Types
+import Protolude ()

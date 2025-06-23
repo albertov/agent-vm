@@ -1,6 +1,7 @@
-{ lib
-, python3
-, fetchPypi
+{
+  lib,
+  python3,
+  fetchPypi,
 }:
 
 python3.pkgs.buildPythonPackage rec {
@@ -17,7 +18,6 @@ python3.pkgs.buildPythonPackage rec {
     inherit pname version;
     hash = "sha256-qYYDybwPrcemnkcYQj6gBiwqkKQhg59/AWGSqTU22Ak="; # Update this hash
   };
-
 
   dependencies = with python3.pkgs; [
     # Core dependencies

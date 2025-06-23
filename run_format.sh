@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -e -o pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-
-RROF_ROOT="$REPO_ROOT/re-react-onping-frontend/"
-
 format_file() {
     local file="$1"
     

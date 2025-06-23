@@ -14,10 +14,8 @@ rec {
   shell.tools.ormolu = "latest";
   # shell.tools.haskell-language-server = "latest";
   # Non-Haskell tools to include in the development shell
-  shell.nativeBuildInputs =
-    with pkgs.buildPackages;
-    [
-      hoogle # This one has our local packages!
-      gh # GitHub CLI for PR automation
-    ];
+  shell.nativeBuildInputs = with pkgs.buildPackages; [
+    hoogle # This one has our local packages!
+    gh # GitHub CLI for PR automation
+  ];
 }

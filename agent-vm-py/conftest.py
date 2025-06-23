@@ -10,7 +10,6 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict
 
 import pytest
 

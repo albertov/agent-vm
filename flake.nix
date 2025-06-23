@@ -42,8 +42,16 @@
     mcp-nixos.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils, treefmt-nix, haskellNix, ... }@inputs:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      flake-utils,
+      treefmt-nix,
+      haskellNix,
+      ...
+    }@inputs:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import inputs.nixpkgs-haskellNix {
           inherit system;
@@ -235,7 +243,6 @@
           };
         };
 
-
         # Checks for CI/testing
         checks = {
           # Ensure agent-vm-py builds correctly
@@ -260,12 +267,15 @@
 
         # Formatter for the flake
         formatter = treefmt-nix.lib.mkWrapper pkgs {
-          settings.global.excludes = [ "nix/materialized/**" ];
+          settings.global.excludes = [
+            "nix/materialized/**"
+            "agent-vm-py/**"
+          ];
           projectRootFile = "flake.nix";
           programs = {
             nixfmt.enable = true;
-            programs.ormolu.enable = true;
-            programs.hlint.enable = true;
+            ormolu.enable = true;
+            hlint.enable = true;
             shellcheck.enable = true;
             deadnix.enable = true;
             ruff.enable = true;

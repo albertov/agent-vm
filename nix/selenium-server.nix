@@ -1,4 +1,9 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 with lib;
 
 let
@@ -27,7 +32,11 @@ in
       };
       packages = mkOption {
         type = types.listOf types.package;
-        default = with pkgs; [ chromedriver chromium firefox ];
+        default = with pkgs; [
+          chromedriver
+          chromium
+          firefox
+        ];
       };
       settings = mkOption {
         default = {
@@ -35,7 +44,7 @@ in
           capabilities = [
             {
               browserName = "chrome";
-              maxInstances = 10; #FIXME: make configurable
+              maxInstances = 10; # FIXME: make configurable
               seleniumProtocol = "WebDriver";
             }
           ];
@@ -79,7 +88,6 @@ in
       };
 
     };
-    networking.firewall.allowedTCPPorts =
-      lib.optional cfg.openFirewall cfg.settings.port;
+    networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall cfg.settings.port;
   };
 }
