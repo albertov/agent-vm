@@ -32,6 +32,13 @@ let
         example = [ "mcp-server-fetch" ];
       };
 
+      runtimeInputs = mkOption {
+        type = types.listOf types.package;
+        default = with pkgs; [];
+        description = "Runtime inputs";
+        example = [ "mcp-server-fetch" ];
+      };
+
       environment = mkOption {
         type = types.attrsOf types.str;
         default = { };
@@ -57,6 +64,7 @@ let
         let
           app = pkgs.writeShellApplication {
             inherit name;
+            inherit (server) runtimeInputs;
             text = "exec ${server.command} ${escapeShellArgs server.args}";
           };
         in
@@ -372,9 +380,8 @@ in
           ProtectKernelLogs = true; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs
 
           # === MEMORY AND EXECUTION PROTECTION ===
-
-          # Enforce W^X (Write XOR Execute) - prevents code injection attacks
-          MemoryDenyWriteExecute = true; # W^X enforcement
+          # We need JIT compilers, etc..
+          MemoryDenyWriteExecute = false;
 
           # Lock execution domain - prevents personality() syscall abuse
           LockPersonality = true; # Lock execution domain
@@ -448,7 +455,7 @@ in
           # # System call filtering - block dangerous syscalls
           SystemCallFilter = [
             "@system-service" # Allow standard service syscalls
-            "~@debug" # Block debugging syscalls (ptrace, etc.)
+            #"~@debug" # Block debugging syscalls (ptrace, etc.)
             "~@mount" # Block mount operations
             "~@reboot" # Block reboot/shutdown syscalls
             "~@swap" # Block swap-related syscalls

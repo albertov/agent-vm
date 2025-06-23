@@ -162,7 +162,7 @@
                 let self = builtins.getFlake \"${self}\";
                     flake = builtins.getFlake \"$FLAKE\";
                     shell = flake.devShells.$SYSTEM.$DEVSHELL;
-                    mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mod).config.system.build.vmWithVirtioFS;
+                    mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mods).config.system.build.vmWithVirtioFS;
                 in mkVM
                     [$CONFIG
                       { agent-vm = {

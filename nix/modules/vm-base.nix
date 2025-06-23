@@ -84,9 +84,8 @@ in
 
       group = lib.mkOption {
         type = lib.types.str;
-        default = null;
-        description = "Overrides group of mcp-proxy user. Useful when gid can't
-        be used because of conflics";
+        default = "mcp-proxy";
+        description = "Overrides group of mcp-proxy user. Useful when gid can't be used because of conflics";
       };
 
       shell = lib.mkOption {
@@ -175,7 +174,8 @@ in
     # Enable and configure the agent service
     services.getty.autologinUser = "mcp-proxy";
     users.users.mcp-proxy.extraGroups = [ "wheel" ];
-    users.users.mcp-proxy.packages = allInputs config.services.mcp-proxy.shell;
+    users.users.mcp-proxy.packages =
+      with pkgs; [vim tmux git nix coreutils] ++ allInputs config.services.mcp-proxy.shell;
     system.activationScripts.mcp-proxy-env =
       let
         hookFile = pkgs.writeText "shellHook.source" (config.services.mcp-proxy.shell.shellHook or "");
@@ -183,7 +183,7 @@ in
       ''
         MCP_HOME_DIR="${config.users.users.mcp-proxy.home}"
         mkdir -p "$MCP_HOME_DIR"
-        cat >> "$MCP_HOME_DIR"/.profile << 'EOF'
+        cat > "$MCP_HOME_DIR"/.profile << 'EOF'
         export IN_NIX_SHELL=YES
         pushd ${config.users.users.mcp-proxy.home}/workspace
         source ${hookFile}
@@ -202,11 +202,13 @@ in
       shell = lib.mkDefault config.agent-vm.shell;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;
-        command = lib.mkDefault "${pkgs.codemcp}/bin/codemcp";
+        command = lib.mkDefault "codemcp";
+        runtimeInputs = [ pkgs.codemcp ];
       };
       namedServers.selenium = {
         enabled = lib.mkDefault config.services.selenium-server.enable;
-        command = lib.mkDefault "${pkgs.mcp-selenium}/bin/mcp-selenium-hs";
+        command = lib.mkDefault "mcp-selenium-hs";
+        runtimeInputs = [ pkgs.mcp-selenium ];
       };
       allowOrigins = [ "https://claude.ai" ];
     };

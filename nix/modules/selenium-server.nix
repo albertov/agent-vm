@@ -80,7 +80,11 @@ in
       serviceConfig = rec {
         Type = "exec";
         Restart = "always";
-        ExecStart = "${pkgs.xvfb-run}/bin/xvfb-run -a ${cfg.package}/bin/selenium-server -config ${cfgFile}";
+        ExecStart =
+          let
+            xvfbServerArgs = ["-screen 0 1920×1080x24"];
+          in
+          "${pkgs.xvfb-run}/bin/xvfb-run -s ${pkgs.lib.escapeShellArgs xvfbServerArgs} -a ${cfg.package}/bin/selenium-server -config ${cfgFile}";
         User = "selenium-server";
         Group = "selenium-server";
 
