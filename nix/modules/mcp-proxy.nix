@@ -343,49 +343,153 @@ in
           Restart = "always";
           RestartSec = "10s";
 
-          # Security settings
+          # === CORE SECURITY ISOLATION ===
+
+          # Prevent privilege escalation attacks - blocks setuid, capabilities acquisition
           NoNewPrivileges = true;
+
+          # Provide isolated temporary directories (/tmp, /var/tmp) - prevents tmp race attacks
           PrivateTmp = true;
-          ProcSubset = "pid";
-          ProtectProc = "invisible";
-          ProtectSystem = "strict";
-          ProtectHome = true;
-          ProtectKernelTunables = true;
-          ProtectKernelLogs = true;
-          # Memory and Execution Protection
+
+          # Hide other processes in /proc - equivalent to hidepid=2, improves process isolation
+          ProcSubset = "pid"; # Only show PIDs belonging to this service
+          ProtectProc = "invisible"; # Make other processes invisible in /proc
+
+          # Filesystem protection - prevents tampering with system files
+          ProtectSystem = "strict"; # Make entire root filesystem read-only except specific paths
+          ProtectHome = true; # Block access to /home directories
+
+          # === KERNEL PROTECTION ===
+
+          # Block access to kernel configuration and sensitive system information
+          ProtectKernelTunables = true; # Prevents writes to /proc/sys, /sys
+          ProtectKernelLogs = true; # Blocks access to /proc/kmsg, /dev/kmsg kernel logs
+
+          # === MEMORY AND EXECUTION PROTECTION ===
+
+          # Enforce W^X (Write XOR Execute) - prevents code injection attacks
           MemoryDenyWriteExecute = true; # W^X enforcement
+
+          # Lock execution domain - prevents personality() syscall abuse
           LockPersonality = true; # Lock execution domain
+
+          # Block realtime scheduling - prevents DoS via CPU monopolization
           RestrictRealtime = true; # Block realtime scheduling
+
+          # Block SUID/SGID execution - prevents privilege escalation via setuid binaries
           RestrictSUIDSGID = true; # Block SUID/SGID execution
+
+          # Prevents loading/unloading kernel modules, blocks /proc/kallsyms
           ProtectKernelModules = true;
+
+          # === NAMESPACE AND IPC PROTECTION ===
+
+          # Block control group modifications - prevents container escape via cgroup manipulation
           ProtectControlGroups = true;
+
+          # Restrict network address families - only allow necessary network protocols
           RestrictAddressFamilies = [
-            "AF_UNIX"
-            "AF_INET"
-            "AF_INET6"
+            "AF_UNIX" # Unix domain sockets
+            "AF_INET" # IPv4
+            "AF_INET6" # IPv6
           ];
+
+          # Block namespace creation - prevents unshare(), clone() with namespace flags
           RestrictNamespaces = true;
+
+          # Remove IPC objects on service stop - prevents IPC persistence attacks
           RemoveIPC = true;
 
           # Working directory
           WorkingDirectory = config.users.users."${cfg.user}".home;
 
-          # Capabilities
-          CapabilityBoundingSet = "";
-          AmbientCapabilities = "";
+          # === CAPABILITY RESTRICTION ===
 
-          # File system access
+          # Remove all Linux capabilities - service runs with minimal privileges
+          CapabilityBoundingSet = ""; # No capabilities in bounding set
+          AmbientCapabilities = ""; # No ambient capabilities inherited by children
+
+          # === FILESYSTEM ACCESS CONTROL ===
+
+          # Define exactly what paths the service can write to
           ReadWritePaths = [
-            config.users.users."${cfg.user}".home
+            config.users.users."${cfg.user}".home # Service home directory only
           ];
+
+          # Define essential read-only system paths needed for operation
           ReadOnlyPaths = [
-            "/etc/resolv.conf" # DNS resolution
+            "/etc/resolv.conf" # DNS resolution configuration
             "/etc/hosts" # Host name resolution
-            "/etc/nsswitch.conf" # Name service switch
-            "/etc/ssl" # SSL certificates
-            "/etc/ca-certificates" # CA certificates
+            "/etc/nsswitch.conf" # Name service switch configuration
+            "/etc/ssl" # SSL certificates directory
+            "/etc/ca-certificates" # Certificate authority certificates
           ];
-          PrivateNetwork = false; # Ensure network access is available
+
+          # Network access (currently enabled for MCP proxy functionality)
+          PrivateNetwork = false; # Ensure network access is available so the
+                                  # agent can do dev work
+
+          # === ADDITIONAL HARDENING RECOMMENDATIONS (COMMENTED OUT) ===
+          # These options would provide even stronger security but may impact functionality
+          # Uncomment and test carefully based on your specific requirements
+
+          # # Resource limits - prevent resource exhaustion attacks
+          # MemoryMax = "1G";                    # Limit maximum memory usage
+          # TasksMax = 100;                      # Limit number of processes/threads
+          # CPUQuota = "50%";                    # Limit CPU usage percentage
+
+          # # System call filtering - block dangerous syscalls
+          SystemCallFilter = [
+            "@system-service" # Allow standard service syscalls
+            "~@debug" # Block debugging syscalls (ptrace, etc.)
+            "~@mount" # Block mount operations
+            "~@reboot" # Block reboot/shutdown syscalls
+            "~@swap" # Block swap-related syscalls
+            "~@privileged" # Block privileged operations
+            "~@resources" # Block resource control syscalls
+          ];
+
+          # # Additional process/system protection
+          ProtectHostname = true; # Make hostname read-only
+          ProtectClock = true; # Block system clock changes
+
+          # # Device access restrictions
+          PrivateDevices = true; # Provide minimal /dev with only essential devices
+          DevicePolicy = "closed"; # Block access to all devices by default
+          DeviceAllow = [
+            # Explicitly allow only necessary devices
+            "/dev/null rw" # Allow null device
+            "/dev/zero rw" # Allow zero device
+            "/dev/urandom r" # Allow random number generation
+          ];
+
+          # # Network isolation (if network not needed)
+          # PrivateNetwork = true;               # Complete network isolation
+          # IPAddressDeny = "any";               # Block all network access
+          # IPAddressAllow = [ "localhost" ];    # Allow only localhost if needed
+
+          # # More restrictive filesystem controls
+          # ReadWritePaths = [                   # More restrictive write access
+          #   "/var/lib/mcp-proxy/data"          # Only specific subdirectories
+          #   "/var/lib/mcp-proxy/logs"          # Instead of entire home directory
+          # ];
+          # TemporaryFileSystem = [               # Override with tmpfs
+          #   "/var:ro"                          # Make /var read-only with exceptions
+          #   "/etc:ro"                          # Make /etc read-only
+          # ];
+
+          # # Advanced isolation (requires systemd 247+)
+          # RootDirectory = "/var/lib/mcp-proxy"; # Chroot-like isolation
+          # RootImage = "/path/to/image.raw";     # Use disk image as root
+
+          # # Security monitoring and logging
+          LogLevel = "debug"; # Detailed logging for security monitoring
+          LogExtraFields = [
+            # Additional log fields for analysis
+            "USER"
+            "UNIT"
+            "INVOCATION_ID"
+          ];
         };
 
         environment = mkEnvironment;
