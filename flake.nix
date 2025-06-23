@@ -64,6 +64,9 @@
           # Agent VM management tool
           agent-vm = pkgs.agent-vm;
 
+          # Integration test executable (separate from normal test suite)
+          integration-test = pkgs.integration-test;
+
           # MCP packages
           codemcp = pkgs.codemcp;
           mcp-proxy = pkgs.mcp-proxy;
@@ -93,6 +96,11 @@
           # Main agent VM app - this is the primary interface
           agent-vm = flake-utils.lib.mkApp {
             drv = pkgs.agent-vm;
+          };
+
+          # Integration test executable for comprehensive testing
+          integration-test = flake-utils.lib.mkApp {
+            drv = pkgs.integration-test;
           };
 
           # Direct agent execution (fallback)
@@ -150,6 +158,9 @@
               curl
               python3
               python3.pkgs.pytest
+
+              # Integration testing
+              integration-test
             ];
 
             shellHook = ''
@@ -162,6 +173,10 @@
               echo "  agent-vm status     - Show VM status"
               echo "  agent-vm list       - List all VM configurations"
               echo "  agent-vm destroy    - Destroy VM configuration"
+              echo ""
+              echo "🧪 Testing:"
+              echo "  integration-test    - Run integration tests (no mocks)"
+              echo "  pytest tests/       - Run unit tests"
               echo ""
               echo "📖 Documentation: ./AGENT_ISOLATION.md"
               echo "📋 Task list: ./TODO.md"

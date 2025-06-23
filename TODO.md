@@ -363,6 +363,21 @@ class VMController:
 - **Phase 3: Robust VM Management**
   - ✅ Steps 11-15: SSH authentication, status monitoring, package structure, UX improvements, and error handling
 
+### Phase 6: Integration Testing and CLI Enhancements
+
+- [x] **Step 24**: Add CLI argument for state directory override
+  - ✅ Add `--state-dir` global argument to agent-vm CLI
+  - ✅ Modify VMController to accept optional base_dir parameter
+  - ✅ Update all VM commands to use custom state directory when specified
+  - ✅ Ensure backward compatibility with default `~/.local/share/agent-vms`
+
+- [x] **Step 25**: Create integration test executable
+  - ✅ Create standalone integration test executable (not part of normal test suite)
+  - ✅ Test executable should call agent_py through CLI exclusively (no mocks)
+  - ✅ Use custom state directory for test isolation
+  - ✅ Include comprehensive workflow testing (create, start, test, stop, destroy)
+  - ✅ Make executable available as flake app for easy running
+
 **🔄 IN PROGRESS:**
 - **Step 16**: VM security hardening
   - Disable user namespaces in VM

@@ -12,6 +12,67 @@ This document specifies the implementation of privilege-restricted agent executi
 - **Easy Shell Access**: SSH and console access methods for development workflows
 - **Proven Reliability**: NixOS QEMU VM machinery is battle-tested and well-supported
 
+## Integration Testing
+
+### Integration Test Executable
+
+The project includes a comprehensive integration test executable (`integration-test`) that validates the complete agent-vm workflow without using mocks. This provides end-to-end testing of:
+
+- VM creation and configuration
+- SSH key generation and authentication
+- VM startup and agent service initialization
+- MCP proxy functionality
+- VM shutdown and cleanup
+- Error handling and recovery scenarios
+
+#### Features
+
+- **CLI-only testing**: Calls `agent-vm` through command line exclusively (no mocks)
+- **Isolated environments**: Uses temporary state directories for test isolation
+- **Comprehensive coverage**: Tests complete workflows from creation to destruction
+- **Colored output**: User-friendly test reporting with progress indicators
+- **Nested virtualization aware**: Automatically detects and skips VM tests when virtualization is unavailable
+
+#### Usage
+
+```bash
+# Run all integration tests
+integration-test
+
+# Run with verbose logging
+integration-test --verbose
+
+# Use specific agent-vm executable
+integration-test --agent-vm ./path/to/agent-vm
+
+# Run via nix flake
+nix run .#integration-test
+
+# Run with custom state directory (automatic in tests)
+nix run .#integration-test -- --verbose
+```
+
+#### Test Structure
+
+The integration test executable validates:
+
+1. **VM Creation**: Configuration generation, SSH key creation, workspace cloning
+2. **VM Listing**: Proper enumeration of created VMs
+3. **VM Status**: Status reporting for stopped VMs
+4. **VM Start/Stop Cycle**: Full VM lifecycle with agent service startup
+5. **VM Destruction**: Complete cleanup and state removal
+
+Tests automatically skip VM execution on systems without nested virtualization support while still validating configuration and CLI functionality.
+
+#### CI/CD Integration
+
+The integration test is designed for continuous integration environments:
+
+- **Exit codes**: Returns 0 for success, 1 for failure, 130 for cancellation
+- **Timeout handling**: Reasonable timeouts for VM operations
+- **Resource cleanup**: Automatic cleanup even on test failures
+- **Environment detection**: Graceful handling of virtualization constraints
+
 ## Host System Requirements
 
 ### Nested Virtualization Support
@@ -366,6 +427,33 @@ in
 ### 3. VM Management Tool (agent-vm)
 
 **Implementation Note**: The `agent-vm` tool is implemented as a typed Python application using `buildPythonApplication` and only uses Python stdlib modules for minimal dependencies and maximum compatibility.
+
+#### CLI Features
+
+The `agent-vm` command provides comprehensive VM lifecycle management with the following global options:
+
+- `--verbose, -v`: Enable verbose logging with debug information
+- `--state-dir STATE_DIR`: Override default state base directory (default: ~/.local/share/agent-vms)
+
+The state directory override allows for:
+- **Isolated testing environments**: Use custom directories for integration testing
+- **Multiple development contexts**: Separate VM configurations per project or environment
+- **CI/CD integration**: Ephemeral state directories for automated testing
+
+#### Usage Examples
+
+```bash
+# Standard usage (uses ~/.local/share/agent-vms)
+agent-vm create --branch=feature-x --port=8001
+agent-vm start feature-x
+
+# Custom state directory for isolated testing
+agent-vm --state-dir /tmp/test-vms create --branch=test --port=8002
+agent-vm --state-dir /tmp/test-vms start test
+
+# Project-specific VM configurations
+agent-vm --state-dir ./vms create --branch=main
+```
 
 ```python
 #!/usr/bin/env python3
