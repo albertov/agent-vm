@@ -277,6 +277,11 @@ class VMController:
   - ✅ Display last 20 lines and paths as log.error on subprocess failures
 
 **🔄 IN PROGRESS:**
+- **Step 28**: Add specific agent service startup integration test
+  - Create test that validates agent-mcp systemd service starts correctly in VM
+  - Verify service is active and healthy after VM startup
+  - Test MCP proxy endpoint accessibility and functionality
+  - Ensure service restarts properly after failure
 - **Step 16**: VM security hardening
   - Disable user namespaces in VM
   - Lock kernel modules and protect kernel image
