@@ -22,23 +22,93 @@ in
     ./virtiofs-qemu.nix
   ];
   options = {
+    agent-vm = {
+      tmpfs = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether to use tmpfs for /tmp";
+      };
+
+      memorySize = lib.mkOption {
+        type = lib.types.int;
+        default = 1024 * 4;
+        description = "VM memory size in MB";
+      };
+
+      cores = lib.mkOption {
+        type = lib.types.int;
+        default = 8;
+        description = "Number of CPU cores for the VM";
+      };
+
+      diskSize = lib.mkOption {
+        type = lib.types.int;
+        default = 1024 * 32;
+        description = "VM disk size in MB";
+      };
+
+      additionalPaths = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = [ ];
+        description = "Additional paths to make available in the VM";
+      };
+
+      workspaceSource = lib.mkOption {
+        type = lib.types.str;
+        default = "/home/alberto/src/agent-vm";
+        description = "Source path for workspace shared directory";
+      };
+
+      hostPort = lib.mkOption {
+        type = lib.types.int;
+        default = 8000;
+        description = "Host port for forwarding to MCP proxy";
+      };
+
+      systemPackages = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        default = with pkgs; [ vim git ];
+        description = "System packages to install";
+      };
+
+      mcpProxy = {
+        port = lib.mkOption {
+          type = lib.types.int;
+          default = 8000;
+          description = "MCP proxy port";
+        };
+
+        uid = lib.mkOption {
+          type = lib.types.int;
+          default = 1000;
+          description = "UID for MCP proxy user";
+        };
+
+        group = lib.mkOption {
+          type = lib.types.str;
+          default = "users";
+          description = "Group for MCP proxy user";
+        };
+
+        shell = lib.mkOption {
+          type = lib.types.package;
+          default = self.devShells."${pkgs.system}".default;
+          description = "Shell environment for MCP proxy";
+        };
+      };
+    };
   };
   config = {
     services.qemuGuest.enable = true;
-    # TODO: Make configurable
-    boot.tmp.useTmpfs = true;
+    boot.tmp.useTmpfs = config.agent-vm.tmpfs;
 
     # VM-specific configuration
     virtualisation = {
-      # TODO: Make configurable
-      memorySize = 1024 * 4;
-      # TODO: Make configurable
-      cores = 8; # 4 CPU cores
-      # TODO: Make configurable
-      diskSize = 1024 * 32; # 32GB disk
+      memorySize = config.agent-vm.memorySize;
+      cores = config.agent-vm.cores;
+      diskSize = config.agent-vm.diskSize;
       graphics = false; # Headless for better performance
       mountHostNixStore = true;
-      # TODO: Allo extra paths from options but keep these
       additionalPaths =
         let
           shell = config.services.mcp-proxy.shell;
@@ -62,16 +132,14 @@ in
 
           closure = pkgs.closureInfo { rootPaths = allItems; };
         in
-        [ closure ];
+        [ closure ] ++ config.agent-vm.additionalPaths;
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
 
       sharedDirectoriesVIO = {
         workspace = {
-          # source gets injected by agent-vm
-          # TODO: Make configurable
-          source = "/home/alberto/src/agent-vm";
+          source = config.agent-vm.workspaceSource;
           target = "/var/lib/mcp-proxy/workspace";
         };
       };
@@ -80,8 +148,7 @@ in
 
         {
           from = "host";
-          # TODO: Make configurable
-          host.port = 8000;
+          host.port = config.agent-vm.hostPort;
           guest.port = config.services.mcp-proxy.port;
         } # MCP proxy
       ];
@@ -91,11 +158,7 @@ in
     # Firewall configuration
     networking.firewall.enable = true;
 
-    # TODO: Make configurable
-    environment.systemPackages = with pkgs; [
-      vim
-      git
-    ];
+    environment.systemPackages = config.agent-vm.systemPackages;
 
     # Security hardening
     security = {
