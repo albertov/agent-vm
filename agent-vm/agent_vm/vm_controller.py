@@ -241,10 +241,26 @@ in
             logger.info(f"Use 'agent-vm destroy {branch}' to remove it first")
             sys.exit(1)
 
-        # Resolve config path relative to flake location (original repo)
+        # Resolve config path relative to flake location
         if not Path(config).is_absolute():
-            # If config is relative, resolve it relative to the flake location
-            flake_config_path = Path(self.origin_repo) / config
+            # If config is relative, resolve it relative to the git root directory
+            # (not the origin repo which might be a remote URL)
+            try:
+                result = run_subprocess(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                git_root = result.stdout.strip()
+                if git_root:
+                    flake_config_path = Path(git_root) / config
+                else:
+                    # Fallback to current directory
+                    flake_config_path = Path.cwd() / config
+            except subprocess.CalledProcessError:
+                # Not in a git repo, use current directory
+                flake_config_path = Path.cwd() / config
         else:
             # If config is absolute, use it as-is
             flake_config_path = Path(config)
@@ -282,6 +298,24 @@ in
         try:
             # Use the origin repo we already determined in __init__
             repo_root = self.origin_repo
+
+            # If origin is a remote URL (e.g., git@github.com:...), use the local git repo instead
+            if repo_root.startswith(('git@', 'https://', 'http://', 'ssh://')):
+                # Get the local git root directory
+                try:
+                    result = run_subprocess(
+                        ["git", "rev-parse", "--show-toplevel"],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    local_repo_root = result.stdout.strip()
+                    if local_repo_root:
+                        logger.info(f"Using local repository for cloning: {local_repo_root}")
+                        repo_root = local_repo_root
+                except subprocess.CalledProcessError:
+                    # If we can't get local repo, continue with remote URL
+                    logger.warning("Could not determine local repository, using remote URL")
 
             # Check if we have a valid branch name or if we're using fallback
             if current_branch == "default":
