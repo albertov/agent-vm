@@ -82,8 +82,7 @@
                     in
                     (
                       # Don't traverse into excluded directories
-                      !(final.lib.hasPrefix "agent-vm-py" relativePath)
-                      && !(final.lib.hasPrefix "cabal.project.local" relativePath)
+                      !(final.lib.hasPrefix "cabal.project.local" relativePath)
                       &&
                         # no bash scripts
                         !(final.lib.hasSuffix ".sh" baseName)
@@ -150,11 +149,6 @@
                 exec agent-vm-test "$@"
               '';
             };
-          };
-
-          # Python integration test executable for comprehensive testing
-          py-integration-test = flake-utils.lib.mkApp {
-            drv = pkgs.py-integration-test;
           };
 
           # Direct agent execution (fallback)
@@ -275,10 +269,9 @@
 
         # Checks for CI/testing
         checks = {
-          # Ensure agent-vm-py builds correctly
-          agent-vm-py-build = pkgs.agent-vm-py;
-
-          agent-vm-package-tests = pkgs.hixProject.getComponent "agent-vm:test:spec";
+          agent-vm-spec = pkgs.hixProject.hsPkgs.agent-vm.checks.spec.overrideAttrs (old: {
+            buildInputs = old.buildInputs ++ [ pkgs.bash ];
+          });
 
           # Ensure all MCP packages build
           mcp-packages-build = pkgs.symlinkJoin {
@@ -298,7 +291,6 @@
         formatter = treefmt-nix.lib.mkWrapper pkgs {
           settings.global.excludes = [
             "nix/materialized/**"
-            "agent-vm-py/**"
           ];
           projectRootFile = "flake.nix";
           programs = {

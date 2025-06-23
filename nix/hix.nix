@@ -3,7 +3,7 @@ rec {
   name = "agent-vm";
   compiler-nix-name = "ghc910"; # Version of GHC to use
   checkMaterialization = false;
-  materialized = ./materialized;
+  #materialized = ./materialized;
 
   # Tools to include in the development shell
   shell.tools.cabal = "latest";

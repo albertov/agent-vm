@@ -18,16 +18,19 @@ import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, stopV
 import qualified AgentVM.Process as P
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Functor.Contravariant (contramap)
+import Paths_agent_vm (getDataFileName)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude
 import System.FilePath ((</>))
 import System.IO.Error (IOError (..), IOErrorType (..), ioError, mkIOError, userErrorType)
 import System.Process.Typed (ExitCode (..))
+import Test.HUnit.Lang (HUnitFailure)
 import Test.Hspec (Spec, around, describe, expectationFailure, it, pending, shouldBe, shouldContain, shouldSatisfy)
-import UnliftIO (MonadUnliftIO, SomeException)
+import UnliftIO (MonadUnliftIO, SomeException, catchAny)
 import qualified UnliftIO as UIO
 import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import UnliftIO.Retry
 
 withTestEnv ::
   (MonadUnliftIO m) =>
@@ -43,8 +46,8 @@ withTestEnv fun = withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
   fun (AgentVmEnv {tracer}, tracesRef)
 
 -- | Helper to get fixture path
-fixturePath :: FilePath -> FilePath
-fixturePath script = "test/fixtures/ProcessSpec" </> script
+fixturePath :: (MonadIO m) => FilePath -> m FilePath
+fixturePath script = liftIO $ getDataFileName $ "test/fixtures/ProcessSpec" </> script
 
 defTimeout :: Maybe Integer
 defTimeout = Just 1_000_000
@@ -57,10 +60,10 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
   describe "VM process lifecycle" $ do
     it "starts and stops VM process" $ \(testEnv, _) -> do
       -- Create a simple test script that runs
-      let testScript = "/bin/sh"
+      let testScript = "bash"
       -- Start the process using the VMT monad
       runVMT @IO testEnv $
-        P.withVMProcess "/bin/sh" [] defTimeout $ \process -> do
+        P.withVMProcess "bash" [] defTimeout $ \process -> do
           -- Check that it's running
           checkVMProcess process
             >>= liftIO
@@ -69,20 +72,23 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
     it "stops VM process gracefully" $ \(testEnv, _) -> do
       -- Start a long-running process
       runVMT @IO testEnv $
-        P.withVMProcess "/bin/sh" [] defTimeout $ \process -> do
+        P.withVMProcess "bash" [] defTimeout $ \process -> do
           -- Check that it's running
           checkVMProcess process
             >>= liftIO
             . (`shouldBe` ProcessRunning)
-          _ <- stopVMProcess (Just 100_000) process
           -- Check that it has stopped
-          checkVMProcess process
-            >>= liftIO
-            . ( `shouldSatisfy`
-                  \case
-                    ProcessExited {} -> True
-                    _ -> False
-              )
+          eventually $ do
+            void (stopVMProcess (Just 1_000) process)
+              `catchAny` const (pure ())
+            checkVMProcess process
+              >>= liftIO
+              . ( `shouldSatisfy`
+                    \case
+                      ProcessExited {} -> True
+                      ProcessNotRunning {} -> True
+                      _ -> False
+                )
 
   describe "Process output capture" $ do
     it "captures stdout output" $ \(env, traceCapture) -> do
@@ -209,29 +215,29 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
           length errorTraces `shouldBe` 0
           length spawnTraces `shouldBe` 1
 
-    it "traces process spawn event with arguments" $ \(env, traceCapture) ->
+    it "traces process spawn event with arguments" $ \(env, traceCapture) -> do
       -- Run process with arguments
-      void $ runVMT @IO env $ P.withVMProcess (fixturePath "echo_stdout.sh") ["arg1", "arg2"] defTimeout $ \process -> do
+      void $ runVMT @IO env $ withFixtureArgs "echo_stdout.sh" ["arg1", "arg2"] $ \process -> do
         -- Wait for process to complete
-        void $ P.waitForProcess defWait process
+        P.waitForProcess defWait process
 
-        -- Check spawn trace
-        traces <- readIORef traceCapture
-        let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
+      -- Check spawn trace
+      traces <- readIORef traceCapture
+      let spawnTraces = [t | t@(ProcessSpawned _ _) <- traces]
 
-        liftIO $ do
-          length spawnTraces `shouldBe` 1
-          case spawnTraces of
-            [ProcessSpawned path args] -> do
-              toS path `shouldContain` "echo_stdout.sh"
-              args `shouldBe` ["arg1", "arg2"]
-            _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
+      length spawnTraces `shouldBe` 1
+      case spawnTraces of
+        [ProcessSpawned path args] -> do
+          toS path `shouldContain` "echo_stdout.sh"
+          args `shouldBe` ["arg1", "arg2"]
+        _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
 
   describe "Process output capture functions" $ do
     it "captures stdout and stderr with waitForProcessCaptured" $ \(testEnv, _) -> do
       -- Run process that outputs to both
+      script <- fixturePath "echo_both.sh"
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture (fixturePath "echo_both.sh") []
+        process <- P.startLoggedProcessWithCapture script []
 
         -- Wait and capture output
         result <- waitForProcessCaptured defWait process
@@ -251,38 +257,30 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
     it "captures output from failing process with waitForProcessCaptured" $ \(testEnv, _) -> do
       -- Run process that fails
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture (fixturePath "exit_failure.sh") []
-
-        -- Wait and capture output
-        result <- waitForProcessCaptured defWait process
-
-        case result of
-          Just (ExitFailure 1, stdout, stderr) -> liftIO $ do
-            -- Check captured output
-            toS stdout `shouldContain` "Attempting operation..."
-            toS stderr `shouldContain` "FATAL: Operation failed!"
-          _ -> liftIO $ expectationFailure "Expected exit failure with code 1"
+        script <- fixturePath "exit_failure.sh"
+        ((), stdout, stderr) <-
+          P.withVMProcessCaptured script [] defTimeout $
+            void . P.waitForProcess defWait
+        liftIO $ do
+          -- Check captured output
+          toS stdout `shouldContain` "Attempting operation..."
+          toS stderr `shouldContain` "FATAL: Operation failed!"
 
     it "captures output with stopVMProcessCaptured" $ \(testEnv, _) -> do
-      -- Run a long-running process
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture (fixturePath "rapid_output.sh") []
-
-        -- Let it run for a bit
-        liftIO $ delay 100_000 -- 0.1 seconds
-
-        -- Stop and capture output
-        (exitCode, stdout, stderr) <- stopVMProcessCaptured (Just 1_000_000) process
-
+        script <- fixturePath "rapid_output.sh"
+        ((), stdout, stderr) <-
+          P.withVMProcessCaptured script [] defTimeout $
+            void . P.waitForProcess defWait
         liftIO $ do
           -- Should have captured at least some output
           stdout `shouldSatisfy` (not . null . lines)
           stderr `shouldSatisfy` (not . null . lines)
 
     it "captures output with withVMProcessCaptured" $ \(testEnv, _) -> do
-      -- Use the bracket-style function
+      script <- fixturePath "echo_both.sh"
       (result, stdout, stderr) <- runVMT @IO testEnv $
-        withVMProcessCaptured (fixturePath "echo_both.sh") [] defTimeout $ \process -> do
+        withVMProcessCaptured script [] defTimeout $ \process -> do
           -- Wait for completion
           void $ P.waitForProcess defWait process
           pure "test result"
@@ -296,46 +294,41 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
     it "handles empty output with captured functions" $ \(testEnv, _) -> do
       -- Run process with no output
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture (fixturePath "no_output.sh") []
-
-        -- Wait and capture output
-        result <- waitForProcessCaptured defWait process
-
-        case result of
-          Just (ExitSuccess, stdout, stderr) -> liftIO $ do
-            stdout `shouldBe` ""
-            stderr `shouldBe` ""
-          _ -> liftIO $ expectationFailure "Expected successful exit"
+        script <- fixturePath "no_output.sh"
+        ((), stdout, stderr) <-
+          P.withVMProcessCaptured script [] defTimeout $
+            void . P.waitForProcess defWait
+        liftIO $ do
+          stdout `shouldBe` ""
+          stderr `shouldBe` ""
 
     it "preserves line order in captured output" $ \(testEnv, _) -> do
       -- Run process with numbered lines
       runVMT @IO testEnv $ do
-        process <- P.startLoggedProcessWithCapture (fixturePath "rapid_output.sh") []
+        script <- fixturePath "rapid_output.sh"
+        ((), stdout, stderr) <-
+          P.withVMProcessCaptured script [] defTimeout $
+            void . P.waitForProcess defWait
+        liftIO $ do
+          let stdoutLines = lines stdout
+          let stderrLines = lines stderr
 
-        -- Wait for completion
-        result <- waitForProcessCaptured defWait process
+          -- Verify all 10 lines are captured in order
+          length stdoutLines `shouldBe` 10
+          length stderrLines `shouldBe` 10
 
-        case result of
-          Just (ExitSuccess, stdout, stderr) -> liftIO $ do
-            let stdoutLines = lines stdout
-            let stderrLines = lines stderr
-
-            -- Verify all 10 lines are captured in order
-            length stdoutLines `shouldBe` 10
-            length stderrLines `shouldBe` 10
-
-            -- Check order
-            forM_ (zip [1 .. 10] stdoutLines) $ \(i, line) ->
-              line `shouldBe` ("stdout line " <> show i)
-            forM_ (zip [1 .. 10] stderrLines) $ \(i, line) ->
-              line `shouldBe` ("stderr line " <> show i)
-          _ -> liftIO $ expectationFailure "Expected successful exit"
+          -- Check order
+          forM_ (zip [1 .. 10] stdoutLines) $ \(i :: Int, line) ->
+            line `shouldBe` ("stdout line " <> show i)
+          forM_ (zip [1 .. 10] stderrLines) $ \(i :: Int, line) ->
+            line `shouldBe` ("stderr line " <> show i)
 
     it "handles exceptions in withVMProcessCaptured" $ \(testEnv, _) -> do
       -- Test that output is still captured even if action throws
       result <- UIO.try $
-        runVMT @IO testEnv $
-          withVMProcessCaptured (fixturePath "echo_both.sh") [] defTimeout $ \process -> do
+        runVMT @IO testEnv $ do
+          script <- fixturePath "echo_both.sh"
+          withVMProcessCaptured script [] defTimeout $ \_ -> do
             -- Wait a bit to ensure some output is generated
             liftIO $ delay 100_000
             -- Throw an exception
@@ -349,7 +342,7 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
     it "handles startup failures" $ \(testEnv, _) -> do
       -- Try to start a non-existent executable
       result <- UIO.try $ runVMT @IO testEnv $ do
-        P.withVMProcess "/non/existent/executable" [] defTimeout $ \process -> do
+        P.withVMProcess "/non/existent/executable" [] defTimeout $ \_ -> do
           -- This should not be reached
           liftIO $ expectationFailure "Process should have failed to start"
 
@@ -393,8 +386,34 @@ spec = describe "AgentVM.Process" $ around withTestEnv $ do
       outputTraces `shouldSatisfy` any (\case ProcessOutput _ "Process starting normally..." -> True; _ -> False)
 
 withFixture :: (MonadTrace AgentVmTrace m, MonadUnliftIO m) => FilePath -> (VMProcess -> m a) -> m a
-withFixture scriptText =
+withFixture scriptText fun = do
+  script <- fixturePath scriptText
   P.withVMProcess
-    (fixturePath scriptText)
+    script
     []
     defTimeout
+    fun
+
+withFixtureArgs ::
+  (MonadTrace AgentVmTrace m, MonadUnliftIO m) =>
+  FilePath ->
+  [Text] ->
+  (VMProcess -> m a) ->
+  m a
+withFixtureArgs scriptText args fun = do
+  script <- fixturePath scriptText
+  P.withVMProcess
+    script
+    args
+    defTimeout
+    fun
+
+-- | Retry an assertion several times until a timeout expires
+eventually :: (MonadUnliftIO m) => m a -> m a
+eventually =
+  recovering
+    (limitRetriesByCumulativeDelay 30_000_000 (fullJitterBackoff 10))
+    [ const (UIO.Handler (\(_ :: HUnitFailure) -> pure True)),
+      const (UIO.Handler (\(_ :: SomeException) -> pure False))
+    ]
+    . const

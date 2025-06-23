@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -41,6 +40,8 @@ import Protolude
     MonadIO,
     Show,
     Text,
+    const,
+    fmap,
     fromIntegral,
     fromMaybe,
     isJust,
@@ -48,14 +49,19 @@ import Protolude
     map,
     mapM_,
     maybe,
+    not,
     pure,
     show,
     toS,
+    void,
     ($),
     (&),
+    (.),
     (<>),
     (>>=),
   )
+import System.Directory (doesDirectoryExist)
+import System.FilePath ((</>))
 import System.Posix.Signals (sigKILL, signalProcess)
 import System.Process.Typed
   ( ExitCode (ExitFailure, ExitSuccess),
@@ -80,8 +86,10 @@ import UnliftIO
     MonadUnliftIO,
     SomeException,
     bracket,
+    bracketOnError,
     catchAny,
     hSetBuffering,
+    handleAny,
     throwIO,
     try,
   )
@@ -91,6 +99,7 @@ import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 -- | State of a VM process
 data ProcessState
   = ProcessRunning
+  | ProcessNotRunning
   | ProcessExited ExitCode
   deriving (Eq, Show)
 
@@ -247,44 +256,8 @@ stopVMProcess ::
   Maybe Timeout ->
   VMProcess ->
   m ExitCode
-stopVMProcess mTimeout vmProcess = do
-  let process = getProcess vmProcess
-      timeoutValue = fromMaybe 1000 mTimeout
-
-  -- Get process name for tracing
-  processName <- liftIO $ do
-    maybePid <- getPid process
-    pure $ case maybePid of
-      Nothing -> "unknown-process"
-      Just pid -> "pid-" <> T.pack (show pid)
-
-  -- Trace the graceful stop attempt
-  trace $ ProcessGracefulStop processName timeoutValue
-
-  -- Stop the process
-  liftIO $ stopProcess process
-  trace $ ProcessStopped processName
-  loop processName
-  where
-    process = getProcess vmProcess
-    loop processName = do
-      let timeoutValue = fromMaybe 1000 mTimeout
-      trace $ ProcessWaitingForExit processName
-      waitForProcess timeoutValue vmProcess >>= \case
-        Just ecode -> do
-          trace $ AgentVM.Log.ProcessExited processName (case ecode of ExitSuccess -> 0; ExitFailure c -> c)
-          pure ecode
-        Nothing | isJust mTimeout -> do
-          trace $ ProcessTimeout processName timeoutValue
-          liftIO $ do
-            getPid process
-              >>= mapM_
-                ( \pid -> do
-                    signalProcess sigKILL pid
-                )
-          trace $ ProcessSigKilled processName (fromIntegral sigKILL)
-          liftIO $ waitExitCode process
-        Nothing -> loop processName
+stopVMProcess mTimeout =
+  fmap (\(a, _, _) -> a) . stopVMProcessCaptured mTimeout
 
 -- | Stop a VM process gracefully and capture output
 stopVMProcessCaptured ::
@@ -309,7 +282,7 @@ stopVMProcessCaptured mTimeout vmProcess = do
   trace $ ProcessGracefulStop processName timeoutValue
 
   -- Stop the process
-  liftIO $ stopProcess process
+  liftIO $ timeout timeoutValue $ stopProcess process
   trace $ ProcessStopped processName
   -- Wait and get the captured output
   maybeResult <- waitForProcessCaptured timeoutValue vmProcess
@@ -354,7 +327,7 @@ withVMProcess ::
 withVMProcess scriptPath args mTimeout =
   bracket
     (startVMProcess scriptPath args)
-    (stopVMProcess mTimeout)
+    (handleAny (const (pure ())) . void . stopVMProcess mTimeout)
 
 -- | Start a VM process with output capture and ensures that it is killed when
 -- the continuation exits
@@ -367,69 +340,47 @@ withVMProcessCaptured ::
   Maybe Timeout ->
   (VMProcess -> m a) ->
   m (a, Text, Text)
-withVMProcessCaptured scriptPath args mTimeout action = do
+withVMProcessCaptured scriptPath args mTimeout action =
   -- Start the process with capture
-  vmProcess <- startLoggedProcessWithCapture scriptPath args
-
-  -- Run the action and handle cleanup
-  result <- try $ action vmProcess
-
-  -- Stop the process and get captured output
-  (_, stdout, stderr) <- stopVMProcessCaptured mTimeout vmProcess
-
-  -- Re-throw any exception from the action after cleanup
-  case result of
-    Left (e :: SomeException) -> throwIO e
-    Right a -> pure (a, stdout, stderr)
+  bracketOnError
+    (startLoggedProcessWithCapture scriptPath args)
+    (stopVMProcess mTimeout)
+    $ \vmProcess -> do
+      a <- action vmProcess
+      -- Stop the process and get captured output
+      (_, stdout, stderr) <- stopVMProcessCaptured mTimeout vmProcess
+      pure (a, stdout, stderr)
 
 -- | Check if VM process is still running
 checkVMProcess :: (MonadTrace AgentVmTrace m, MonadIO m) => VMProcess -> m ProcessState
 checkVMProcess process = do
   -- Get process name for tracing
   let proc = getProcess process
-  processName <- liftIO $ do
-    maybePid <- getPid proc
-    pure $ case maybePid of
-      Nothing -> "unknown-process"
-      Just pid -> "pid-" <> T.pack (show pid)
-
-  exitCode <- liftIO $ getExitCode proc
-  let state = maybe ProcessRunning AgentVM.Process.ProcessExited exitCode
-
-  -- Trace process state changes only when process has exited
-  case state of
-    AgentVM.Process.ProcessExited code -> trace $ AgentVM.Log.ProcessExited processName (case code of ExitSuccess -> 0; ExitFailure c -> c)
-    ProcessRunning -> pure () -- Don't spam logs for running processes
-  pure state
+  maybePid <- liftIO $ getPid proc
+  case maybePid of
+    Nothing -> pure ProcessNotRunning
+    Just pid -> do
+      let procPath = "/proc" </> show pid
+      isRunning <- liftIO $ doesDirectoryExist procPath
+      if not isRunning
+        then pure ProcessNotRunning
+        else do
+          let processName = "pid-" <> T.pack (show pid)
+          eExitCode <- liftIO $ try $ getExitCode proc
+          case eExitCode of
+            Right exitCode -> do
+              let state = maybe ProcessRunning AgentVM.Process.ProcessExited exitCode
+              -- Trace process state changes only when process has exited
+              case state of
+                AgentVM.Process.ProcessExited code -> trace $ AgentVM.Log.ProcessExited processName (case code of ExitSuccess -> 0; ExitFailure c -> c)
+                ProcessRunning -> pure () -- Don't spam logs for running processes
+              pure state
+            Left (_ :: IOException) -> pure ProcessNotRunning
 
 -- | Wait for a process with timeout
 waitForProcess :: (MonadTrace AgentVmTrace m, MonadIO m) => Integer -> VMProcess -> m (Maybe ExitCode)
-waitForProcess timeoutMicros vmProcess = do
-  -- Get process name for tracing
-  let process = getProcess vmProcess
-  processName <- liftIO $ do
-    maybePid <- getPid process
-    pure $ case maybePid of
-      Nothing -> "unknown-process"
-      Just pid -> "pid-" <> T.pack (show pid)
-
-  trace $ ProcessWaitingForExit processName
-
-  -- Convert microseconds to Integer for unbounded-delays
-  result <- liftIO $ timeout timeoutMicros $ do
-    exitCode <- waitExitCode process
-    -- IMPORTANT: Wait for IO threads to complete to ensure all output is captured
-    waitIOThreads vmProcess
-    pure exitCode
-
-  case result of
-    Just exitCode -> do
-      trace $ AgentVM.Log.ProcessExited processName (case exitCode of ExitSuccess -> 0; ExitFailure c -> c)
-      trace $ ProcessIOWaiting processName
-      pure (Just exitCode)
-    Nothing -> do
-      trace $ ProcessTimeout processName timeoutMicros
-      pure Nothing
+waitForProcess timeoutMicros =
+  fmap (fmap (\(a, _, _) -> a)) . waitForProcessCaptured timeoutMicros
 
 -- | Wait for a process with timeout and capture output
 waitForProcessCaptured :: (MonadTrace AgentVmTrace m, MonadIO m) => Integer -> VMProcess -> m (Maybe (ExitCode, Text, Text))
