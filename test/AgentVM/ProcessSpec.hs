@@ -13,12 +13,13 @@ module AgentVM.ProcessSpec (spec) where
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log hiding (ProcessExited)
 import AgentVM.Monad (runVMT)
-import AgentVM.Process (ProcessState (..), VMProcess (..), checkVMProcess, stopVMProcess)
+import AgentVM.Process (ProcessState (..), VMProcess (..), VMProcessWithCapture (..), checkVMProcess, stopVMProcess, stopVMProcessCaptured, waitForProcessCaptured, withVMProcessCaptured)
 import qualified AgentVM.Process as P
 import Control.Concurrent.Thread.Delay (delay)
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer))
 import Protolude
 import System.FilePath ((</>))
+import System.IO.Error (IOError (..), IOErrorType (..), ioError, mkIOError, userErrorType)
 import System.Process.Typed (ExitCode (..))
 import Test.Hspec (Spec, describe, expectationFailure, it, pending, shouldBe, shouldContain, shouldSatisfy)
 import UnliftIO (MonadUnliftIO, SomeException)
@@ -253,6 +254,124 @@ spec = describe "AgentVM.Process" $ do
               toS path `shouldContain` "echo_stdout.sh"
               args `shouldBe` ["arg1", "arg2"]
             _ -> expectationFailure "Expected exactly one ProcessSpawned trace"
+
+  describe "Process output capture functions" $ do
+    it "captures stdout and stderr with waitForProcessCaptured" $ do
+      -- Run process that outputs to both
+      runVMT @IO testEnv $ do
+        process <- P.startLoggedProcessWithCapture (fixturePath "echo_both.sh") []
+
+        -- Wait and capture output
+        result <- waitForProcessCaptured defWait process
+
+        case result of
+          Just (ExitSuccess, stdout, stderr) -> liftIO $ do
+            -- Check stdout content
+            toS stdout `shouldContain` "Starting process..."
+            toS stdout `shouldContain` "Processing data..."
+            toS stdout `shouldContain` "Done!"
+
+            -- Check stderr content
+            toS stderr `shouldContain` "Warning: This is stderr"
+            toS stderr `shouldContain` "Error: Something went wrong"
+          _ -> liftIO $ expectationFailure "Expected successful exit with output"
+
+    it "captures output from failing process with waitForProcessCaptured" $ do
+      -- Run process that fails
+      runVMT @IO testEnv $ do
+        process <- P.startLoggedProcessWithCapture (fixturePath "exit_failure.sh") []
+
+        -- Wait and capture output
+        result <- waitForProcessCaptured defWait process
+
+        case result of
+          Just (ExitFailure 1, stdout, stderr) -> liftIO $ do
+            -- Check captured output
+            toS stdout `shouldContain` "Attempting operation..."
+            toS stderr `shouldContain` "FATAL: Operation failed!"
+          _ -> liftIO $ expectationFailure "Expected exit failure with code 1"
+
+    it "captures output with stopVMProcessCaptured" $ do
+      -- Run a long-running process
+      runVMT @IO testEnv $ do
+        process <- P.startLoggedProcessWithCapture (fixturePath "rapid_output.sh") []
+
+        -- Let it run for a bit
+        liftIO $ delay 100_000 -- 0.1 seconds
+
+        -- Stop and capture output
+        (exitCode, stdout, stderr) <- stopVMProcessCaptured (Just 1_000_000) process
+
+        liftIO $ do
+          -- Should have captured at least some output
+          stdout `shouldSatisfy` (not . null . lines)
+          stderr `shouldSatisfy` (not . null . lines)
+
+    it "captures output with withVMProcessCaptured" $ do
+      -- Use the bracket-style function
+      (result, stdout, stderr) <- runVMT @IO testEnv $
+        withVMProcessCaptured (fixturePath "echo_both.sh") [] defTimeout $ \process -> do
+          -- Wait for completion
+          void $ P.waitForProcess defWait (P.VMProcess (P.getProcessCapture process) (P.waitIOThreadsCapture process))
+          pure "test result"
+
+      -- Check result and captured output
+      result `shouldBe` "test result"
+      toS stdout `shouldContain` "Starting process..."
+      toS stdout `shouldContain` "Done!"
+      toS stderr `shouldContain` "Warning: This is stderr"
+
+    it "handles empty output with captured functions" $ do
+      -- Run process with no output
+      runVMT @IO testEnv $ do
+        process <- P.startLoggedProcessWithCapture (fixturePath "no_output.sh") []
+
+        -- Wait and capture output
+        result <- waitForProcessCaptured defWait process
+
+        case result of
+          Just (ExitSuccess, stdout, stderr) -> liftIO $ do
+            stdout `shouldBe` ""
+            stderr `shouldBe` ""
+          _ -> liftIO $ expectationFailure "Expected successful exit"
+
+    it "preserves line order in captured output" $ do
+      -- Run process with numbered lines
+      runVMT @IO testEnv $ do
+        process <- P.startLoggedProcessWithCapture (fixturePath "rapid_output.sh") []
+
+        -- Wait for completion
+        result <- waitForProcessCaptured defWait process
+
+        case result of
+          Just (ExitSuccess, stdout, stderr) -> liftIO $ do
+            let stdoutLines = lines stdout
+            let stderrLines = lines stderr
+
+            -- Verify all 10 lines are captured in order
+            length stdoutLines `shouldBe` 10
+            length stderrLines `shouldBe` 10
+
+            -- Check order
+            forM_ (zip [1 .. 10] stdoutLines) $ \(i, line) ->
+              line `shouldBe` ("stdout line " <> show i)
+            forM_ (zip [1 .. 10] stderrLines) $ \(i, line) ->
+              line `shouldBe` ("stderr line " <> show i)
+          _ -> liftIO $ expectationFailure "Expected successful exit"
+
+    it "handles exceptions in withVMProcessCaptured" $ do
+      -- Test that output is still captured even if action throws
+      result <- UIO.try $
+        runVMT @IO testEnv $
+          withVMProcessCaptured (fixturePath "echo_both.sh") [] defTimeout $ \process -> do
+            -- Wait a bit to ensure some output is generated
+            liftIO $ delay 100_000
+            -- Throw an exception
+            liftIO $ ioError $ mkIOError userErrorType "Test exception" Nothing Nothing
+
+      case result of
+        Left (e :: SomeException) -> show e `shouldContain` "Test exception"
+        Right _ -> expectationFailure "Expected an exception"
 
   describe "Process error handling" $ do
     it "handles startup failures" $ do

@@ -1,8 +1,11 @@
 {- This executable is for tests that need to be able to create
  - VMs
  -}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Main (main, withTempStateDir, testVMConfig) where
 
@@ -10,9 +13,12 @@ import AgentVM (createVM, destroyVM, runVMT)
 import AgentVM.Config (initConfig)
 import AgentVM.Env (AgentVmEnv (AgentVmEnv))
 import AgentVM.Log (createLogContext)
+import qualified AgentVM.Process as P
 import AgentVM.Types (VMConfig (VMConfig, vmConfigCores, vmConfigHost, vmConfigMemory, vmConfigNixPath, vmConfigPort, vmConfigSshPort, vmConfigWorkspace), VMHandle, vmHandlePid)
-import Protolude (FilePath, IO, ($), (.), (<>), (==))
+import Control.Concurrent.Thread.Delay (delay)
+import Protolude (Bool (..), FilePath, IO, Maybe (..), liftIO, panic, toS, ($), (.), (<>), (==))
 import System.IO.Temp (withSystemTempDirectory)
+import System.Process.Typed (ExitCode (..))
 import Test.Hspec (Spec, describe, hspec, it, pending, shouldBe, shouldSatisfy)
 import UnliftIO (bracket)
 
@@ -33,7 +39,7 @@ spec = describe "Agent VM Integration Tests" $ do
 
         -- Create VM and verify it exists
         handle <- runVMT env (createVM vmConfig)
-        handle `shouldSatisfy` (\h -> vmHandlePid h == 12345) -- TODO: Check for real PID
+        handle `shouldSatisfy` (\h -> vmHandlePid h == 12_345) -- TODO: Check for real PID
 
         -- Destroy the VM
         runVMT env (destroyVM handle)
@@ -120,7 +126,91 @@ spec = describe "Agent VM Integration Tests" $ do
     it "cleans up zombie processes" $ do
       pending -- TODO: Implement
     it "captures process stdout/stderr" $ do
-      pending -- TODO: Implement
+      withTempStateDir $ \stateDir -> do
+        -- Create log context for testing
+        logCtx <- createLogContext
+        let env = AgentVmEnv logCtx
+
+        -- Test with a simple echo command
+        runVMT env $ do
+          (result, stdout, stderr) <- P.withVMProcessCaptured "/bin/sh" ["-c", "echo 'Hello stdout'; echo 'Hello stderr' >&2"] (Just 5_000_000) $ \process -> do
+            -- Wait for process to complete
+            P.waitForProcessCaptured 2_000_000 process
+
+          liftIO $ do
+            -- Check that we captured the output correctly
+            stdout `shouldBe` "Hello stdout"
+            stderr `shouldBe` "Hello stderr"
+            case result of
+              Just (exitCode, _, _) -> exitCode `shouldBe` ExitSuccess
+              Nothing -> panic "Process timed out"
+
+    it "captures multiline output correctly" $ do
+      withTempStateDir $ \stateDir -> do
+        -- Create log context for testing
+        logCtx <- createLogContext
+        let env = AgentVmEnv logCtx
+
+        -- Test with multiline output
+        runVMT env $ do
+          (result, stdout, stderr) <- P.withVMProcessCaptured "/bin/sh" ["-c", "echo 'Line 1'; echo 'Line 2'; echo 'Error 1' >&2; echo 'Line 3'; echo 'Error 2' >&2"] (Just 5_000_000) $ \process -> do
+            -- Wait for process to complete
+            P.waitForProcessCaptured 2_000_000 process
+
+          liftIO $ do
+            -- Check stdout
+            stdout `shouldBe` "Line 1\nLine 2\nLine 3"
+            -- Check stderr
+            stderr `shouldBe` "Error 1\nError 2"
+            case result of
+              Just (exitCode, _, _) -> exitCode `shouldBe` ExitSuccess
+              Nothing -> panic "Process timed out"
+
+    it "captures output from failing process" $ do
+      withTempStateDir $ \stateDir -> do
+        -- Create log context for testing
+        logCtx <- createLogContext
+        let env = AgentVmEnv logCtx
+
+        -- Test with a failing command
+        runVMT env $ do
+          (result, stdout, stderr) <- P.withVMProcessCaptured "/bin/sh" ["-c", "echo 'Before failure'; echo 'Error message' >&2; exit 42"] (Just 5_000_000) $ \process -> do
+            -- Wait for process to complete
+            P.waitForProcessCaptured 2_000_000 process
+
+          liftIO $ do
+            -- Check output
+            stdout `shouldBe` "Before failure"
+            stderr `shouldBe` "Error message"
+            case result of
+              Just (exitCode, _, _) -> exitCode `shouldBe` ExitFailure 42
+              Nothing -> panic "Process timed out"
+
+    it "handles stopVMProcessCaptured correctly" $ do
+      withTempStateDir $ \stateDir -> do
+        -- Create log context for testing
+        logCtx <- createLogContext
+        let env = AgentVmEnv logCtx
+
+        -- Test stopVMProcessCaptured
+        runVMT env $ do
+          -- Start a long-running process
+          process <- P.startLoggedProcessWithCapture "/bin/sh" ["-c", "echo 'Started'; sleep 10; echo 'Should not see this'"]
+
+          -- Let it run briefly
+          liftIO $ delay 500_000 -- 0.5 seconds
+
+          -- Stop it and get output
+          (exitCode, stdout, stderr) <- P.stopVMProcessCaptured (Just 1_000_000) process
+
+          liftIO $ do
+            -- Should only see the first echo
+            stdout `shouldBe` "Started"
+            stderr `shouldBe` ""
+            -- Process should have been terminated
+            exitCode `shouldSatisfy` \case
+              ExitFailure _ -> True
+              _ -> False
     it "enforces process resource limits" $ do
       pending -- TODO: Implement
     it "detects and reports process crashes" $ do

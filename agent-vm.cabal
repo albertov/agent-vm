@@ -113,6 +113,8 @@ executable agent-vm-test
                     , hspec
                     , temporary
                     , unliftio
+                    , unbounded-delays
+                    , typed-process
     hs-source-dirs:   integration-test
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
