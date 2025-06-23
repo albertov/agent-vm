@@ -9,15 +9,7 @@ format_file() {
     local file="$1"
     
     case "$file" in
-        *.hs)
-            echo "Formatting Haskell file: $file"
-            fourmolu -i "$file"
-            ;;
-        *.res|*.resi)
-            echo "Formatting ReScript file: $file"
-            "$REPO_ROOT/agents/rescript_sys.sh" format "$file"
-            ;;
-        *.nix)
+        *.nix|*.py|*.sh)
             echo "Formatting file with nix fmt: $file"
             nix fmt "$file"
             ;;
