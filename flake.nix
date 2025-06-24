@@ -87,6 +87,7 @@
               MEMORY_SIZE=4
               CORES=2
               DISK_SIZE=4
+              DISK_IMAGE="$HOME/.local/share/agent-vm/disk.qcow2"
 
               # Show usage
               usage() {
@@ -101,6 +102,7 @@
                 echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
                 echo "  --cores NUM        Number of CPU cores (default: $CORES)"
                 echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
+                echo "  --disk-image FILE  VM disk size image filename (default: $DISK_IMAGE)
                 echo "  -h, --help         Show this help message"
                 exit 0
               }
@@ -140,6 +142,10 @@
                     DISK_SIZE="$2"
                     shift 2
                     ;;
+                  --disk-image)
+                    DISK_IMAGE="$2"
+                    shift 2
+                    ;;
                   -h|--help)
                     usage
                     ;;
@@ -170,6 +176,7 @@
                           port=$PORT;
                           memorySize=1024 * $MEMORY_SIZE;
                           diskSize=1024 * $DISK_SIZE;
+                          diskImage=\"$DISK_IMAGE\";
                           cores=$CORES;
                           uid=$(id -u);
                           group=\"$(id -n -g)\";

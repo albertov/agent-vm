@@ -34,7 +34,7 @@ let
 
       runtimeInputs = mkOption {
         type = types.listOf types.package;
-        default = with pkgs; [];
+        default = with pkgs; [ ];
         description = "Runtime inputs";
         example = [ "mcp-server-fetch" ];
       };

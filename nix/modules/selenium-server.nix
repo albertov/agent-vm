@@ -82,7 +82,7 @@ in
         Restart = "always";
         ExecStart =
           let
-            xvfbServerArgs = ["-screen 99 1920×1080x24"];
+            xvfbServerArgs = [ "-screen 99 1920×1080x24" ];
           in
           "${pkgs.xvfb-run}/bin/xvfb-run -s ${pkgs.lib.escapeShellArgs xvfbServerArgs} -a ${cfg.package}/bin/selenium-server -config ${cfgFile}";
         User = "selenium-server";

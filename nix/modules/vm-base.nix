@@ -44,6 +44,12 @@ in
         description = "VM disk size in MB";
       };
 
+      diskImage = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "./${config.system.name}.qcow2";
+        description = "VM disk image file. null for a tmpfs root FS";
+      };
+
       additionalPaths = lib.mkOption {
         type = lib.types.listOf lib.types.package;
         default = [ ];
@@ -103,27 +109,10 @@ in
       memorySize = config.agent-vm.memorySize;
       cores = config.agent-vm.cores;
       diskSize = config.agent-vm.diskSize;
+      diskImage = config.agent-vm.diskImage;
       graphics = false; # Headless for better performance
       mountHostNixStore = true;
-      additionalPaths =
-        let
-          shell = config.services.mcp-proxy.shell;
-          allItems =
-            allInputs shell
-            ++ config.agent-vm.additionalPaths
-            ++ (
-              if pkgs ? hixProject then
-                [
-                  pkgs.hixProject.roots
-                  pkgs.hixProject.plan-nix
-                ]
-              else
-                [ ]
-            );
-
-          closure = pkgs.closureInfo { rootPaths = allItems; };
-        in
-        [ closure ];
+      additionalPaths = config.agent-vm.additionalPaths;
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
@@ -136,7 +125,6 @@ in
       };
 
       forwardPorts = [
-
         {
           from = "host";
           host.port = config.agent-vm.port;
@@ -175,7 +163,15 @@ in
     services.getty.autologinUser = "mcp-proxy";
     users.users.mcp-proxy.extraGroups = [ "wheel" ];
     users.users.mcp-proxy.packages =
-      with pkgs; [vim tmux git nix coreutils] ++ allInputs config.services.mcp-proxy.shell;
+      with pkgs;
+      [
+        vim
+        tmux
+        git
+        nix
+        coreutils
+      ]
+      ++ allInputs config.services.mcp-proxy.shell;
     system.activationScripts.mcp-proxy-env =
       let
         hookFile = pkgs.writeText "shellHook.source" (config.services.mcp-proxy.shell.shellHook or "");
