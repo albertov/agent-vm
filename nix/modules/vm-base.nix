@@ -4,14 +4,6 @@
   lib,
   ...
 }:
-let
-  allInputs =
-    p:
-    (p.buildInputs or [ ])
-    ++ (p.nativeBuildInputs or [ ])
-    ++ (p.propagatedBuildInputs or [ ])
-    ++ (p.propagatedNativeBuildInputs or [ ]);
-in
 {
   imports = [
     ./mcp-proxy.nix
@@ -94,9 +86,21 @@ in
         description = "Overrides group of mcp-proxy user. Useful when gid can't be used because of conflics";
       };
 
+      shellEnv = lib.mkOption {
+        type = lib.types.path;
+        default = lib.extractShellEnv {
+          inherit (config.agent-vm) flake shell;
+        };
+        description = '''
+          The path to a file with the output of nix print-dev-env flake#shell
+          '';
+      };
       shell = lib.mkOption {
-        type = lib.types.package;
-        description = "Shell environment for MCP proxy";
+        type = lib.types.str;
+        default = "default";
+      };
+      flake = lib.mkOption {
+        type = lib.types.unspecified;
       };
     };
   };
@@ -162,28 +166,24 @@ in
     # Enable and configure the agent service
     services.getty.autologinUser = "mcp-proxy";
     users.users.mcp-proxy.extraGroups = [ "wheel" ];
-    users.users.mcp-proxy.packages =
-      with pkgs;
-      [
-        vim
-        tmux
-        git
-        nix
-        coreutils
-      ]
-      ++ allInputs config.services.mcp-proxy.shell;
+    users.users.mcp-proxy.packages = with pkgs; [
+      vim
+      tmux
+      git
+      nix
+      coreutils
+    ];
     system.activationScripts.mcp-proxy-env =
-      let
-        hookFile = pkgs.writeText "shellHook.source" (config.services.mcp-proxy.shell.shellHook or "");
-      in
       ''
         MCP_HOME_DIR="${config.users.users.mcp-proxy.home}"
         mkdir -p "$MCP_HOME_DIR"
         cat > "$MCP_HOME_DIR"/.profile << 'EOF'
-        export IN_NIX_SHELL=YES
-        pushd ${config.users.users.mcp-proxy.home}/workspace
-        source ${hookFile}
-        popd
+        if [ -z "$MCP_SHELL_INIT" ]; then
+          export MCP_SHELL_INIT=YES
+          pushd ${config.users.users.mcp-proxy.home}/workspace
+          source ${config.agent-vm.shellEnv}
+          popd
+        fi
         EOF
       '';
 
@@ -195,7 +195,7 @@ in
       uid = config.agent-vm.uid;
       gid = config.agent-vm.gid;
       group = config.agent-vm.group;
-      shell = lib.mkDefault config.agent-vm.shell;
+      shellEnv = lib.mkDefault config.agent-vm.shellEnv;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;
         command = lib.mkDefault "codemcp";

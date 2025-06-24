@@ -1,40 +1,18 @@
 inputs: final: prev: {
 
-  mkMCPDevServers =
-    {
-      name ? "start-agent",
-      shell,
-      pkgs ? final,
-    }:
-    let
-      hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-      shellInputs = shell.buildInputs or [ ] ++ shell.nativeBuildInputs or [ ];
-
-    in
-    pkgs.writeShellApplication {
-      inherit name;
-      runtimeInputs =
-        with pkgs;
-        [
-          git
-          nix
-          bash
-          codemcp
-          mcp-proxy
-          mcp-language-server
-          rescript-language-server
-          inputs.mcp-selenium.packages.${system}.default
-          inputs.mcp-nixos.packages.${system}.default
-        ]
-        ++ shellInputs;
-      excludeShellChecks = [
-        "SC1091" # So we can 'source' the shellHook
-      ];
-      text = ''
-        source ${hookFile}
-        ${builtins.readFile ../start.sh}
-      '';
-    };
+  lib = prev.lib.recursiveUpdate prev.lib {
+    extractShellEnv = { flake, shell?"default"}:
+      final.runCommand "shell-env-setup"
+        {
+          buildInputs = [ final.nix ];  
+          #Enable Import From Derivation
+          __impure = true;
+        }
+        ''
+          nix print-dev-env ${flake}#${shell} > $out
+        ''
+        ;
+  };
 
   python3 = final.lib.recursiveUpdate prev.python3 {
     pkgs.agno = final.callPackage ./pkgs/agno.nix { };

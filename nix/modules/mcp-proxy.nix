@@ -146,10 +146,11 @@ in
       default = pkgs;
     };
 
-    shell = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default = null;
-      description = "The devshell derivation to inject in agent's environment";
+    shellEnv = lib.mkOption {
+      type = lib.types.path;
+      description = '''
+        The path to a file with the output of nix print-dev-env flake#shell
+        '';
     };
 
     debug = mkOption {
@@ -304,42 +305,19 @@ in
 
     systemd.services.mcp-proxy =
       let
-        allInputs =
-          p:
-          (p.buildInputs or [ ])
-          ++ (p.nativeBuildInputs or [ ])
-          ++ (p.propagatedBuildInputs or [ ])
-          ++ (p.propagatedNativeBuildInputs or [ ]);
-        # Use the provided shell or create a minimal default
-        shell =
-          if cfg.shell != null then
-            cfg.shell
-          else
-            pkgs.mkShell {
-              buildInputs = with pkgs; [
-                git
-                curl
-                bash
-              ];
-            };
-        hookFile = pkgs.writeText "shellHook.source" (shell.shellHook or "");
-        shellInputs = allInputs shell;
         startService = pkgs.writeShellApplication {
           name = "start";
-          runtimeInputs =
-            with pkgs;
-            [
-              git
-              nix
-              bash
-              cfg.package
-            ]
-            ++ shellInputs;
+          runtimeInputs = with pkgs; [
+            git
+            nix
+            bash
+            cfg.package
+          ];
           excludeShellChecks = [
             "SC1091" # So we can 'source' the shellHook
           ];
           text = ''
-            source ${hookFile}
+            source ${cfg.shellEnv}
             mcp-proxy ${escapeShellArgs mkArgs};
           '';
         };

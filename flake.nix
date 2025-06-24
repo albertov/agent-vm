@@ -102,7 +102,7 @@
                 echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
                 echo "  --cores NUM        Number of CPU cores (default: $CORES)"
                 echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
-                echo "  --disk-image FILE  VM disk size image filename (default: $DISK_IMAGE)
+                echo "  --disk-image FILE  VM disk size image filename (default: $DISK_IMAGE)"
                 echo "  -h, --help         Show this help message"
                 exit 0
               }
@@ -159,20 +159,22 @@
               # If FLAKE is not provided, use the current git repo
               if [ "$FLAKE" == "" ]; then
                 REPO_ROOT="$(git rev-parse --show-toplevel)"
-                BRANCH=$(git branch --show-current)
+                BRANCH="$(git branch --show-current)"
                 FLAKE="git+file://$REPO_ROOT?ref=$BRANCH"
               fi
 
+              SHELLENVTMP="$(mktemp)"
+              trap 'rm -f "$SHELLENVTMP"' EXIT
+              nix print-dev-env "$FLAKE#$DEVSHELL" > "$SHELLENVTMP"
+              SHELLENV="$(nix-store --add "$SHELLENVTMP")"
               SYSTEM="$(nix eval --impure --expr builtins.currentSystem)"
               exec nix run --impure --show-trace --expr "
                 let self = builtins.getFlake \"${self}\";
-                    flake = builtins.getFlake \"$FLAKE\";
-                    shell = flake.devShells.$SYSTEM.$DEVSHELL;
                     mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mods).config.system.build.vmWithVirtioFS;
                 in mkVM
                     [$CONFIG
                       { agent-vm = {
-                          inherit shell;
+                          shellEnv=\"$SHELLENV\";
                           port=$PORT;
                           memorySize=1024 * $MEMORY_SIZE;
                           diskSize=1024 * $DISK_SIZE;
@@ -244,7 +246,6 @@
         flake = pkgs.hixProject.flake { };
 
         # Default shell for development
-        defaultShell = self.outputs.devShells.${system}.default;
 
       in
       (pkgs.lib.recursiveUpdate flake {
@@ -255,6 +256,7 @@
           mk-agent-vm =
             mods:
             (inputs.nixpkgs.lib.nixosSystem {
+              specialArgs = { inherit (pkgs) lib; };
               modules = [
                 "${inputs.nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
                 {
@@ -285,14 +287,6 @@
               text = ''
                 exec agent-vm-test "$@"
               '';
-            };
-          };
-
-          # Direct agent execution (fallback)
-          agent-direct = flake-utils.lib.mkApp {
-            drv = pkgs.mkMCPDevServers {
-              name = "agent-direct";
-              shell = defaultShell;
             };
           };
 
