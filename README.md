@@ -11,7 +11,7 @@ All VMs state is located in an user configurable `--state-dir` directory
 
 **🚀 High Performance**: VirtioFS provides near-native filesystem performance for workspace sharing, while optimized QEMU configurations minimize overhead.
 
-**🔧 Development-Friendly**: SSH access, comprehensive monitoring, and seamless integration with existing development workflows ensure no disruption to productivity.
+**🔧 Development-Friendly**: Comprehensive monitoring and seamless integration with existing development workflows ensure no disruption to productivity.
 
 **📦 Reproducible**: NixOS-based VMs ensure consistent, reproducible environments across different host systems.
 

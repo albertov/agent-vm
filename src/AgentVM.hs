@@ -1,83 +1,30 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 -- | Main entry point for the agent-vm library
 module AgentVM
   ( -- * Types
-    VMState (..),
-    BranchName (..),
-    VMId (..),
     VMConfig (..),
-    VM (..),
-    VMStateData (..),
-    VMOp (..),
     VMError (..),
-    VMHandle (..),
-
-    -- * State
-    VMRegistry (..),
-    VMInfo (..),
-    newVMRegistry,
-    withVMLock,
-    registerVM,
-    lookupVM,
-    unregisterVM,
-    allocatePort,
-    releasePort,
-
-    -- * Process
-    startVMProcess,
-    stopVMProcess,
-    checkVMProcess,
-    waitForProcess,
-
-    -- * SSH
-    generateSSHKey,
-    waitForSSH,
-    sshExec,
-    trySSHConnect,
-
-    -- * Nix
-    buildVMConfig,
-    runVMScript,
 
     -- * Logging
-    AgentVmTrace
-      ( VMCreated,
-        VMStarting,
-        VMStarted,
-        VMStopping,
-        VMStopped,
-        VMDestroyed,
-        VMFailed,
-        ProcessSpawned,
-        ProcessExited,
-        ProcessOutput,
-        ProcessError,
-        SSHKeyGenerated,
-        SSHConnecting,
-        SSHConnected,
-        SSHCommandExecuted,
-        SSHFailed,
-        NixBuildStarted,
-        NixBuildProgress,
-        NixBuildCompleted
-      ),
+    AgentVmTrace,
     traceToMessage,
     renderTrace,
     vmLogger,
 
-    -- * Config
-    VMConfigJson (..),
-    loadVMConfig,
-    saveVMConfig,
+    -- * Interface Monad
+    MonadVM (..),
 
-    -- * VM Lifecycle
-    createVM,
-    destroyVM,
+    -- * Config
+    loadVMConfig,
 
     -- * Environment
     AgentVmEnv (..),
@@ -86,72 +33,99 @@ module AgentVM
 where
 
 import AgentVM.Class (MonadVM (..))
-import AgentVM.Config
 import AgentVM.Env
+import AgentVM.Interactive
 import AgentVM.Log (AgentVmTrace, MonadTrace (..), renderTrace, traceToMessage, vmLogger)
 import qualified AgentVM.Log as Log
 import AgentVM.Monad (VMT, runVMT)
 import AgentVM.Nix
-import AgentVM.Process
-import AgentVM.SSH
-import AgentVM.State
+import AgentVM.StreamingProcess (Process (..))
+import AgentVM.StreamingSocket (Socket (..))
 import AgentVM.Types
-import Protolude (Either (Left, Right), IO, MonadIO, return, ($))
+import Data.Generics.Labels ()
+import Lens.Micro
+import Protolude hiding (bracket, throwIO, trace, try)
+import System.Directory (doesDirectoryExist, doesFileExist)
+import UnliftIO (MonadUnliftIO)
+import UnliftIO.Exception (throwIO, try)
 
 -- | Instance of MonadVM for VMT IO
-instance MonadVM (VMT IO) where
-  create config = do
-    handle <- createVM config
-    return (Right handle)
+instance (MonadUnliftIO m) => MonadVM (VMT m) where
+  create config =
+    try $ do
+      let vmDirPath = config ^. #stateDir
+      dirExists <- liftIO $ doesDirectoryExist vmDirPath
+      when dirExists $
+        throwIO $
+          WorkspaceError ("Directory already exists: " <> toS vmDirPath)
+      buildVMImage config
+      trace (Log.VMCreated config)
 
-  destroy handle = do
-    destroyVM handle
-    return (Right ())
+  update config =
+    try $ do
+      buildVMImage config
+      trace (Log.VMUpdated config)
+
+  destroy config =
+    try $ do
+      destroyVM config
+        <* trace (Log.VMDestroyed config)
 
   -- These are not implemented yet
-  start _ = return (Left (VMInvalidState "start not implemented"))
+  start config = do
+    try $ do
+      trace (Log.VMStarting config)
+      startVM config
   stop _ = return (Left (VMInvalidState "stop not implemented"))
   status _ = return (Left (VMInvalidState "status not implemented"))
 
--- | Create a new VM with the given configuration
-createVM ::
+  shell config = do
+    try $ do
+      trace (Log.VMConnectingShell config)
+      connectToVMShell config
+
+-- | Destroy a VM and clean up its resources
+destroyVM ::
+  ( MonadTrace AgentVmTrace m
+  ) =>
+  VMConfig ->
+  m ()
+destroyVM = const (pure ()) -- TODO
+
+-- | Start a VM and relay stdin/stdout using raw streaming process with proper terminal handling
+startVM ::
   ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
   VMConfig ->
-  m VMHandle
-createVM vmConfig = do
-  -- For now, just log that we're creating a VM
-  -- This is a minimal implementation to make the test pass
-  let branchName = BranchName "test" -- TODO: Get from config
-      vmId = VMId branchName "localhost"
-      handle = VMHandle vmId vmConfig 12345 -- TODO: Real PID
-  Log.trace $ Log.VMCreated branchName vmConfig
-  return handle
+  m ()
+startVM config = do
+  let scriptPath = vmStartScript config
 
--- TODO: Implement actual VM creation logic:
--- 1. Generate SSH keys
--- 2. Build VM configuration with Nix
--- 3. Start QEMU process
--- 4. Wait for SSH connection
--- 5. Register VM in state
+  -- Check if VM start script exists
+  scriptExists <- liftIO $ doesFileExist scriptPath
+  unless scriptExists $ do
+    trace $ Log.VMFailed config ("VM start script not found: " <> toS scriptPath)
+    liftIO $ throwIO $ VMNotFound scriptPath
 
--- | Destroy a VM and clean up its resources
-destroyVM ::
+  trace $ Log.ProcessSpawned (toS scriptPath) []
+  interactWith stdin stdout stderr $ Process scriptPath []
+
+-- | Connect to VM shell via serial socket with proper terminal handling
+connectToVMShell ::
   ( MonadTrace AgentVmTrace m,
     MonadIO m
   ) =>
-  VMHandle ->
+  VMConfig ->
   m ()
-destroyVM handle = do
-  -- For now, just log that we're destroying a VM
-  -- This is a minimal implementation to make the test pass
-  let VMId branchName _ = vmHandleId handle
-  Log.trace $ Log.VMDestroyed branchName
+connectToVMShell config = do
+  let serialSocketPath = vmSerialSocket config
 
--- TODO: Implement actual VM destruction logic:
--- 1. Stop VM process
--- 2. Clean up workspace
--- 3. Remove SSH keys
--- 4. Unregister VM from state
--- 5. Release allocated ports
+  -- Check if serial socket exists
+  socketExists <- liftIO $ doesFileExist serialSocketPath
+  unless socketExists $ do
+    trace $ Log.VMFailed config ("Serial socket not found: " <> toS serialSocketPath)
+    liftIO $ throwIO $ VMNotFound serialSocketPath
+
+  trace $ Log.ProcessSpawned "socket-connection" [toS serialSocketPath]
+  interactWith stdin stdout stderr $ Socket serialSocketPath

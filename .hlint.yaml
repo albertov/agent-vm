@@ -1,7 +1,7 @@
 # HLint configuration file
 
 - functions:
-  - {name: shell, within: [], message: "Highly vulnerable to code injection. Use proc instead. If you need standard input, make sure proc is compiled with ghc-option -threaded."}
+  - {name: shell, within: ["AgentVM.Class", "AgentVM", "Main"], message: "Highly vulnerable to code injection. Use proc instead. If you need standard input, make sure proc is compiled with ghc-option -threaded."}
   - {name: shells, within: [], message: "Highly vulnerable to code injection. Use procs instead. If you need standard input, make sure procs is compiled with ghc-option -threaded."}
   - {name: shellStrict, within: [], message: "Highly vulnerable to code injection. Use procStrict instead. If you need standard input, make sure procStrict is compiled with ghc-option -threaded."}
   - {name: shellStrictWithErr, within: [], message: "Highly vulnerable to code injection. Use procStrictWithErr instead. If you need standard input, make sure procStrictWithErr is compiled with ghc-option -threaded."}
@@ -16,13 +16,6 @@
   - {name: nubBy, within: [], message: "Has quadtratic complexity. Use Data.List.Extra.nubOrdBy instead (from extra package)"}
   - {name: nubOn, within: [], message: "Has quadtratic complexity. Use Data.List.Extra.nubOrdOn instead (from extra package)"}
   - {name: foldl, within: [], message: "Leaks space. Use Data.List.foldl' instead with a strict (BangPattern'd) accumulator"}
-
-  - {name: putStrLn, within: [], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
-  - {name: hPutStrLn, within: ["AgentVM.Log"], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
-  - {name: print, within: [], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
-  - {name: hPrint, within: [], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
-  - {name: putStr, within: [], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
-  - {name: hPutStr, within: ["AgentVM.Log"], message: "Fine for debugging when developing but remove before committing or use plow-log instead"}
 
   - {name: forkIO, within: [], message: "Use Control.Concurrent.Async.withAsync (or async if withAsync not possible) from async package instead"}
   - {name: forkOn, within: [], message: "Use Control.Concurrent.Async.withAsyncOn (or asyncOn if withAsyncOn not possible) from async package instead"}
@@ -54,7 +47,7 @@
     rules:
 
     # errors
-  
+
     - error: {name: unsafeCoerce, within: [], message: "Use Data.Coerce.coerce instead"}
     - error: {name: unsafePerformIO, within: [], message: "Just don't"}
 

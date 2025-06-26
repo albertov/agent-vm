@@ -8,6 +8,15 @@ project_prompt = """
 exception handling. Never catch SomeExeption explicitly, use the `*Any`
 functions from UnliftIO instead.
 
+## Use toS for string conversion and OverloadedStrings
+
+## To resolve field ambiguity due to the use of DuplicateRecordFields:
+- Enable OverloadedLabels extension
+- import Data.Generics.Labels()
+- import Lens.Micro ((^.))
+
+Now you can do obj ^. #fieldName and there will be no ambiguity!
+
 ## Never use String unless mandated by an external library, always Text or
 ByteString instead
 
@@ -107,15 +116,15 @@ command = ["bash"]
 command = ["nix", "--accept-flake-config", "flake", "check"]
 
 [commands.cabal_build]
-command = ["cabal", "build"]
+command = ["./run_cabal.sh", "build"]
 doc = "Runs cabal build"
 
 [commands.cabal_clean]
-command = ["cabal", "clean"]
+command = ["./run_cabal.sh", "clean"]
 doc = "Runs cabal clean."
 
 [commands.cabal_test]
-command = ["timeout", "60s", "cabal", "test"]
+command = ["timeout", "60s", "./run_cabal.sh", "test"]
 doc = "Runs cabal test."
 
 [commands.lynx]
@@ -156,7 +165,7 @@ set of packages.
 """
 
 [commands.integration-test]
-command = ["timeout", "90s", "nix", "--accept-flake-config", "run", ".#integration-test", "--"]
+command = ["env", "AGENT_VM_LOGLEVEL=Trace", "timeout", "120s", "./run_cabal.sh", "run", "agent-vm-test", "--"]
 doc = """
 Runs the .#integration-test flake app with the arguments you pass"
 

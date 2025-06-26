@@ -4,110 +4,129 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Core type definitions for agent-vm
 module AgentVM.Types
   ( -- * VM States
     VMState (..),
-    BranchName (..),
-    VMId (..),
     VMConfig (..),
-    VM (..),
-    VMStateData (..),
-    VMOp (..),
+    defVMConfig,
+
+    -- * Path accessors
+    vmDiskImage,
+    vmSerialSocket,
+    vmNixFile,
+    vmConfigFile,
+    vmGCRoot,
+    vmStartScript,
     VMError (..),
-    VMHandle (..),
   )
 where
 
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Kind (Type)
-import Data.Time (UTCTime)
-import Protolude (Eq, FilePath, Generic, Int, Ord, Show, Text)
-import System.Process.Typed (Process)
+import Protolude hiding (group)
+import System.Directory (getHomeDirectory)
+import System.FilePath ((</>))
 
 -- import UnliftIO (SomeException)
 
 -- | VM states as type-level values
 data VMState = Stopped | Starting | Running | Stopping | Failed
 
--- | Branch name newtype for type safety
-newtype BranchName = BranchName {unBranchName :: Text}
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
--- | VM identifier
-data VMId = VMId
-  { vmIdBranch :: BranchName,
-    vmIdHost :: Text
-  }
-  deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
-
--- | VM configuration
+-- | VM configuration matching vm-base.nix module options
 data VMConfig = VMConfig
-  { vmConfigHost :: Text,
-    vmConfigPort :: Int,
-    vmConfigSshPort :: Int,
-    vmConfigMemory :: Int,
-    vmConfigCores :: Int,
-    vmConfigWorkspace :: FilePath,
-    vmConfigNixPath :: FilePath
+  { name :: Text,
+    tmpfs :: Bool,
+    memorySize :: Int, -- In GB
+    cores :: Int,
+    diskSize :: Int, -- In GB
+    additionalPaths :: [Text], -- Package names
+    workspace :: FilePath, -- Required - no default in Nix
+    port :: Int,
+    systemPackages :: [Text], -- Package names
+    uid :: Int,
+    gid :: Int,
+    group :: Text,
+    -- | This is the name of the shell in the flake that we want to inject.
+    -- Defaults to "default"
+    shellName :: Text,
+    -- | This is the flake where the development shell we want to inject in the
+    -- VM lives in
+    flake :: Text,
+    nixBaseConfig :: Maybe FilePath,
+    stateDir :: FilePath
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
--- | Type-safe VM with phantom state
-data VM (s :: VMState) = VM
-  { vmId :: VMId,
-    vmConfig :: VMConfig,
-    vmCreatedAt :: UTCTime,
-    vmStateData :: VMStateData s
-  }
+defVMConfig :: (MonadIO m) => Maybe FilePath -> Text -> FilePath -> m VMConfig
+defVMConfig mStateDir name workspace = do
+  defaultBaseStateDir <- (</> ".local/share/agent-vm") <$> liftIO getHomeDirectory
+  pure
+    VMConfig
+      { tmpfs = True,
+        memorySize = 4,
+        cores = 2,
+        diskSize = 4,
+        additionalPaths = [],
+        name,
+        workspace,
+        port = 8000,
+        systemPackages = ["vim", "git"],
+        uid = 1000,
+        gid = 1000,
+        group = "mcp-proxy",
+        shellName = "default",
+        flake = ".",
+        nixBaseConfig = Nothing,
+        stateDir = fromMaybe defaultBaseStateDir mStateDir </> toS name
+      }
 
--- | State-specific data
-data VMStateData (s :: VMState) where
-  StoppedData :: VMStateData 'Stopped
-  StartingData :: {startingPid :: Int} -> VMStateData 'Starting
-  RunningData :: {runningPid :: Int, runningProcess :: Process () () ()} -> VMStateData 'Running
-  StoppingData :: {stoppingPid :: Int} -> VMStateData 'Stopping
-  FailedData :: {failureReason :: Text} -> VMStateData 'Failed
+-- | Derived path functions from VMConfig stateDir
+vmDiskImage :: VMConfig -> FilePath
+vmDiskImage config = stateDir config </> "disk.qcow2"
 
-deriving instance Show (VMStateData s)
+-- | Path to vm.nix file
+vmNixFile :: VMConfig -> FilePath
+vmNixFile config = stateDir config </> "vm.nix"
 
--- | VM operations GADT for type-safe transitions
-data VMOp :: VMState -> VMState -> Type -> Type where
-  Create :: VMConfig -> VMOp 'Stopped 'Stopped VMId
-  Start :: VMOp 'Stopped 'Running (Process () () ())
-  Stop :: VMOp 'Running 'Stopped ()
-  ForceStop :: VMOp 'Running 'Stopped ()
-  MarkFailed :: Text -> VMOp s 'Failed ()
+-- | Path to config.json file
+vmConfigFile :: VMConfig -> FilePath
+vmConfigFile config = stateDir config </> "config.json"
 
--- | Handle to a running VM
-data VMHandle = VMHandle
-  { vmHandleId :: VMId,
-    vmHandleConfig :: VMConfig,
-    vmHandlePid :: Int
-  }
-  deriving (Eq, Show, Generic)
+-- | Path to gc-root symlink
+vmGCRoot :: VMConfig -> FilePath
+vmGCRoot config = stateDir config </> "vm-start"
+
+-- | Path to the script that starts the vm and allows us to communicate with a
+-- login shell at the virtual qemu terminal
+vmStartScript :: VMConfig -> FilePath
+vmStartScript config = vmGCRoot config </> "bin" </> "run-nixos-vm-virtiofs"
+
+-- | Path to the serial console socket
+vmSerialSocket :: VMConfig -> FilePath
+vmSerialSocket config = stateDir config </> "serial.sock"
 
 -- | Errors that can occur during VM operations
 data VMError
-  = VMAlreadyExists BranchName
-  | VMNotFound BranchName
+  = VMAlreadyExists FilePath
+  | VMNotFound FilePath
   | VMInvalidState Text
   | VMStartupTimeout
   | VMShutdownTimeout
-  | SSHConnectionFailed Text
   | NixBuildFailed Text
+  | NixStoreAddFailed Text
   | PortAllocationFailed
   | WorkspaceError Text
+  | CommandTimeout
   -- TODO: So the runVMT version can catch
   -- unhandled exceptions with tryAny
 
   deriving
     ( -- | UnhandledException SomeException
       Eq,
-      Show
+      Show,
+      Exception
     )

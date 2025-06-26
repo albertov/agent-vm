@@ -9,14 +9,9 @@ maintainer:         alberto@toscat.net
 category:           System
 build-type:         Simple
 
-extra-source-files:
-  test/fixtures/ProcessSpec/*.sh
-data-files:
-  test/fixtures/ProcessSpec/*.sh
-
 common warnings
     ghc-options: -Wall
-               --  -Werror
+                 -Werror
                  -Wcompat
                  -Widentities
                  -Wincomplete-record-updates
@@ -26,44 +21,56 @@ common warnings
                  -Wpartial-fields
                  -Wredundant-constraints
                  -Wunused-packages
-                 -Wmissing-import-lists
 
 library
     import:           warnings
     exposed-modules:  AgentVM
                     , AgentVM.Types
-                    , AgentVM.State
-                    , AgentVM.Process
-                    , AgentVM.SSH
                     , AgentVM.Nix
                     , AgentVM.Log
-                    , AgentVM.Config
                     , AgentVM.Env
                     , AgentVM.Class
                     , AgentVM.Monad
+                    , AgentVM.Flake
+                    , AgentVM.Interactive
+                    , AgentVM.StreamingProcess
+                    , AgentVM.StreamingSocket
     build-depends:    base
                     , protolude
                     , unliftio
                     , unbounded-delays
                     , stm
-                    , containers
+                    , rolling-queue
                     , text
                     , bytestring
                     , aeson
                     , ansi-terminal
                     , directory
-                    , time
-                    , typed-process
+                    , shelly
                     , filepath
                     , plow-log
-                    , plow-log-async
-                    , network
-                    , microlens
-                    , microlens-mtl
-                    , generic-lens
                     , mtl
                     , unix
+                    , neat-interpolation
+                    , process
+                    , network
+                    , microlens
+                    , generic-lens
+                    , template-haskell
     hs-source-dirs:   src
+    default-language: Haskell2010
+    default-extensions: NoImplicitPrelude
+
+library test-utils
+    import:           warnings
+    exposed-modules:  AgentVM.TestUtils
+    build-depends:    base
+                    , protolude
+                    , agent-vm
+                    , unliftio
+                    , plow-log
+                    , plow-log-async
+    hs-source-dirs:   test-utils
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
 
@@ -76,6 +83,12 @@ executable agent-vm
                     , optparse-applicative
                     , plow-log-async
                     , plow-log
+                    , text
+                    , directory
+                    , filepath
+                    , unliftio
+                    , shelly
+                    , unbounded-delays
     hs-source-dirs:   app
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -85,28 +98,19 @@ test-suite spec
     import:           warnings
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
-    other-modules:    AgentVM.StateSpec
-                    , AgentVM.ProcessSpec
-                    , AgentVM.NixSpec
+    other-modules:
+                      AgentVM.NixSpec
+                    , AgentVM.StreamingProcessSpec
+                    , AgentVM.StreamingSocketSpec
                     , Paths_agent_vm
     build-depends:    base
                     , protolude
-                    , HUnit
-                    , exceptions
                     , agent-vm
                     , hspec
-                    , retry
                     , unliftio
-                    , typed-process
-                    , temporary
-                    , stm
-                    , containers
-                    , plow-log
-                    , plow-log-async
+                    , bytestring
                     , network
                     , unbounded-delays
-                    , filepath
-                    , directory
     hs-source-dirs:   test
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -117,14 +121,15 @@ test-suite spec
 executable agent-vm-test
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base
-                    , protolude
+    other-modules:    AgentVM.NixSpec
+    build-depends:    protolude
                     , agent-vm
+                    , agent-vm:test-utils
                     , hspec
-                    , temporary
-                    , unliftio
-                    , unbounded-delays
-                    , typed-process
+                    , directory
+                    , generic-lens
+                    , microlens
+                    , filepath
     hs-source-dirs:   integration-test
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude

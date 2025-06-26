@@ -1,19 +1,5 @@
 inputs: final: prev: {
 
-  lib = prev.lib.recursiveUpdate prev.lib {
-    extractShellEnv = { flake, shell?"default"}:
-      final.runCommand "shell-env-setup"
-        {
-          buildInputs = [ final.nix ];  
-          #Enable Import From Derivation
-          __impure = true;
-        }
-        ''
-          nix print-dev-env ${flake}#${shell} > $out
-        ''
-        ;
-  };
-
   python3 = final.lib.recursiveUpdate prev.python3 {
     pkgs.agno = final.callPackage ./pkgs/agno.nix { };
     pkgs.mcp = final.callPackage ./pkgs/mcp.nix { };

@@ -57,6 +57,7 @@
         # Haskell.nix overlay
         haskellNix.overlay
         (final: _prev: {
+          AGENT_VM_SELF = self;
           projectStatic = final.hixProject.projectCross.musl64;
           hoogleEnv = final.hixProject.ghcWithHoogle (
             _:
@@ -78,6 +79,11 @@
               final.git
             ];
             text = ''
+              REPO_ROOT="$(git rev-parse --show-toplevel)"
+              BRANCH="$(git branch --show-current)"
+              # TODO: NAME should be derived from repo and branch name and
+              # should also support git worktrees
+              NAME="testing"
               # Parse command line arguments
               CONFIG=""
               FLAKE=""
@@ -87,7 +93,7 @@
               MEMORY_SIZE=4
               CORES=2
               DISK_SIZE=4
-              DISK_IMAGE="$HOME/.local/share/agent-vm/disk.qcow2"
+              DISK_IMAGE="$HOME/.local/share/agent-vm/$NAME.qcow2"
 
               # Show usage
               usage() {
@@ -100,10 +106,11 @@
                 echo "  --port PORT        Port for the VM (default: $PORT)"
                 echo "  --workspace PATH   Workspace directory (default: current directory)"
                 echo "  --memory SIZE      VM memory size in GB (default: $MEMORY_SIZE)"
-                echo "  --cores NUM        Number of CPU cores (default: $CORES)"
-                echo "  --disk SIZE        VM disk size in GB (default: $DISK_SIZE)"
-                echo "  --disk-image FILE  VM disk size image filename (default: $DISK_IMAGE)"
-                echo "  -h, --help         Show this help message"
+                echo "  --cores NUM           Number of CPU cores (default: $CORES)"
+                echo "  --disk SIZE           VM disk size in GB (default: $DISK_SIZE)"
+                echo "  --disk-image FILE     VM disk size image filename (default: $DISK_IMAGE)"
+                echo "  --serial-socket PATH  Path to the serial console socket"
+                echo "  -h, --help            Show this help message"
                 exit 0
               }
 
@@ -158,8 +165,6 @@
 
               # If FLAKE is not provided, use the current git repo
               if [ "$FLAKE" == "" ]; then
-                REPO_ROOT="$(git rev-parse --show-toplevel)"
-                BRANCH="$(git branch --show-current)"
                 FLAKE="git+file://$REPO_ROOT?ref=$BRANCH"
               fi
 
@@ -171,18 +176,19 @@
               exec nix run --impure --show-trace --expr "
                 let self = builtins.getFlake \"${self}\";
                     mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mods).config.system.build.vmWithVirtioFS;
+                    lib = self.legacyPackages.$SYSTEM.lib;
                 in mkVM
                     [$CONFIG
                       { agent-vm = {
-                          shellEnv=\"$SHELLENV\";
-                          port=$PORT;
-                          memorySize=1024 * $MEMORY_SIZE;
-                          diskSize=1024 * $DISK_SIZE;
-                          diskImage=\"$DISK_IMAGE\";
-                          cores=$CORES;
-                          uid=$(id -u);
-                          group=\"$(id -n -g)\";
-                          workspace=\"$WORKSPACE\";
+                          shellEnv= lib.mkDefault \"$SHELLENV\";
+                          port= lib.mkDefault $PORT;
+                          memorySize= lib.mkDefault $MEMORY_SIZE;
+                          diskSize= lib.mkDefault $DISK_SIZE;
+                          diskImage= lib.mkDefault \"$DISK_IMAGE\";
+                          cores= lib.mkDefault $CORES;
+                          uid= lib.mkDefault $(id -u);
+                          group= lib.mkDefault \"$(id -n -g)\";
+                          workspace= lib.mkDefault \"$WORKSPACE\";
                         };
                       }
                     ]
@@ -230,12 +236,7 @@
         (import ./nix/overlay.nix inputs)
       ];
     in
-    {
-      nixosConfigurations = {
-        agent-vm = self.lib.x86_64-linux.mk-agent-vm [ ./nix/vm-config.nix ];
-      };
-    }
-    // flake-utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachDefaultSystem (
       system:
       let
         # traceShowId = x: builtins.trace "Debug: ${toString x}" x;
@@ -273,13 +274,26 @@
 
         # Apps for running the agent
         apps = rec {
-          # Haskell agent-vm app (new implementation)
+          # Haskell agent-vm app
           agent-vm = flake-utils.lib.mkApp {
-            drv = pkgs.agent-vm-sh;
-
+            drv = pkgs.writeShellApplication {
+              name = "agent-vm";
+              runtimeInputs = [
+                pkgs.nix
+                pkgs.git
+                pkgs.agent-vm
+              ];
+              text = ''
+                exec agent-vm "$@"
+              '';
+            };
           };
 
-          # Haskell integration test stub (to be implemented)
+          agent-vm-sh = flake-utils.lib.mkApp {
+            drv = pkgs.agent-vm-sh;
+          };
+
+          # Haskell integration test
           integration-test = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "integration-test";

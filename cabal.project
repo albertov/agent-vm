@@ -1,4 +1,6 @@
 write-ghc-environment-files: never
+index-state: 2025-06-09T20:31:03Z
+multi-repl: true
 packages:
   ./.
 tests: True

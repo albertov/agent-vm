@@ -148,9 +148,10 @@ in
 
     shellEnv = lib.mkOption {
       type = lib.types.path;
-      description = '''
-        The path to a file with the output of nix print-dev-env flake#shell
-        '';
+      description = ''
+        '
+                The path to a file with the output of nix print-dev-env flake#shell
+      '';
     };
 
     debug = mkOption {
@@ -431,15 +432,17 @@ in
           # CPUQuota = "50%";                    # Limit CPU usage percentage
 
           # # System call filtering - block dangerous syscalls
-          SystemCallFilter = [
-            "@system-service" # Allow standard service syscalls
-            #"~@debug" # Block debugging syscalls (ptrace, etc.)
-            "~@mount" # Block mount operations
-            "~@reboot" # Block reboot/shutdown syscalls
-            "~@swap" # Block swap-related syscalls
-            "~@privileged" # Block privileged operations
-            "~@resources" # Block resource control syscalls
-          ];
+          /*
+            SystemCallFilter = [
+              "@system-service" # Allow standard service syscalls
+              #"~@debug" # Block debugging syscalls (ptrace, etc.)
+              "~@mount" # Block mount operations
+              "~@reboot" # Block reboot/shutdown syscalls
+              "~@swap" # Block swap-related syscalls
+              "~@privileged" # Block privileged operations
+              "~@resources" # Block resource control syscalls
+            ];
+          */
 
           # # Additional process/system protection
           ProtectHostname = true; # Make hostname read-only

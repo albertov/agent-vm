@@ -9,13 +9,14 @@ where
 
 import AgentVM.Log (AgentVmTrace)
 import Plow.Logging (IOTracer)
-import Protolude (Generic)
+import Protolude (FilePath, Generic)
 
 -- | Environment for agent VM operations
 {-# ANN AgentVmEnv "HLint: ignore Use newtype instead of data" #-}
 
 data AgentVmEnv = AgentVmEnv
-  { tracer :: IOTracer AgentVmTrace
-  -- Add more fields as needed
+  { tracer :: IOTracer AgentVmTrace,
+    stateDir :: FilePath
+    -- Add more fields as needed
   }
   deriving (Generic)

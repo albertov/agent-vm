@@ -4,6 +4,9 @@
   lib,
   ...
 }:
+let
+  cfg = config.agent-vm;
+in
 {
   imports = [
     ./mcp-proxy.nix
@@ -20,8 +23,8 @@
 
       memorySize = lib.mkOption {
         type = lib.types.int;
-        default = 1024 * 4;
-        description = "VM memory size in MB";
+        default = 4;
+        description = "VM memory size in GB";
       };
 
       cores = lib.mkOption {
@@ -32,8 +35,8 @@
 
       diskSize = lib.mkOption {
         type = lib.types.int;
-        default = 1024 * 32;
-        description = "VM disk size in MB";
+        default = 32;
+        description = "VM disk size in GB";
       };
 
       diskImage = lib.mkOption {
@@ -51,6 +54,12 @@
       workspace = lib.mkOption {
         type = lib.types.str;
         description = "Source path for workspace shared directory";
+      };
+
+      serialSocket = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Path to the serial console socket";
       };
 
       port = lib.mkOption {
@@ -88,42 +97,42 @@
 
       shellEnv = lib.mkOption {
         type = lib.types.path;
-        default = lib.extractShellEnv {
-          inherit (config.agent-vm) flake shell;
-        };
-        description = '''
+        description = ''
           The path to a file with the output of nix print-dev-env flake#shell
-          '';
-      };
-      shell = lib.mkOption {
-        type = lib.types.str;
-        default = "default";
-      };
-      flake = lib.mkOption {
-        type = lib.types.unspecified;
+        '';
       };
     };
   };
   config = {
     services.qemuGuest.enable = true;
-    boot.tmp.useTmpfs = config.agent-vm.tmpfs;
+    boot.tmp.useTmpfs = cfg.tmpfs;
+
+    systemd.services."serial-getty@ttyS0" = {
+      enable = true;
+      serviceConfig = {
+        Restart = "always";
+      };
+    };
 
     # VM-specific configuration
     virtualisation = {
-      memorySize = config.agent-vm.memorySize;
-      cores = config.agent-vm.cores;
-      diskSize = config.agent-vm.diskSize;
-      diskImage = config.agent-vm.diskImage;
+      cores = cfg.cores;
+      memorySize = cfg.memorySize * 1024;
+      diskSize = cfg.diskSize * 1024;
+      diskImage = cfg.diskImage;
       graphics = false; # Headless for better performance
       mountHostNixStore = true;
-      additionalPaths = config.agent-vm.additionalPaths;
+      additionalPaths = cfg.additionalPaths;
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
+      qemu.options = lib.optional (
+        cfg.serialSocket != null
+      ) "-serial unix:${cfg.serialSocket},server,nowait";
 
       sharedDirectoriesVIO = {
         workspace = {
-          source = config.agent-vm.workspace;
+          source = cfg.workspace;
           target = "/var/lib/mcp-proxy/workspace";
         };
       };
@@ -131,7 +140,7 @@
       forwardPorts = [
         {
           from = "host";
-          host.port = config.agent-vm.port;
+          host.port = cfg.port;
           guest.port = config.services.mcp-proxy.port;
         } # MCP proxy
       ];
@@ -141,7 +150,7 @@
     # Firewall configuration
     networking.firewall.enable = true;
 
-    environment.systemPackages = config.agent-vm.systemPackages;
+    environment.systemPackages = cfg.systemPackages;
 
     # Security hardening
     security = {
@@ -173,29 +182,28 @@
       nix
       coreutils
     ];
-    system.activationScripts.mcp-proxy-env =
-      ''
-        MCP_HOME_DIR="${config.users.users.mcp-proxy.home}"
-        mkdir -p "$MCP_HOME_DIR"
-        cat > "$MCP_HOME_DIR"/.profile << 'EOF'
-        if [ -z "$MCP_SHELL_INIT" ]; then
-          export MCP_SHELL_INIT=YES
-          pushd ${config.users.users.mcp-proxy.home}/workspace
-          source ${config.agent-vm.shellEnv}
-          popd
-        fi
-        EOF
-      '';
+    system.activationScripts.mcp-proxy-env = ''
+      MCP_HOME_DIR="${config.users.users.mcp-proxy.home}"
+      mkdir -p "$MCP_HOME_DIR"
+      cat > "$MCP_HOME_DIR"/.profile << 'EOF'
+      if [ -z "$MCP_SHELL_INIT" ]; then
+        export MCP_SHELL_INIT=YES
+        pushd ${config.users.users.mcp-proxy.home}/workspace
+        source ${cfg.shellEnv}
+        popd
+      fi
+      EOF
+    '';
 
     services.mcp-proxy = {
       enable = true;
       openFirewall = true;
       host = "0.0.0.0";
       port = 8000;
-      uid = config.agent-vm.uid;
-      gid = config.agent-vm.gid;
-      group = config.agent-vm.group;
-      shellEnv = lib.mkDefault config.agent-vm.shellEnv;
+      uid = cfg.uid;
+      gid = cfg.gid;
+      group = cfg.group;
+      shellEnv = lib.mkDefault cfg.shellEnv;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;
         command = lib.mkDefault "codemcp";
