@@ -22,6 +22,7 @@ import AgentVM.Types
   ( VMConfig (..),
     VMError (CommandTimeout),
     vmConfigFile,
+    vmDiskImage,
     vmGCRoot,
     vmNixFile,
     vmSerialSocket,
@@ -39,6 +40,7 @@ import System.Directory
     doesFileExist,
   )
 import System.Environment (lookupEnv)
+import System.FilePath (makeRelative, (</>))
 import UnliftIO (MonadUnliftIO, hClose, withSystemTempFile)
 
 -- | Calculate shell environment and save as gc-root
@@ -99,7 +101,11 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
            systemPackages = resolvePackages;
          }."$${name}" or lib.mkDefault;
 
-    in { shellEnv = $shellEnvPath; serialSocket = "$serialSocket"; }
+    in {
+      shellEnv = $shellEnvPath;
+      serialSocket = "$serialSocket";
+      diskImage = "$diskImage";
+    }
     // (builtins.mapAttrs mapAttr
          (builtins.removeAttrs
             (builtins.fromJSON (builtins.readFile $configPath))
@@ -108,8 +114,12 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
 |]
   where
     nixBaseConfigValue = maybe "" toS (nixBaseConfig vmConfig)
-    configPath = toS (vmConfigFile vmConfig)
+    configPath = toNixRelative vmConfigFile
     serialSocket = toS (vmSerialSocket vmConfig)
+    diskImage = toS (vmDiskImage vmConfig)
+
+    toNixRelative f =
+      toS ("." </> makeRelative (stateDir vmConfig) (f vmConfig))
 
 -- | Build the VM image and save gc-root
 buildVMImage ::
