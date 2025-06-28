@@ -1,12 +1,14 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | Main entry point for agent-vm CLI
 module Main (main) where
@@ -15,39 +17,63 @@ import AgentVM (loadVMConfig)
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Git (generateDefaultName)
-import AgentVM.Log (AgentVmTrace (..), LogLevel (..), renderTracedMessage, traceLevel)
+import AgentVM.Log
+  ( AgentVmTrace (..),
+    LogLevel (..),
+    MonadTrace,
+    renderTracedMessage,
+    trace,
+    traceLevel,
+  )
 import AgentVM.Monad (runVMT)
 import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile2)
 import qualified AgentVM.Types as Types
 import AgentVM.VMStatus (renderVMStatus)
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
+import Data.Generics.Product (HasType, typed)
 import Data.Text (split)
 import qualified Data.Text as T
-import Lens.Micro ((^.))
+import Lens.Micro.Mtl (view)
 import Options.Applicative
 import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
-import Protolude hiding (throwIO)
+import Protolude hiding (throwIO, trace)
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
-import UnliftIO (throwIO)
+import UnliftIO (MonadUnliftIO, throwIO)
 import UnliftIO.Directory (makeAbsolute)
 
--- | Set up async filtered logger based on global options
--- Verbose flag sets minimum level to Debug, Debug flag sets it to Trace
-withAsyncFilteredLogger :: GlobalOpts -> (IOTracer AgentVmTrace -> IO a) -> IO a
-withAsyncFilteredLogger globalOpts tracerAction = do
-  let minLevel = case (optDebug globalOpts, optVerbose globalOpts) of
-        (True, _) -> Trace -- Debug flag takes precedence
-        (False, True) -> Debug -- Verbose flag
-        (False, False) -> Info -- Default level
-  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    let filteredTracer :: forall m. (MonadIO m) => Tracer m AgentVmTrace
-        filteredTracer = filterTracer (\traceEvent -> traceLevel traceEvent >= minLevel) $
-          Tracer $ \traceEvent -> do
-            let IOTracer (Tracer textTracerFunc) = asyncTracer
-            textTracerFunc (renderTracedMessage traceEvent)
-    tracerAction (IOTracer filteredTracer)
+main :: IO ()
+main = do
+  (globalOpts, cmd) <- execParser opts
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let mkEnv vmConfig = AgentVmEnv {tracer, vmConfig}
+    case cmd of
+      Create createConfig -> flip runVMT handleCreate . mkEnv =<< createConfigToVMConfig globalOpts createConfig
+      Update updateConfig -> flip runVMT handleUpdate . mkEnv =<< updateConfigToVMConfig globalOpts updateConfig
+      Start maybeVmName -> flip runVMT handleStart . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      Stop maybeVmName -> flip runVMT handleStop . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      Status maybeVmName -> flip runVMT handleStatus . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      Shell maybeVmName -> flip runVMT handleShell . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      _ -> do
+        traceWith tracer $ MainError ("Haskell agent-vm: " <> show cmd <> " (not yet implemented)")
+        exitFailure
+  where
+    opts =
+      info
+        (parseArgs <**> helper)
+        ( fullDesc
+            <> progDesc "VM control command for managing development VMs"
+            <> header "agent-vm - Agent sandbox VM lifecycle management"
+        )
+    loadVMConfig' tracer globalOpts maybeVmName = do
+      vmName <- getVmName maybeVmName
+      vmConfigFile2 (optStateDir globalOpts) vmName >>= loadVMConfig >>= \case
+        Just vmConfig -> pure vmConfig
+        Nothing -> do
+          let msg = "Could not find config for " <> vmName
+          traceWith tracer $ MainError msg
+          throwIO $ ConfigError msg
 
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath,
@@ -118,7 +144,7 @@ parseArgs = (,) <$> globalOpts <*> commandParser
             <> command "stop" (info (Stop <$> optional nameOption) (progDesc "Stop VM"))
             <> command "status" (info (Status <$> optional nameOption) (progDesc "Show VM status"))
             <> command "list" (info (pure List) (progDesc "List all VMs"))
-            <> command "reset" (info (Reset <$> optional nameOption) (progDesc "Delete the VM hard disk clearing all persistent state (except workspace)"))
+            <> command "reset" (info (Reset <$> optional nameOption) (progDesc "Delete the VM hard disk which holds all persistent state (except workspace)"))
             <> command "destroy" (info (Destroy <$> optional nameOption) (progDesc "Destroy VM"))
             <> command "shell" (info (Shell <$> optional nameOption) (progDesc "Connect to VM shell via serial console"))
         )
@@ -322,6 +348,130 @@ createConfigToVMConfig globalOpts createConfig = do
         nixBaseConfig
       }
 
+type MonadVmCli m r =
+  ( MonadVM m,
+    MonadUnliftIO m,
+    MonadReader r m,
+    HasType VMConfig r,
+    MonadTrace AgentVmTrace m
+  )
+
+-- | Handle the create command
+handleCreate :: (MonadVmCli m r) => m ()
+handleCreate = do
+  -- Run the VM create operation
+  result <- create =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to create VM: " <> show err)
+      exitFailure'
+    Right () -> do
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("Successfully created VM: " <> name')
+      exitSuccess'
+
+-- | Handle the update command
+handleUpdate :: (MonadVmCli m r) => m ()
+handleUpdate = do
+  -- Run the VM update operation
+  result <- update =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to update VM: " <> show err)
+      exitFailure'
+    Right () -> do
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("Successfully updated VM: " <> name')
+      exitSuccess'
+
+-- | Handle the start command
+handleStart :: (MonadVmCli m r) => m ()
+handleStart = do
+  result <- start =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to start VM: " <> show err)
+      exitFailure'
+    Right () -> do
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("Successfully started VM: " <> name')
+      exitSuccess'
+
+-- | Handle the stop command
+handleStop :: (MonadVmCli m r) => m ()
+handleStop = do
+  result <- stop =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to stop VM: " <> show err)
+      exitFailure'
+    Right () -> do
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("Successfully stopped VM: " <> name')
+      exitSuccess'
+
+-- | Handle the status command
+handleStatus :: (MonadVmCli m r) => m ()
+handleStatus = do
+  result <- status =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to get VM status: " <> toS (show err :: [Char]))
+      exitFailure'
+    Right vmState -> do
+      -- Display basic VM state
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("VM " <> name' <> " is " <> showVMState vmState)
+
+      -- Display detailed status information when running
+      case vmState of
+        Running vmStatus -> do
+          let statusLines = renderVMStatus vmStatus
+          mapM_ (trace . MainInfo) statusLines
+        _ -> pure ()
+      exitSuccess'
+
+-- | Handle the shell command
+handleShell :: (MonadVmCli m r) => m ()
+handleShell = do
+  -- Run the VM shell connection operation
+  result <- shell =<< view typed
+  case result of
+    Left err -> do
+      trace $ MainError ("Failed to connect to shell: " <> show err)
+      exitFailure'
+    Right () -> do
+      name' <- view (typed @VMConfig . #name)
+      trace $ MainInfo ("Shell session ended for VM: " <> name')
+      exitSuccess'
+
+getVmName :: Maybe Text -> IO Text
+getVmName = maybe (generateDefaultName =<< getCurrentDirectory) pure
+
+-- | Show VMState as text
+showVMState :: VMState -> Text
+showVMState Stopped = "stopped"
+showVMState Starting = "starting"
+showVMState (Running _) = "running"
+showVMState Stopping = "stopping"
+showVMState Failed = "failed"
+
+-- | Set up async filtered logger based on global options
+-- Verbose flag sets minimum level to Debug, Debug flag sets it to Trace
+withAsyncFilteredLogger :: GlobalOpts -> (IOTracer AgentVmTrace -> IO a) -> IO a
+withAsyncFilteredLogger globalOpts tracerAction = do
+  let minLevel = case (optDebug globalOpts, optVerbose globalOpts) of
+        (True, _) -> Trace -- Debug flag takes precedence
+        (False, True) -> Debug -- Verbose flag
+        (False, False) -> Info -- Default level
+  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
+    let filteredTracer :: forall m. (MonadIO m) => Tracer m AgentVmTrace
+        filteredTracer = filterTracer (\traceEvent -> traceLevel traceEvent >= minLevel) $
+          Tracer $ \traceEvent -> do
+            let IOTracer (Tracer textTracerFunc) = asyncTracer
+            textTracerFunc (renderTracedMessage traceEvent)
+    tracerAction (IOTracer filteredTracer)
+
 sanitizeFlake :: Text -> IO Text
 sanitizeFlake flake
   | dir : _ <- T.splitOn "#" flake = makeAbsoluteIfDirectory dir
@@ -333,205 +483,12 @@ sanitizeFlake flake
         True -> toS <$> makeAbsolute dir
         False -> pure flake
 
--- | Handle the create command
-handleCreate :: GlobalOpts -> CreateConfig -> IO ()
-handleCreate globalOpts createConfig = do
-  vmConfig <- createConfigToVMConfig globalOpts createConfig
+exitSuccess' :: (MonadIO m) => m ()
+exitSuccess' = liftIO $ do
+  delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
+  exitSuccess
 
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, vmConfig}
-
-    -- Run the VM create operation
-    result <- runVMT env (create vmConfig)
-    case result of
-      Left err -> do
-        traceWith tracer $ MainError ("Failed to create VM: " <> toS (show err :: [Char]))
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitFailure
-      Right () -> do
-        traceWith tracer $ MainInfo ("Successfully created VM: " <> name vmConfig)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitSuccess
-
--- | Handle the update command
-handleUpdate :: GlobalOpts -> CreateConfig -> IO ()
-handleUpdate globalOpts updateConfig = do
-  vmConfig <- updateConfigToVMConfig globalOpts updateConfig
-
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, vmConfig}
-
-    -- Run the VM update operation
-    result <- runVMT env (update vmConfig)
-    case result of
-      Left err -> do
-        traceWith tracer $ MainError ("Failed to update VM: " <> toS (show err :: [Char]))
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitFailure
-      Right () -> do
-        traceWith tracer $ MainInfo ("Successfully updated VM: " <> name vmConfig)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitSuccess
-
--- | Handle the start command
-handleStart :: GlobalOpts -> Maybe Text -> IO ()
-handleStart globalOpts maybeVmName = do
-  case maybeVmName of
-    Nothing -> do
-      -- No VM name provided, try to infer from current directory
-      currentDir <- getCurrentDirectory
-      vmName <- generateDefaultName currentDir
-      startVmWithName globalOpts vmName
-    Just vmName -> startVmWithName globalOpts vmName
-
--- | Start VM with given name
-startVmWithName :: GlobalOpts -> Text -> IO ()
-startVmWithName globalOpts vmName =
-  withAgentVmEnv globalOpts vmName $ \env -> do
-    -- Run the VM start operation
-    result <- runVMT env (start (env ^. #vmConfig))
-    case result of
-      Left err -> do
-        traceWith (tracer env) $ MainError ("Failed to start VM: " <> show err)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitFailure
-      Right () -> do
-        traceWith (tracer env) $ MainInfo ("Successfully started VM: " <> vmName)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitSuccess
-
--- | Handle the stop command
-handleStop :: GlobalOpts -> Maybe Text -> IO ()
-handleStop globalOpts maybeVmName = do
-  case maybeVmName of
-    Nothing -> do
-      -- No VM name provided, try to infer from current directory
-      currentDir <- getCurrentDirectory
-      vmName <- generateDefaultName currentDir
-      stopVmWithName globalOpts vmName
-    Just vmName -> stopVmWithName globalOpts vmName
-
--- | Stop VM with given name
-stopVmWithName :: GlobalOpts -> Text -> IO ()
-stopVmWithName globalOpts vmName =
-  withAgentVmEnv globalOpts vmName $ \env -> do
-    -- Run the VM stop operation
-    result <- runVMT env (stop (env ^. #vmConfig))
-    case result of
-      Left err -> do
-        traceWith (tracer env) $ MainError ("Failed to stop VM: " <> show err)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitFailure
-      Right () -> do
-        traceWith (tracer env) $ MainInfo ("Successfully stopped VM: " <> vmName)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitSuccess
-
--- | Handle the status command
-handleStatus :: GlobalOpts -> Maybe Text -> IO ()
-handleStatus globalOpts maybeVmName = do
-  case maybeVmName of
-    Nothing -> do
-      -- No VM name provided, try to infer from current directory
-      currentDir <- getCurrentDirectory
-      vmName <- generateDefaultName currentDir
-      statusVmWithName globalOpts vmName
-    Just vmName -> statusVmWithName globalOpts vmName
-
--- | Get detailed status for VM with given name
-statusVmWithName :: GlobalOpts -> Text -> IO ()
-statusVmWithName globalOpts vmName =
-  withAgentVmEnv globalOpts vmName $ \env -> do
-    -- Run the VM status operation
-    result <- runVMT env (status (env ^. #vmConfig))
-    case result of
-      Left err -> do
-        traceWith (tracer env) $ MainError ("Failed to get VM status: " <> toS (show err :: [Char]))
-        delay 1_000_000
-        exitFailure
-      Right vmState -> do
-        -- Display basic VM state
-        traceWith (tracer env) $ MainInfo ("VM " <> vmName <> " is " <> showVMState vmState)
-
-        -- Display detailed status information when running
-        case vmState of
-          Running vmStatus -> do
-            let statusLines = renderVMStatus vmStatus
-            mapM_ (traceWith (tracer env) . MainInfo) statusLines
-          _ -> pure ()
-
-        delay 1_000_000
-        exitSuccess
-
--- | Show VMState as text
-showVMState :: VMState -> Text
-showVMState Stopped = "stopped"
-showVMState Starting = "starting"
-showVMState (Running _) = "running"
-showVMState Stopping = "stopping"
-showVMState Failed = "failed"
-
--- | Handle the shell command
-handleShell :: GlobalOpts -> Maybe Text -> IO ()
-handleShell globalOpts maybeVmName = do
-  case maybeVmName of
-    Nothing -> do
-      -- No VM name provided, try to infer from current directory
-      currentDir <- getCurrentDirectory
-      vmName <- generateDefaultName currentDir
-      connectWithShell globalOpts vmName
-    Just vmName -> connectWithShell globalOpts vmName
-
--- | Connect to VM shell using the library function
-connectWithShell :: GlobalOpts -> Text -> IO ()
-connectWithShell globalOpts vmName =
-  withAgentVmEnv globalOpts vmName $ \env -> do
-    -- Run the VM shell connection operation
-    result <- runVMT env (shell (env ^. #vmConfig))
-    case result of
-      Left err -> do
-        traceWith (tracer env) $ MainError ("Failed to connect to shell: " <> show err)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitFailure
-      Right () -> do
-        traceWith (tracer env) $ MainInfo ("Shell session ended for VM: " <> vmName)
-        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
-        exitSuccess
-
-main :: IO ()
-main = do
-  (globalOpts, cmd) <- execParser opts
-  case cmd of
-    Create createConfig -> handleCreate globalOpts createConfig
-    Update updateConfig -> handleUpdate globalOpts updateConfig
-    Start maybeVmName -> handleStart globalOpts maybeVmName
-    Stop maybeVmName -> handleStop globalOpts maybeVmName
-    Status maybeVmName -> handleStatus globalOpts maybeVmName
-    Shell maybeVmName -> handleShell globalOpts maybeVmName
-    _ -> do
-      -- Set up async filtered logging for unimplemented commands
-      withAsyncFilteredLogger globalOpts $ \tracer -> do
-        -- For now, just demonstrate logging is working for other commands
-        traceWith tracer $ MainError ("Haskell agent-vm: " <> toS (show cmd :: [Char]) <> " (not yet implemented)")
-        exitFailure
-  where
-    opts =
-      info
-        (parseArgs <**> helper)
-        ( fullDesc
-            <> progDesc "VM control command for managing development VMs"
-            <> header "agent-vm - Type-safe VM lifecycle management"
-        )
-
-withAgentVmEnv :: GlobalOpts -> Text -> (AgentVmEnv -> IO a) -> IO a
-withAgentVmEnv globalOpts vmName fun =
-  withAsyncFilteredLogger globalOpts $ \tracer ->
-    vmConfigFile2 (optStateDir globalOpts) vmName >>= loadVMConfig >>= \case
-      Just vmConfig ->
-        fun AgentVmEnv {tracer, vmConfig}
-      Nothing -> do
-        let msg = "Could not find config for " <> vmName
-        traceWith tracer $ MainError msg
-        throwIO $ ConfigError msg
+exitFailure' :: (MonadIO m) => m ()
+exitFailure' = liftIO $ do
+  delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
+  exitFailure

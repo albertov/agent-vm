@@ -92,7 +92,7 @@ executable agent-vm
                     , directory
                     , unliftio
                     , unbounded-delays
-                    , microlens
+                    , microlens-mtl
                     , generic-lens
     hs-source-dirs:   app
     default-language: Haskell2010
