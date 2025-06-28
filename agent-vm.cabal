@@ -129,6 +129,7 @@ executable agent-vm-test
     other-modules:    AgentVM.NixSpec
                     , AgentVM.VMLifecycleSpec
                     , AgentVM.ResetDestroySpec
+                    , AgentVM.ShellEscapeKeySpec
     build-depends:    protolude
                     , agent-vm
                     , agent-vm:test-utils

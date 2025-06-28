@@ -98,7 +98,8 @@ data CreateConfig = CreateConfig
     createGroup :: Maybe Text,
     createShellName :: Maybe Text,
     createFlake :: Maybe Text,
-    createNixBaseConfig :: Maybe FilePath
+    createNixBaseConfig :: Maybe FilePath,
+    createShellEscapeKey :: Maybe Text
   }
   deriving (Show)
 
@@ -283,6 +284,13 @@ parseCreateConfig =
               <> short 'b'
           )
       )
+    <*> optional
+      ( strOption
+          ( long "shell-escape-key"
+              <> metavar "ESCAPE_KEY"
+              <> help "Shell escape key sequence (default: Ctrl-W)"
+          )
+      )
 
 -- | Convert CreateConfig to VMConfig for update, using existing config as defaults
 updateConfigToVMConfig :: GlobalOpts -> CreateConfig -> IO VMConfig
@@ -319,7 +327,8 @@ updateConfigToVMConfig globalOpts updateConfig = do
             shellName = fromMaybe (shellName existing) (createShellName updateConfig),
             flake,
             nixBaseConfig,
-            name = fromMaybe (name existing) (createName updateConfig)
+            name = fromMaybe (name existing) (createName updateConfig),
+            shellEscapeKey = fromMaybe (shellEscapeKey existing) (createShellEscapeKey updateConfig)
           }
 
 -- | Convert CreateConfig to VMConfig using defVMConfig for defaults
@@ -347,7 +356,8 @@ createConfigToVMConfig globalOpts createConfig = do
         Types.group = fromMaybe (Types.group defaults) (createGroup createConfig),
         shellName = fromMaybe (shellName defaults) (createShellName createConfig),
         flake,
-        nixBaseConfig
+        nixBaseConfig,
+        shellEscapeKey = fromMaybe (shellEscapeKey defaults) (createShellEscapeKey createConfig)
       }
 
 type MonadVmCli m r =

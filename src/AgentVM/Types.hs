@@ -90,7 +90,10 @@ data VMConfig = VMConfig
     -- VM lives in
     flake :: Text,
     nixBaseConfig :: Maybe FilePath,
-    stateDir :: FilePath
+    stateDir :: FilePath,
+    -- | Shell escape key sequence for exiting interactive shell sessions.
+    -- Defaults to "Ctrl-W"
+    shellEscapeKey :: Text
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -118,7 +121,8 @@ defVMConfig mStateDir name workspace = do
         shellName = "default",
         flake = ".",
         nixBaseConfig = Nothing,
-        stateDir = toS vmStateDir'
+        stateDir = toS vmStateDir',
+        shellEscapeKey = "Ctrl-W"
       }
 
 -- | Computes VM state dir from global statedir and VM name

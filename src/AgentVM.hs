@@ -158,7 +158,7 @@ startVM config = do
     liftIO $ throwIO $ VMNotFound scriptPath
 
   trace $ Log.ProcessSpawned (toS scriptPath) []
-  interactWith stdin stdout stderr $ Process scriptPath []
+  interactWith stdin stdout stderr (shellEscapeKey config) $ Process scriptPath []
 
 -- | Get the current state of a VM by checking its PID file
 getVMState ::
@@ -257,4 +257,4 @@ connectToVMShell config = do
     liftIO $ throwIO $ VMNotFound serialSocketPath
 
   trace $ Log.ProcessSpawned "socket-connection" [toS serialSocketPath]
-  interactWith stdin stdout stderr $ Socket serialSocketPath
+  interactWith stdin stdout stderr (shellEscapeKey config) $ Socket serialSocketPath
