@@ -111,14 +111,7 @@ vmSerialSocket config = stateDir config </> "serial.sock"
 
 -- | Errors that can occur during VM operations
 data VMError
-  = VMAlreadyExists FilePath
-  | VMNotFound FilePath
-  | VMInvalidState Text
-  | VMStartupTimeout
-  | VMShutdownTimeout
-  | NixBuildFailed Text
-  | NixStoreAddFailed Text
-  | PortAllocationFailed
+  = VMNotFound FilePath
   | WorkspaceError Text
   | CommandTimeout
   -- TODO: So the runVMT version can catch

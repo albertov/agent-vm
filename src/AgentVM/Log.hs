@@ -69,36 +69,16 @@ traceLevel :: AgentVmTrace -> LogLevel
 traceLevel traceEvent = case traceEvent of
   -- Critical events - system failures that need immediate attention
   VMFailed {} -> Critical
-  -- Error events - failures that should be investigated
-  ProcessTimeout {} -> Error
-  ProcessSigKilled {} -> Error
-  NixBuildFailed {} -> Error
   -- Info events - normal operational events
   VMCreated {} -> Info
   VMUpdated {} -> Info
-  VMStarted {} -> Info
-  VMStopped {} -> Info
   VMDestroyed {} -> Info
   VMConnectingShell {} -> Info
-  NixBuildCompleted {} -> Info
-  PortAllocated {} -> Info
   WorkspaceCreated {} -> Info
   -- Debug events - detailed operational info
   VMStarting {} -> Debug
-  VMStopping {} -> Debug
   ProcessSpawned {} -> Debug
-  ProcessExited {} -> Debug
-  ProcessStopped {} -> Debug
-  ProcessWaitingForExit {} -> Debug
-  ProcessIOWaiting {} -> Debug
-  ProcessGracefulStop {} -> Debug
   NixBuildStarted {} -> Debug
-  NixBuildProgress {} -> Debug
-  PortScanning {} -> Debug
-  PortReleased {} -> Debug
-  WorkspaceCloned {} -> Debug
-  WorkspaceSynced {} -> Debug
-  WorkspaceRemoved {} -> Debug
   MainInfo {} -> Info
   MainError {} -> Critical
 
@@ -110,35 +90,15 @@ data AgentVmTrace
     VMCreated VMConfig
   | VMUpdated VMConfig
   | VMStarting VMConfig
-  | VMStarted VMConfig Int
-  | VMStopping VMConfig
-  | VMStopped VMConfig
   | VMDestroyed VMConfig
   | VMFailed VMConfig Text
   | VMConnectingShell VMConfig
   | -- Process Management
     ProcessSpawned Text [Text]
-  | ProcessExited Text Int
-  | ProcessStopped Text -- Process gracefully stopped
-  | ProcessSigKilled Text Int -- Process force killed with signal
-  | ProcessTimeout Text Integer -- Process timed out after N microseconds
-  | ProcessWaitingForExit Text -- Waiting for process to exit
-  | ProcessIOWaiting Text -- Waiting for IO threads to complete
-  | ProcessGracefulStop Text Integer -- Attempting graceful stop with timeout
   | -- Nix Operations
     NixBuildStarted Text
-  | NixBuildProgress Text
-  | NixBuildCompleted FilePath
-  | NixBuildFailed Text
-  | -- Network Operations
-    PortScanning Int
-  | PortAllocated Int
-  | PortReleased Int
   | -- Workspace Operations
     WorkspaceCreated FilePath
-  | WorkspaceCloned Text FilePath
-  | WorkspaceSynced FilePath
-  | WorkspaceRemoved FilePath
   | -- Agent Service
     MainInfo Text
   | MainError Text
@@ -155,31 +115,12 @@ renderTrace = \case
   VMCreated c -> "🆕 Created VM at  " <> toS (stateDir c) <> " for " <> name c
   VMUpdated c -> "🔄 Updated VM configuration for " <> name c
   VMStarting c -> "⏳ Starting VM for " <> name c
-  VMStarted c p -> "🚀 Started VM for " <> name c <> " (PID: " <> T.pack (show p) <> ")"
-  VMStopping c -> "⏹️  Stopping VM for " <> name c
-  VMStopped c -> "🛑 Stopped VM for " <> name c
   VMDestroyed c -> "🗑️  Destroyed VM at " <> toS (stateDir c)
   VMFailed c r -> "❌ VM failed for " <> name c <> ": " <> r
   VMConnectingShell c -> "🐚 Connecting to shell for " <> name c
   ProcessSpawned c a -> "🔧 Spawned process: " <> c <> " " <> T.unwords a
-  ProcessExited c e -> "📤 Process exited: " <> c <> " (code: " <> T.pack (show e) <> ")"
-  ProcessStopped c -> "⏹️  Process stopped gracefully: " <> c
-  ProcessSigKilled c sig -> "🔪 Process force killed: " <> c <> " (signal: " <> T.pack (show sig) <> ")"
-  ProcessTimeout c timeoutVal -> "⏰ Process timed out: " <> c <> " (after: " <> T.pack (show timeoutVal) <> "μs)"
-  ProcessWaitingForExit c -> "⏳ Waiting for process exit: " <> c
-  ProcessIOWaiting c -> "📡 Waiting for IO threads: " <> c
-  ProcessGracefulStop c timeoutVal -> "🛑 Attempting graceful stop: " <> c <> " (timeout: " <> T.pack (show timeoutVal) <> "μs)"
   NixBuildStarted f -> "🔨 Building " <> f
-  NixBuildProgress m -> "📊 Build progress: " <> m
-  NixBuildCompleted p -> "✅ Built " <> T.pack p
-  AgentVM.Log.NixBuildFailed e -> "❌ Build failed: " <> e
-  PortScanning p -> "🔍 Scanning ports from " <> T.pack (show p)
-  PortAllocated p -> "🔌 Allocated port " <> T.pack (show p)
-  PortReleased p -> "🔓 Released port " <> T.pack (show p)
   WorkspaceCreated p -> "📁 Created workspace: " <> T.pack p
-  WorkspaceCloned o d -> "📋 Cloned " <> o <> " to " <> T.pack d
-  WorkspaceSynced p -> "🔄 Synced workspace: " <> T.pack p
-  WorkspaceRemoved p -> "🗑️  Removed workspace: " <> T.pack p
   MainInfo m -> "✅ " <> m
   MainError e -> "❌ " <> e
 

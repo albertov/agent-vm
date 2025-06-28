@@ -76,8 +76,8 @@ instance (MonadUnliftIO m) => MonadVM (VMT m) where
     try $ do
       trace (Log.VMStarting config)
       startVM config
-  stop _ = return (Left (VMInvalidState "stop not implemented"))
-  status _ = return (Left (VMInvalidState "status not implemented"))
+  stop _ = return (Left (WorkspaceError "stop not implemented"))
+  status _ = return (Left (WorkspaceError "status not implemented"))
 
   shell config = do
     try $ do

@@ -112,9 +112,6 @@ verbosity = "DEBUG"
 [commands.bash]
 command = ["bash"]
 
-[commands.test]
-command = ["nix", "--accept-flake-config", "flake", "check"]
-
 [commands.cabal_build]
 command = ["./run_cabal.sh", "build"]
 doc = "Runs cabal build"

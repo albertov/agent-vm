@@ -99,8 +99,7 @@ test-suite spec
     type:             exitcode-stdio-1.0
     main-is:          Spec.hs
     other-modules:
-                      AgentVM.NixSpec
-                    , AgentVM.StreamingProcessSpec
+                      AgentVM.StreamingProcessSpec
                     , AgentVM.StreamingSocketSpec
                     , Paths_agent_vm
     build-depends:    base
