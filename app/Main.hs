@@ -28,12 +28,14 @@ import AgentVM.Log
 import AgentVM.Monad (runVMT)
 import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile2)
 import qualified AgentVM.Types as Types
+import AgentVM.VMCache (addVMToCache, lookupVMByWorkspace)
 import AgentVM.VMStatus (renderVMStatus)
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
 import Data.Generics.Product (HasType, typed)
 import Data.Text (split)
 import qualified Data.Text as T
+import Lens.Micro ((^.))
 import Lens.Micro.Mtl (view)
 import Options.Applicative
 import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
@@ -69,9 +71,13 @@ main = do
             <> header "agent-vm - Agent sandbox VM lifecycle management"
         )
     loadVMConfig' tracer globalOpts maybeVmName = do
-      vmName <- getVmName maybeVmName
+      vmName <- getVmName globalOpts maybeVmName
       vmConfigFile2 (optStateDir globalOpts) vmName >>= loadVMConfig >>= \case
-        Just vmConfig -> pure vmConfig
+        Just vmConfig -> do
+          -- Update cache with this VM's info (handles existing VMs created before cache feature)
+          let workspace = vmConfig ^. #workspace
+          addVMToCache (optStateDir globalOpts) workspace vmName
+          pure vmConfig
         Nothing -> do
           let msg = "Could not find config for " <> vmName
           traceWith tracer $ MainError msg
@@ -505,8 +511,16 @@ handleDestroy = do
       trace $ MainInfo "Destroy cancelled"
       exitSuccess'
 
-getVmName :: Maybe Text -> IO Text
-getVmName = maybe (generateDefaultName =<< getCurrentDirectory) pure
+getVmName :: GlobalOpts -> Maybe Text -> IO Text
+getVmName globalOpts maybeVmName = case maybeVmName of
+  Just vmName -> pure vmName
+  Nothing -> do
+    -- Try to find VM name from cache using current workspace
+    workspaceDir <- getCurrentDirectory
+    cachedName <- lookupVMByWorkspace (optStateDir globalOpts) workspaceDir
+    case cachedName of
+      Just vmName -> pure vmName
+      Nothing -> generateDefaultName workspaceDir
 
 -- | Ask user for confirmation with a yes/no prompt
 askConfirmation :: Text -> IO Bool

@@ -8,10 +8,12 @@ import AgentVM (MonadVM (..), runVMT)
 import AgentVM.Env (AgentVmEnv)
 import AgentVM.TestUtils (withTestEnv)
 import AgentVM.Types (VMConfig (..), vmPidFile)
+import AgentVM.VMCache (lookupVMByWorkspace)
 import Data.Generics.Labels ()
 import Lens.Micro
 import Protolude hiding (bracket)
 import System.Directory (doesFileExist)
+import System.FilePath (takeDirectory)
 import Test.Hspec (Spec, around, describe, it, shouldBe, shouldSatisfy)
 import UnliftIO (catchAny)
 import UnliftIO.Exception (bracket)
@@ -76,6 +78,38 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       -- Try to stop with invalid PID
       stopResult <- liftIO $ runVMT env (stop vmConfig)
       stopResult `shouldSatisfy` isLeft
+
+  describe "VM Cache functionality" $ do
+    it "should populate cache when creating a VM" $ \(env, _) -> do
+      let vmConfig = env ^. #vmConfig
+
+      -- Create the VM
+      createResult <- liftIO $ runVMT env (create vmConfig)
+      createResult `shouldSatisfy` isRight
+
+      -- Check cache was populated
+      let workspacePath = vmConfig ^. #workspace
+          vmName = vmConfig ^. #name
+          stateDir' = takeDirectory (vmConfig ^. #stateDir)
+      cachedName <- liftIO $ lookupVMByWorkspace (Just stateDir') workspacePath
+      cachedName `shouldBe` Just vmName
+
+    it "should remove from cache when destroying a VM" $ \(env, _) -> do
+      let vmConfig = env ^. #vmConfig
+
+      -- Create the VM first
+      createResult <- liftIO $ runVMT env (create vmConfig)
+      createResult `shouldSatisfy` isRight
+
+      -- Destroy the VM
+      destroyResult <- liftIO $ runVMT env (destroy vmConfig)
+      destroyResult `shouldSatisfy` isRight
+
+      -- Check cache was cleared
+      let workspacePath = vmConfig ^. #workspace
+          stateDir' = takeDirectory (vmConfig ^. #stateDir)
+      cachedName <- liftIO $ lookupVMByWorkspace (Just stateDir') workspacePath
+      cachedName `shouldBe` Nothing
 
 -- | Start VM for testing (simplified - doesn't actually run the interactive process)
 startVMForTest :: AgentVmEnv -> VMConfig -> IO Bool

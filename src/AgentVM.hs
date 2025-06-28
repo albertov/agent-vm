@@ -44,6 +44,7 @@ import AgentVM.Nix
 import AgentVM.StreamingProcess (Process (..))
 import AgentVM.StreamingSocket (Socket (..))
 import AgentVM.Types
+import AgentVM.VMCache (addVMToCache, removeVMFromCache)
 import AgentVM.VMStatus (getDetailedVMStatus)
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
@@ -51,11 +52,19 @@ import qualified Data.Text as T
 import Lens.Micro
 import Protolude hiding (bracket, throwIO, trace, try, tryJust)
 import System.Directory (doesDirectoryExist, doesFileExist, removeDirectoryRecursive, removeFile)
+import System.FilePath (takeDirectory)
 import System.IO.Error (isDoesNotExistError)
 import System.Posix.Signals (sigKILL, sigTERM, signalProcess)
 import System.Posix.Types (ProcessID)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Exception (catchAny, throwIO, try, tryJust)
+
+-- | Extract global state directory from VM state directory
+-- e.g., "/home/user/.local/share/agent-vm/my-vm" -> Just "/home/user/.local/share/agent-vm"
+getGlobalStateDir :: VMConfig -> Maybe FilePath
+getGlobalStateDir config =
+  let vmStatePath = config ^. #stateDir
+   in Just $ takeDirectory vmStatePath
 
 -- | Instance of MonadVM for VMT IO
 instance (MonadUnliftIO m) => MonadVM (VMT m) where
@@ -67,11 +76,21 @@ instance (MonadUnliftIO m) => MonadVM (VMT m) where
         throwIO $
           WorkspaceError ("Directory already exists: " <> toS vmDirPath)
       buildVMImage config
+      -- Add VM to cache after successful creation
+      let workspacePath = config ^. #workspace
+          vmName = config ^. #name
+          globalStateDir = getGlobalStateDir config
+      addVMToCache globalStateDir workspacePath vmName
       trace (Log.VMCreated config)
 
   update config =
     try $ do
       buildVMImage config
+      -- Update VM in cache in case workspace changed
+      let workspacePath = config ^. #workspace
+          vmName = config ^. #name
+          globalStateDir = getGlobalStateDir config
+      addVMToCache globalStateDir workspacePath vmName
       trace (Log.VMUpdated config)
 
   destroy config =
@@ -117,6 +136,11 @@ destroyVM config = do
   case vmState of
     Running _ -> stopVM config
     _ -> pure ()
+
+  -- Remove VM from cache before removing files
+  let workspacePath = config ^. #workspace
+      globalStateDir = getGlobalStateDir config
+  removeVMFromCache globalStateDir workspacePath
 
   -- Remove the entire state directory
   let stateDir' = stateDir config
