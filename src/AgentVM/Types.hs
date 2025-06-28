@@ -21,6 +21,7 @@ module AgentVM.Types
     vmConfigFile,
     vmGCRoot,
     vmStartScript,
+    vmPidFile,
     VMError (..),
   )
 where
@@ -108,6 +109,10 @@ vmStartScript config = vmGCRoot config </> "bin" </> "run-" <> toS (name config)
 -- | Path to the serial console socket
 vmSerialSocket :: VMConfig -> FilePath
 vmSerialSocket config = stateDir config </> "serial.sock"
+
+-- | Path to the pid file
+vmPidFile :: VMConfig -> FilePath
+vmPidFile config = stateDir config </> "vm.pid"
 
 -- | Errors that can occur during VM operations
 data VMError

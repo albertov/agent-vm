@@ -64,7 +64,13 @@ in
       serialSocket = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Path to the serial console socket";
+        description = "Path to the serial console socket. If null console won't be on socket but on console";
+      };
+
+      pidFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Path to the pid file. If null qemu won't daemonize";
       };
 
       port = lib.mkOption {
@@ -115,7 +121,7 @@ in
 
     # Serial console on the serialSocket
     systemd.services."serial-getty@ttyS0" = {
-      enable = true;
+      enable = cfg.serialSocket != null;
       serviceConfig = {
         Restart = "always";
       };
@@ -133,9 +139,11 @@ in
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
-      qemu.options = lib.optional (
-        cfg.serialSocket != null
-      ) "-serial unix:${cfg.serialSocket},server,nowait";
+      qemu.options = (lib.optional (cfg.serialSocket != null)
+        "-serial unix:${cfg.serialSocket},server,nowait")
+        ++ (lib.optional (cfg.pidFile != null)
+        "-deamonize -pidfile ${cfg.pidFile}");
+
 
       sharedDirectoriesVIO = {
         workspace = {

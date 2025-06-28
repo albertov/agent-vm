@@ -22,6 +22,7 @@ import AgentVM.Types
   ( VMConfig (..),
     VMError (CommandTimeout),
     vmConfigFile,
+    vmPidFile,
     vmDiskImage,
     vmGCRoot,
     vmNixFile,
@@ -104,6 +105,7 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
     in {
       shellEnv = $shellEnvPath;
       serialSocket = "$serialSocket";
+      pidFile = "$pidFile";
       diskImage = "$diskImage";
     }
     // (builtins.mapAttrs mapAttr
@@ -116,6 +118,7 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
     nixBaseConfigValue = maybe "" toS (nixBaseConfig vmConfig)
     configPath = toNixRelative vmConfigFile
     serialSocket = toS (vmSerialSocket vmConfig)
+    pidFile = toS (vmPidFile vmConfig)
     diskImage = toS (vmDiskImage vmConfig)
 
     toNixRelative f =
