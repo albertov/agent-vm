@@ -3,7 +3,7 @@
 Agent VM is a comprehensive system for running MCP (Model Context Protocol) agents in secure, isolated QEMU virtual machines. It provides enhanced security through hardware virtualization while maintaining full development workflow compatibility.
 
 All VMs state is located in an user configurable `--state-dir` directory
-(defaults to `~/.local/share/agent-vms/<repo>/<branch>`)
+(defaults to `~/.local/share/agent-vms/<repo>-<branch>`)
 
 ## Key Benefits
 
@@ -102,11 +102,12 @@ agent-vm --debug create
 - `--port PORT` / `-p` - Port number
 - `--uid UID` / `-u` - User ID
 - `--gid GID` / `-g` - Group ID
-- `--group GROUP` / `-G` - Group name
-- `--shell SHELL` / `-s` - Shell name
+- `--group GROUP` / `-G` - Group name This is needed when the gid you want to
+  assign conflict with a gid inside the VM
 
 **Development Configuration:**
-- `--flake FLAKE` / `-F` - Flake path
+- `--flake FLAKE` / `-F` - Flake path (defaults to HEAD of current directory)
+- `--shell SHELL` / `-s` - Flake shell name attribute (defaults to default)
 - `--base PATH` / `-b` - Nix base configuration file path
 - `--system-packages PACKAGES` - System packages (comma-separated)
 - `--additional-paths PATHS` - Additional Nix paths (comma-separated)
