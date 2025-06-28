@@ -9,17 +9,16 @@
 module Main (main) where
 
 import AgentVM (MonadVM (..), loadVMConfig, runVMT)
-import AgentVM.Git (generateDefaultName, gitInit)
+import AgentVM.Git (generateDefaultName)
 import qualified AgentVM.NixSpec as NixSpec
 import qualified AgentVM.ResetDestroySpec as ResetDestroySpec
-import AgentVM.TestUtils (withTestEnv)
+import AgentVM.TestUtils (withGitWorkspaceTestEnv)
 import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile)
 import qualified AgentVM.VMLifecycleSpec as VMLifecycleSpec
 import Data.Generics.Labels ()
 import Lens.Micro ((^.))
 import Protolude
 import qualified Shelly as Sh
-import System.Directory (createDirectoryIfMissing)
 import Test.Hspec
 
 main :: IO ()
@@ -30,8 +29,8 @@ spec = describe "Agent VM Integration Tests" $ do
   NixSpec.spec
   VMLifecycleSpec.spec
   ResetDestroySpec.spec
-  describe "VM Command Tests" $ around withTestEnv $ do
-    it "can show VM status" $ \(env, _) -> do
+  describe "VM Command Tests" $ do
+    around withGitWorkspaceTestEnv $ it "can show VM status" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       -- Create VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -44,7 +43,7 @@ spec = describe "Agent VM Integration Tests" $ do
         Right vmState -> vmState `shouldBe` Stopped
         Left _ -> panic "Status check failed"
 
-    it "can update VM configuration" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "can update VM configuration" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       -- Create VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -61,7 +60,7 @@ spec = describe "Agent VM Integration Tests" $ do
         Just cfg -> memorySize cfg `shouldBe` 8
         Nothing -> panic "Failed to reload config"
 
-    it "prevents duplicate VM creation for same name" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "prevents duplicate VM creation for same name" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       -- Create VM first
       createResult1 <- liftIO $ runVMT env (create vmConfig)
@@ -74,8 +73,8 @@ spec = describe "Agent VM Integration Tests" $ do
         Left (WorkspaceError _) -> pure () -- Expected error
         _ -> panic "Expected WorkspaceError for duplicate creation"
 
-  describe "VM State Management" $ around withTestEnv $ do
-    it "persists VM configuration across operations" $ \(env, _) -> do
+  describe "VM State Management" $ do
+    around withGitWorkspaceTestEnv $ it "persists VM configuration across operations" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       -- Create VM
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -85,16 +84,10 @@ spec = describe "Agent VM Integration Tests" $ do
       reloadedConfig <- liftIO $ loadVMConfig (vmConfigFile vmConfig)
       reloadedConfig `shouldBe` Just vmConfig
 
-    it "handles VM name inference from git repository" $ \(env, _) -> do
-      -- Set up a git repository with specific repo name and branch
+    around withGitWorkspaceTestEnv $ it "handles VM name inference from git repository" $ \(env, _) -> do
+      -- The workspace already has a git repository initialized by withGitWorkspaceTestEnv
       let vmConfig = env ^. #vmConfig
           workspaceDir = vmConfig ^. #workspace
-
-      -- Create workspace directory first
-      liftIO $ createDirectoryIfMissing True workspaceDir
-
-      -- Initialize git repository
-      liftIO $ gitInit workspaceDir
 
       -- Set up a fake remote with a specific repository name
       liftIO $ do

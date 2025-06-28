@@ -6,7 +6,7 @@ module AgentVM.VMLifecycleSpec (spec) where
 
 import AgentVM (MonadVM (..), runVMT)
 import AgentVM.Env (AgentVmEnv)
-import AgentVM.TestUtils (withTestEnv)
+import AgentVM.TestUtils (withGitWorkspaceTestEnv)
 import AgentVM.Types (VMConfig (..), vmPidFile)
 import AgentVM.VMCache (lookupVMByWorkspace)
 import Data.Generics.Labels ()
@@ -19,9 +19,9 @@ import UnliftIO (catchAny)
 import UnliftIO.Exception (bracket)
 
 spec :: Spec
-spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
+spec = describe "VM Lifecycle Integration Tests" $ do
   describe "VM Start/Stop with proper cleanup" $ do
-    it "can start and stop a VM with bracket pattern" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "can start and stop a VM with bracket pattern" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
@@ -55,7 +55,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
 
       result `shouldBe` True
 
-    it "stops VM when already stopped gracefully" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "stops VM when already stopped gracefully" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       -- Create the VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -65,7 +65,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       stopResult <- liftIO $ runVMT env (stop vmConfig)
       stopResult `shouldSatisfy` isLeft
 
-    it "handles invalid PID file gracefully" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "handles invalid PID file gracefully" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
@@ -80,7 +80,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       stopResult `shouldSatisfy` isLeft
 
   describe "VM Cache functionality" $ do
-    it "should populate cache when creating a VM" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "should populate cache when creating a VM" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM
@@ -94,7 +94,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       cachedName <- liftIO $ lookupVMByWorkspace (Just stateDir') workspacePath
       cachedName `shouldBe` Just vmName
 
-    it "should remove from cache when destroying a VM" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "should remove from cache when destroying a VM" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first

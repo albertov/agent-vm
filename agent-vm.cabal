@@ -81,6 +81,10 @@ library test-utils
                     , microlens
                     , generic-lens
                     , HUnit
+                    , directory
+                    , text
+                    , random
+                    , shelly
     hs-source-dirs:   test-utils
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude

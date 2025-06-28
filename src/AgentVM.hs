@@ -257,8 +257,9 @@ stopVM config = do
                       True -> delay 1_000 >> loop (n - 1)
                       False -> pure ()
               loop 50
-          liftIO $ handleJust (guard . isDoesNotExistError) (const (pure ())) $
-            removeFile pidFilePath
+          liftIO $
+            handleJust (guard . isDoesNotExistError) (const (pure ())) $
+              removeFile pidFilePath
           trace $ Log.VMStopped config
     Left _ -> do
       trace $ Log.VMFailed config ("VM PID file not found, VM may already be stopped: " <> toS pidFilePath)

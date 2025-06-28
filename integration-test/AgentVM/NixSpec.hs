@@ -5,7 +5,7 @@
 module AgentVM.NixSpec (spec) where
 
 import AgentVM (MonadVM (..), runVMT)
-import AgentVM.TestUtils (withTestEnv)
+import AgentVM.TestUtils (withGitWorkspaceTestEnv)
 import AgentVM.Types (vmGCRoot, vmNixFile)
 import Data.Generics.Labels ()
 import Lens.Micro
@@ -14,9 +14,9 @@ import System.Directory (doesDirectoryExist, doesFileExist)
 import Test.Hspec (Spec, around, describe, it, shouldBe, shouldSatisfy)
 
 spec :: Spec
-spec = describe "MonadVM Integration Tests" $ around withTestEnv $ do
+spec = describe "MonadVM Integration Tests" $ do
   describe "create" $ do
-    it "creates VM directory structure with all required files" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "creates VM directory structure with all required files" $ \(env, _) -> do
       -- Create test VM configuration
       let vmConfig = env ^. #vmConfig
           vmDir = vmConfig ^. #stateDir
@@ -39,7 +39,7 @@ spec = describe "MonadVM Integration Tests" $ around withTestEnv $ do
       gcRootExists <- liftIO $ doesDirectoryExist (vmGCRoot vmConfig)
       gcRootExists `shouldBe` True
 
-    it "fails when directory already exists" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "fails when directory already exists" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- First call should succeed

@@ -5,7 +5,7 @@
 module AgentVM.ResetDestroySpec (spec) where
 
 import AgentVM (MonadVM (..), runVMT)
-import AgentVM.TestUtils (withTestEnv)
+import AgentVM.TestUtils (withGitWorkspaceTestEnv)
 import AgentVM.Types (VMConfig (..), vmConfigFile, vmDiskImage)
 import Data.Generics.Labels ()
 import Lens.Micro
@@ -14,9 +14,9 @@ import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileE
 import Test.Hspec (Spec, around, describe, it, shouldBe, shouldSatisfy)
 
 spec :: Spec
-spec = describe "VM Reset and Destroy Integration Tests" $ around withTestEnv $ do
+spec = describe "VM Reset and Destroy Integration Tests" $ do
   describe "VM Reset" $ do
-    it "resets VM by deleting disk but keeping configuration" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "resets VM by deleting disk but keeping configuration" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
@@ -43,7 +43,7 @@ spec = describe "VM Reset and Destroy Integration Tests" $ around withTestEnv $ 
       configExistsAfter `shouldBe` True
       diskExistsAfter `shouldBe` False
 
-    it "handles reset when disk doesn't exist" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "handles reset when disk doesn't exist" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
@@ -60,7 +60,7 @@ spec = describe "VM Reset and Destroy Integration Tests" $ around withTestEnv $ 
       resetResult `shouldSatisfy` isRight
 
   describe "VM Destroy" $ do
-    it "destroys VM by removing entire state directory" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "destroys VM by removing entire state directory" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
@@ -86,7 +86,7 @@ spec = describe "VM Reset and Destroy Integration Tests" $ around withTestEnv $ 
       stateDirExistsAfter <- liftIO $ doesDirectoryExist stateDir'
       stateDirExistsAfter `shouldBe` False
 
-    it "handles destroy when state directory doesn't exist" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "handles destroy when state directory doesn't exist" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
       let stateDir' = stateDir vmConfig
 
@@ -99,7 +99,7 @@ spec = describe "VM Reset and Destroy Integration Tests" $ around withTestEnv $ 
       destroyResult `shouldSatisfy` isRight
 
   describe "Reset vs Destroy Comparison" $ do
-    it "demonstrates difference between reset and destroy" $ \(env, _) -> do
+    around withGitWorkspaceTestEnv $ it "demonstrates difference between reset and destroy" $ \(env, _) -> do
       let vmConfig = env ^. #vmConfig
 
       -- Create two identical VMs for comparison
