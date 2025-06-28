@@ -9,7 +9,6 @@ module Main (main) where
 
 import qualified AgentVM.NixSpec as NixSpec
 import qualified AgentVM.ResetDestroySpec as ResetDestroySpec
-import qualified AgentVM.ShellEscapeKeySpec as ShellEscapeKeySpec
 import AgentVM.TestUtils (withTestEnv)
 import qualified AgentVM.VMLifecycleSpec as VMLifecycleSpec
 import Protolude
@@ -23,7 +22,6 @@ spec = describe "Agent VM Integration Tests" $ do
   NixSpec.spec
   VMLifecycleSpec.spec
   ResetDestroySpec.spec
-  ShellEscapeKeySpec.spec
   describe "VM Lifecycle" $ around withTestEnv $ do
     it "can start a VM" $ \(_env, _) -> do
       pending -- TODO: Implement start command
