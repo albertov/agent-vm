@@ -19,10 +19,12 @@ module AgentVM.Types
     vmSerialSocket,
     vmNixFile,
     vmConfigFile,
+    vmConfigFile2,
     vmGCRoot,
     vmStartScript,
     vmPidFile,
     VMError (..),
+    getDefaultBaseStateDir,
   )
 where
 
@@ -62,9 +64,12 @@ data VMConfig = VMConfig
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+getDefaultBaseStateDir :: (MonadIO m) => m FilePath
+getDefaultBaseStateDir = (</> ".local/share/agent-vm") <$> liftIO getHomeDirectory
+
 defVMConfig :: (MonadIO m) => Maybe FilePath -> Text -> FilePath -> m VMConfig
 defVMConfig mStateDir name workspace = do
-  defaultBaseStateDir <- (</> ".local/share/agent-vm") <$> liftIO getHomeDirectory
+  vmStateDir' <- vmStateDir mStateDir name
   pure
     VMConfig
       { tmpfs = True,
@@ -82,8 +87,14 @@ defVMConfig mStateDir name workspace = do
         shellName = "default",
         flake = ".",
         nixBaseConfig = Nothing,
-        stateDir = fromMaybe defaultBaseStateDir mStateDir </> toS name
+        stateDir = toS vmStateDir'
       }
+
+-- | Computes VM state dir from global statedir and VM name
+vmStateDir :: (MonadIO m) => Maybe FilePath -> Text -> m FilePath
+vmStateDir mStateDir name = do
+  defaultBaseStateDir <- getDefaultBaseStateDir
+  pure $ fromMaybe defaultBaseStateDir mStateDir </> toS name
 
 -- | Derived path functions from VMConfig stateDir
 vmDiskImage :: VMConfig -> FilePath
@@ -96,6 +107,9 @@ vmNixFile config = stateDir config </> "vm.nix"
 -- | Path to config.json file
 vmConfigFile :: VMConfig -> FilePath
 vmConfigFile config = stateDir config </> "config.json"
+
+vmConfigFile2 :: (MonadIO m) => Maybe FilePath -> Text -> m FilePath
+vmConfigFile2 mStateDir = fmap (</> "config.json") . vmStateDir mStateDir
 
 -- | Path to gc-root symlink
 vmGCRoot :: VMConfig -> FilePath
@@ -117,6 +131,7 @@ vmPidFile config = stateDir config </> "vm.pid"
 -- | Errors that can occur during VM operations
 data VMError
   = VMNotFound FilePath
+  | ConfigError Text
   | WorkspaceError Text
   | CommandTimeout
   -- TODO: So the runVMT version can catch

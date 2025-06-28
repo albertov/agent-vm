@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -13,14 +14,15 @@ module Main (main) where
 import AgentVM (loadVMConfig)
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
-import qualified AgentVM.Env as Env
 import AgentVM.Log (AgentVmTrace (..), LogLevel (..), renderTracedMessage, traceLevel)
 import AgentVM.Monad (runVMT)
-import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile)
+import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile2)
 import qualified AgentVM.Types as Types
 import Control.Concurrent.Thread.Delay (delay)
+import Data.Generics.Labels ()
 import Data.Text (split)
 import qualified Data.Text as T
+import Lens.Micro ((^.))
 import Options.Applicative
 import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
@@ -319,18 +321,13 @@ updateConfigToVMConfig globalOpts updateConfig = do
     Just vmName -> pure vmName
     Nothing -> generateDefaultName workspaceDir
 
-  -- First create a temporary config to determine the correct paths
-  tempConfig <- Types.defVMConfig (optStateDir globalOpts) vmName (toS workspaceDir)
-
-  -- Now we can get the correct config file path
-  let configFilePath = vmConfigFile tempConfig
-
-  existingConfig <- loadVMConfig configFilePath
+  vmConfigFile' <- vmConfigFile2 (optStateDir globalOpts) vmName
+  existingConfig <- loadVMConfig vmConfigFile'
 
   case existingConfig of
     Nothing -> do
       -- No existing config, update should fail
-      throwIO $ WorkspaceError ("VM does not exist. Use 'create' to create a new VM: " <> toS configFilePath)
+      throwIO $ VMNotFound vmConfigFile'
     Just existing -> do
       nixBaseConfig <- mapM makeAbsolute (createNixBaseConfig updateConfig <|> nixBaseConfig existing)
       flake <- sanitizeFlake (fromMaybe (flake existing) (createFlake updateConfig))
@@ -400,7 +397,7 @@ handleCreate globalOpts createConfig = do
 
   -- Set up async filtered logging
   withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
+    let env = AgentVmEnv {tracer, vmConfig}
 
     -- Run the VM create operation
     result <- runVMT env (create vmConfig)
@@ -421,7 +418,7 @@ handleUpdate globalOpts updateConfig = do
 
   -- Set up async filtered logging
   withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
+    let env = AgentVmEnv {tracer, vmConfig}
 
     -- Run the VM update operation
     result <- runVMT env (update vmConfig)
@@ -448,22 +445,17 @@ handleStart globalOpts maybeVmName = do
 
 -- | Start VM with given name
 startVmWithName :: GlobalOpts -> Text -> IO ()
-startVmWithName globalOpts vmName = do
-  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
-
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
-
+startVmWithName globalOpts vmName =
+  withAgentVmEnv globalOpts vmName $ \env -> do
     -- Run the VM start operation
-    result <- runVMT env (start vmConfig)
+    result <- runVMT env (start (env ^. #vmConfig))
     case result of
       Left err -> do
-        traceWith tracer $ MainError ("Failed to start VM: " <> toS (show err :: [Char]))
+        traceWith (tracer env) $ MainError ("Failed to start VM: " <> show err)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith tracer $ MainInfo ("Successfully started VM: " <> name vmConfig)
+        traceWith (tracer env) $ MainInfo ("Successfully started VM: " <> vmName)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -480,22 +472,17 @@ handleStop globalOpts maybeVmName = do
 
 -- | Stop VM with given name
 stopVmWithName :: GlobalOpts -> Text -> IO ()
-stopVmWithName globalOpts vmName = do
-  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
-
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
-
+stopVmWithName globalOpts vmName =
+  withAgentVmEnv globalOpts vmName $ \env -> do
     -- Run the VM stop operation
-    result <- runVMT env (stop vmConfig)
+    result <- runVMT env (stop (env ^. #vmConfig))
     case result of
       Left err -> do
-        traceWith tracer $ MainError ("Failed to stop VM: " <> toS (show err :: [Char]))
+        traceWith (tracer env) $ MainError ("Failed to stop VM: " <> show err)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith tracer $ MainInfo ("Successfully stopped VM: " <> name vmConfig)
+        traceWith (tracer env) $ MainInfo ("Successfully stopped VM: " <> vmName)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -513,27 +500,22 @@ handleStatus globalOpts maybeVmName = do
 -- | Get detailed status for VM with given name
 statusVmWithName :: GlobalOpts -> Text -> IO ()
 statusVmWithName globalOpts vmName = do
-  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
-
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
-
+  withAgentVmEnv globalOpts vmName $ \env -> do
     -- Run the VM status operation
-    result <- runVMT env (status vmConfig)
+    result <- runVMT env (status (env ^. #vmConfig))
     case result of
       Left err -> do
-        traceWith tracer $ MainError ("Failed to get VM status: " <> toS (show err :: [Char]))
+        traceWith (tracer env) $ MainError ("Failed to get VM status: " <> toS (show err :: [Char]))
         delay 1_000_000
         exitFailure
       Right vmState -> do
         -- Display basic VM state
-        traceWith tracer $ MainInfo ("VM " <> name vmConfig <> " is " <> showVMState vmState)
+        traceWith (tracer env) $ MainInfo ("VM " <> vmName <> " is " <> showVMState vmState)
 
         -- Get detailed status information
         when (isRunning vmState) $ do
-          detailedStatus <- liftIO $ getDetailedVMStatus vmConfig
-          mapM_ (traceWith tracer . MainInfo) detailedStatus
+          detailedStatus <- liftIO $ getDetailedVMStatus (vmConfig env)
+          mapM_ (traceWith (tracer env) . MainInfo) detailedStatus
 
         delay 1_000_000
         exitSuccess
@@ -648,22 +630,17 @@ handleShell globalOpts maybeVmName = do
 
 -- | Connect to VM shell using the library function
 connectWithShell :: GlobalOpts -> Text -> IO ()
-connectWithShell globalOpts vmName = do
-  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
-
-  -- Set up async filtered logging
-  withAsyncFilteredLogger globalOpts $ \tracer -> do
-    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
-
+connectWithShell globalOpts vmName =
+  withAgentVmEnv globalOpts vmName $ \env -> do
     -- Run the VM shell connection operation
-    result <- runVMT env (shell vmConfig)
+    result <- runVMT env (shell (env ^. #vmConfig))
     case result of
       Left err -> do
-        traceWith tracer $ MainError ("Failed to connect to shell: " <> toS (show err :: [Char]))
+        traceWith (tracer env) $ MainError ("Failed to connect to shell: " <> show err)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith tracer $ MainInfo ("Shell session ended for VM: " <> name vmConfig)
+        traceWith (tracer env) $ MainInfo ("Shell session ended for VM: " <> vmName)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -691,3 +668,14 @@ main = do
             <> progDesc "VM control command for managing development VMs"
             <> header "agent-vm - Type-safe VM lifecycle management"
         )
+
+withAgentVmEnv :: GlobalOpts -> Text -> (AgentVmEnv -> IO a) -> IO a
+withAgentVmEnv globalOpts vmName fun =
+  withAsyncFilteredLogger globalOpts $ \tracer ->
+    vmConfigFile2 (optStateDir globalOpts) vmName >>= loadVMConfig >>= \case
+      Just vmConfig ->
+        fun AgentVmEnv {tracer, vmConfig}
+      Nothing -> do
+        let msg = "Could not find config for " <> vmName
+        traceWith tracer $ MainError msg
+        throwIO $ ConfigError msg

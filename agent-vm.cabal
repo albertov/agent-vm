@@ -70,6 +70,9 @@ library test-utils
                     , unliftio
                     , plow-log
                     , plow-log-async
+                    , filepath
+                    , microlens
+                    , generic-lens
     hs-source-dirs:   test-utils
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -88,6 +91,8 @@ executable agent-vm
                     , unliftio
                     , shelly
                     , unbounded-delays
+                    , microlens
+                    , generic-lens
     hs-source-dirs:   app
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -128,7 +133,6 @@ executable agent-vm-test
                     , directory
                     , generic-lens
                     , microlens
-                    , filepath
                     , unliftio
     hs-source-dirs:   integration-test
     default-language: Haskell2010

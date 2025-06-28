@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -13,10 +14,14 @@ where
 
 import AgentVM.Env (AgentVmEnv (..))
 import AgentVM.Log (AgentVmTrace, LogLevel (..), renderTracedMessage, traceLevel)
+import AgentVM.Types (defVMConfig)
+import Data.Generics.Labels ()
+import Lens.Micro ((.~))
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), filterTracer)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude
 import System.Environment (lookupEnv)
+import System.FilePath ((</>))
 import UnliftIO (MonadUnliftIO, withSystemTempDirectory)
 import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef)
 
@@ -51,4 +56,8 @@ withTestEnv fun = do
               textTracerFunc (renderTracedMessage traceEvent)
 
           tracer = IOTracer $ refTracer <> vmTracer
-      fun (AgentVmEnv {tracer, stateDir}, tracesRef)
+      vmConfig <-
+        defVMConfig (Just stateDir) "test" (stateDir </> "workspaceDir")
+          <&> #group
+            .~ "users" -- FIXME Un-hardcode, fetch from environment
+      fun (AgentVmEnv {tracer, vmConfig}, tracesRef)

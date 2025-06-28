@@ -7,12 +7,11 @@ module AgentVM.VMLifecycleSpec (spec) where
 import AgentVM (MonadVM (..), runVMT)
 import AgentVM.Env (AgentVmEnv)
 import AgentVM.TestUtils (withTestEnv)
-import AgentVM.Types (VMConfig (..), defVMConfig, vmPidFile)
+import AgentVM.Types (VMConfig (..), vmPidFile)
 import Data.Generics.Labels ()
 import Lens.Micro
 import Protolude hiding (bracket)
 import System.Directory (doesFileExist)
-import System.FilePath ((</>))
 import Test.Hspec (Spec, around, describe, it, shouldBe, shouldSatisfy)
 import UnliftIO (catchAny)
 import UnliftIO.Exception (bracket)
@@ -21,9 +20,7 @@ spec :: Spec
 spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
   describe "VM Start/Stop with proper cleanup" $ do
     it "can start and stop a VM with bracket pattern" $ \(env, _) -> do
-      -- Create test VM configuration
-      let envStateDir = env ^. #stateDir
-      vmConfig <- testVMConfig envStateDir (envStateDir </> "test-workspace-lifecycle")
+      let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -57,10 +54,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       result `shouldBe` True
 
     it "stops VM when already stopped gracefully" $ \(env, _) -> do
-      -- Create test VM configuration
-      let envStateDir = env ^. #stateDir
-      vmConfig <- testVMConfig envStateDir (envStateDir </> "test-workspace-stop-twice")
-
+      let vmConfig = env ^. #vmConfig
       -- Create the VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
       createResult `shouldSatisfy` isRight
@@ -70,9 +64,7 @@ spec = describe "VM Lifecycle Integration Tests" $ around withTestEnv $ do
       stopResult `shouldSatisfy` isLeft
 
     it "handles invalid PID file gracefully" $ \(env, _) -> do
-      -- Create test VM configuration
-      let envStateDir = env ^. #stateDir
-      vmConfig <- testVMConfig envStateDir (envStateDir </> "test-workspace-invalid-pid")
+      let vmConfig = env ^. #vmConfig
 
       -- Create the VM first
       createResult <- liftIO $ runVMT env (create vmConfig)
@@ -105,10 +97,3 @@ stopVMSafely env vmConfig _vmWasStarted = do
           Right _ -> pure ()
     )
     (\_ -> pure ()) -- Ignore all errors in cleanup
-
--- | Test helper: Create test VM configuration for integration tests
-testVMConfig :: (MonadIO m) => FilePath -> FilePath -> m VMConfig
-testVMConfig envStateDir workspaceDir =
-  defVMConfig (Just envStateDir) "test-vm-lifecycle" workspaceDir
-    <&> #group
-      .~ "users" -- FIXME Un-hardcode, fetch from environment
