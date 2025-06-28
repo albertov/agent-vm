@@ -93,7 +93,10 @@ data VMConfig = VMConfig
     stateDir :: FilePath,
     -- | Shell escape key sequence for exiting interactive shell sessions.
     -- Defaults to "Ctrl-W"
-    shellEscapeKey :: Text
+    shellEscapeKey :: Text,
+    -- | URL prefix for named servers in mcp-proxy.
+    -- Defaults to "/servers"
+    serverPrefix :: Text
   }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
@@ -122,7 +125,8 @@ defVMConfig mStateDir name workspace = do
         flake = ".",
         nixBaseConfig = Nothing,
         stateDir = toS vmStateDir',
-        shellEscapeKey = "Ctrl-W"
+        shellEscapeKey = "Ctrl-W",
+        serverPrefix = "/servers"
       }
 
 -- | Computes VM state dir from global statedir and VM name

@@ -86,11 +86,11 @@ let
             "--allow-origin"
             x
           ]) cfg.allowOrigins
+        )
         ++ optionals (cfg.serverPrefix != "/servers") [
           "--server-prefix"
           cfg.serverPrefix
         ]
-        )
         ++ flatten (
           mapAttrsToList (name: server: [
             "--named-server"

@@ -38,9 +38,6 @@ using existing dependencies when possible.
 errors. Do this after every edit that affects haskell code and fix errors before
 proceeding.
 
-## You MUST always run the 'format' command on every Haskell file after testing
-your edits and fix ALL the warnings and errors it reports.
-
 ## You MUST always use Generic deriving mechanisms for JSON/YAML
 serialization, never hand-code it.  Use DeriveAnyClass and
 DuplicateRecordFields for nice field names. Use OverloadedRecordDot extension to disambiguate types on record access

@@ -99,7 +99,8 @@ data CreateConfig = CreateConfig
     createShellName :: Maybe Text,
     createFlake :: Maybe Text,
     createNixBaseConfig :: Maybe FilePath,
-    createShellEscapeKey :: Maybe Text
+    createShellEscapeKey :: Maybe Text,
+    createServerPrefix :: Maybe Text
   }
   deriving (Show)
 
@@ -291,6 +292,13 @@ parseCreateConfig =
               <> help "Shell escape key sequence (default: Ctrl-W)"
           )
       )
+    <*> optional
+      ( strOption
+          ( long "server-prefix"
+              <> metavar "PREFIX"
+              <> help "URL prefix for named servers in mcp-proxy (default: /servers)"
+          )
+      )
 
 -- | Convert CreateConfig to VMConfig for update, using existing config as defaults
 updateConfigToVMConfig :: GlobalOpts -> CreateConfig -> IO VMConfig
@@ -328,7 +336,8 @@ updateConfigToVMConfig globalOpts updateConfig = do
             flake,
             nixBaseConfig,
             name = fromMaybe (name existing) (createName updateConfig),
-            shellEscapeKey = fromMaybe (shellEscapeKey existing) (createShellEscapeKey updateConfig)
+            shellEscapeKey = fromMaybe (shellEscapeKey existing) (createShellEscapeKey updateConfig),
+            serverPrefix = fromMaybe (serverPrefix existing) (createServerPrefix updateConfig)
           }
 
 -- | Convert CreateConfig to VMConfig using defVMConfig for defaults
@@ -357,7 +366,8 @@ createConfigToVMConfig globalOpts createConfig = do
         shellName = fromMaybe (shellName defaults) (createShellName createConfig),
         flake,
         nixBaseConfig,
-        shellEscapeKey = fromMaybe (shellEscapeKey defaults) (createShellEscapeKey createConfig)
+        shellEscapeKey = fromMaybe (shellEscapeKey defaults) (createShellEscapeKey createConfig),
+        serverPrefix = fromMaybe (serverPrefix defaults) (createServerPrefix createConfig)
       }
 
 type MonadVmCli m r =

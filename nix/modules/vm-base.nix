@@ -118,6 +118,12 @@ in
         default = "Ctrl-W";
         description = "The escape key sequence for exiting the VM shell console (e.g., Ctrl-W, Ctrl-A)";
       };
+
+      serverPrefix = lib.mkOption {
+        type = lib.types.str;
+        default = "/servers";
+        description = "URL prefix for named servers in mcp-proxy";
+      };
     };
   };
   config = {
@@ -225,6 +231,7 @@ in
       gid = cfg.gid;
       group = cfg.group;
       shellEnv = lib.mkDefault cfg.shellEnv;
+      serverPrefix = cfg.serverPrefix;
       namedServers.codemcp = {
         enabled = lib.mkDefault true;
         command = lib.mkDefault "codemcp";
