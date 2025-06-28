@@ -197,11 +197,12 @@ interactWith hStdin hStdout hStderr shellEscapeKey backend = do
               then return () -- EOF on stdin, exit gracefully
               else do
                 -- Check for escape sequence: configured escape key followed by 'x'
-                shouldExit <- handleEscapeSequence escapeMode input socket hStderr escapeKeyByte
-                unless shouldExit $ loop False
+                (shouldExit, nextEscapeMode) <- handleEscapeSequence escapeMode input socket hStderr escapeKeyByte
+                unless shouldExit $ loop nextEscapeMode
       loop False
 
     -- Handle escape sequence detection and normal input
+    -- Returns (shouldExit, nextEscapeMode)
     handleEscapeSequence escapeMode input socket hErr escapeKeyByte = do
       let inputList = BS.unpack input
       case (escapeMode, inputList) of
@@ -209,28 +210,28 @@ interactWith hStdin hStdout hStderr shellEscapeKey backend = do
         (True, 120 : _) -> do
           -- 'x' = 120
           hPutStrLn hErr "\r\nExiting..."
-          return True
+          return (True, False)
         (True, _) -> do
           -- Not 'x', send the escape key and current input
           writeBytes socket (BS.pack [escapeKeyByte])
           writeBytes socket input
-          return False
+          return (False, False)
         -- Check for configured escape key
-        (False, [keyByte]) | keyByte == escapeKeyByte -> return False -- Enter escape mode, don't send escape key yet
+        (False, [keyByte]) | keyByte == escapeKeyByte -> return (False, True) -- Enter escape mode, don't send escape key yet
         (False, keyByte : rest) | keyByte == escapeKeyByte -> do
           -- Escape key followed by other chars
           case rest of
             120 : _ -> do
               -- 'x'
               hPutStrLn hErr "\r\nExiting..."
-              return True
+              return (True, False)
             _ -> do
               writeBytes socket input
-              return False
+              return (False, False)
         (False, _) -> do
           -- Normal input, send as-is
           writeBytes socket input
-          return False
+          return (False, False)
 
     -- Output relay: socket -> stdout (exits on socket EOF)
     outputRelay hOut socket = do
