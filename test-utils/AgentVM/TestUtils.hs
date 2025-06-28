@@ -162,8 +162,6 @@ createBaseVMFixture fixturesDir = do
         "    vim",
         "    git",
         "  ];",
-        "",
-        "  services.openssh.enable = true;",
         "}"
       ]
   pure baseVmFile
