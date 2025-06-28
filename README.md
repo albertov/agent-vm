@@ -42,20 +42,20 @@ nix run .#agent-vm -- --help
 ### Basic Usage
 
 ```bash
-# Create a new VM configuration for current branch
+# Create a new VM configuration for current directory
 agent-vm create
 
-# Start the VM with agent services
+# Create VM for specific workspace directory
+agent-vm create /path/to/workspace
+
+# Start the VM
 agent-vm start
 
-# Check VM and agent status
+# Check VM status
 agent-vm status
 
-# Open SSH shell in the VM
+# Connect to VM shell via serial console
 agent-vm shell
-
-# View real-time agent service logs
-agent-vm logs
 
 # Stop the VM
 agent-vm stop
@@ -67,21 +67,49 @@ agent-vm destroy
 ### Advanced Usage
 
 ```bash
-# Create VM for specific branch and port
-agent-vm create --branch=feature-x --port=8001
+# Create VM with custom configuration
+agent-vm create --name=my-vm --memory-size=4 --cores=2 --port=8001
 
-# Use custom state directory for isolation
-agent-vm --state-dir ./test-vms create --branch=test
+# Create ephemeral VM (tmpfs root filesystem)
+agent-vm create --ephemeral --disk-size=10
+
+# Use custom state directory
+agent-vm --state-dir ./test-vms create
 
 # List all VM configurations
 agent-vm list
 
-# Restart VM services
-agent-vm restart
+# Update existing VM configuration
+agent-vm update --memory-size=8 --cores=4
 
-# Get detailed status with resource monitoring
-agent-vm status --verbose
+# Reset VM (delete hard disk, keep configuration)
+agent-vm reset
+
+# Enable verbose or debug logging
+agent-vm --verbose start
+agent-vm --debug create
 ```
+
+### VM Configuration Options
+
+**Resource Configuration:**
+- `--memory-size GB` / `-m` - Memory in GB
+- `--cores CORES` / `-c` - Number of CPU cores
+- `--disk-size GB` / `-S` - Disk size in GB
+- `--ephemeral` / `-e` - Use tmpfs for root filesystem
+
+**System Configuration:**
+- `--port PORT` / `-p` - Port number
+- `--uid UID` / `-u` - User ID
+- `--gid GID` / `-g` - Group ID
+- `--group GROUP` / `-G` - Group name
+- `--shell SHELL` / `-s` - Shell name
+
+**Development Configuration:**
+- `--flake FLAKE` / `-F` - Flake path
+- `--base PATH` / `-b` - Nix base configuration file path
+- `--system-packages PACKAGES` - System packages (comma-separated)
+- `--additional-paths PATHS` - Additional Nix paths (comma-separated)
 
 ## Architecture
 
@@ -115,44 +143,46 @@ agent-vm status --verbose
 
 ### VM Creation
 
-The `agent-vm create` command:
+The `agent-vm create [workspace]` command:
 
-1. **Configuration Setup**: Creates VM configuration directory in `~/.local/share/agent-vms/<repo>/<branch>/`
-3. **Workspace Clone**: Clones current repository branch to VM workspace using
-   git worktrees
-5. **Metadata Storage**: Saves VM configuration as a nix expression
+1. **Workspace Setup**: Uses current directory or specified workspace path
+2. **Name Generation**: Auto-generates VM name from git repository and branch (or uses `--name`)
+3. **Configuration Creation**: Creates VM configuration with specified or default settings
+4. **State Directory**: Creates VM state directory structure
+
+### VM Configuration Update
+
+The `agent-vm update [workspace]` command:
+
+1. **Configuration Loading**: Loads existing VM configuration
+2. **Settings Merge**: Merges CLI options with existing configuration (CLI takes precedence)
+3. **Configuration Update**: Updates VM configuration without removing disk image
 
 ### VM Startup
 
-The `agent-vm start` command:
+The `agent-vm start [--name VM_NAME]` command:
 
 1. **Configuration Validation**: Verifies VM configuration exists and is valid
 2. **VM Building**: Uses Nix to build VM with injected SSH keys and workspace paths
 3. **Process Launch**: Starts QEMU VM process with proper naming and resource allocation
 
-### Status Monitoring
+### VM Operations
 
-The `agent-vm status` command provides comprehensive monitoring:
+**Status Monitoring**: `agent-vm status [--name VM_NAME]`
+- VM process status and resource usage
+- Configuration details and health checks
 
-**VM Process Status**:
-- Process existence and PID tracking
-- Resource usage (CPU, memory, uptime)
-- QEMU process health monitoring
+**Shell Access**: `agent-vm shell [--name VM_NAME]`
+- Connects to VM via serial console
+- Auto-detects VM name if not specified
 
-**Agent Service Status**:
-- Systemd service state (active, failed, restarting)
-- Process ID and restart count tracking
-- Memory usage and performance metrics
+**VM Control**:
+- `agent-vm stop [--name VM_NAME]` - Stop running VM
+- `agent-vm reset [--name VM_NAME]` - Delete VM disk image (keeps configuration)
+- `agent-vm destroy [--name VM_NAME]` - Remove VM configuration completely
 
-**MCP Proxy Health**:
-- HTTP endpoint health checks
-- Response time measurement
-- Service availability verification
-
-**Workspace Status**:
-- Directory accessibility and permissions
-- Git repository status and cleanliness
-- Disk usage and workspace size
+**VM Listing**: `agent-vm list`
+- Shows all configured VMs and their status
 
 ## Configuration
 
@@ -162,21 +192,35 @@ The VM configuration defines:
 
 ### Agent Service (`services/mcp-proxy.nix`)
 
+### Global Options
+
+**Logging Control:**
+- `--verbose` / `-v` - Enable verbose logging (Debug level)
+- `--debug` / `-d` - Enable debug logging (Trace level)
+
+**State Management:**
+- `--state-dir DIR` - Override default state directory
+
+### VM Naming
+
+VMs are automatically named based on git repository and branch:
+- Repository name is extracted from git remote origin URL
+- Branch name is detected from current git branch
+- Final name format: `<repo-name>-<branch-name>` (with dashes converted to underscores)
+- Override with `--name` option for custom naming
+
 ### State Directory Structure
 
-VM configurations are stored in `~/.local/share/agent-vms/<repo>/<branch>/`:
+VM configurations are stored in `~/.local/share/agent-vms/<vm-name>/` (or custom `--state-dir`):
 
 ```
-~/.local/share/agent-vms/my-repo/
-├── main/
-│   ├── config.json          # VM metadata and configuration
-│   ├── ssh/
-│   │   ├── id_ed25519       # Private SSH key (600)
-│   │   └── id_ed25519.pub   # Public SSH key (644)
-│   ├── workspace/           # Git repository workspace
-│   └── vm.pid              # VM process ID (when running)
-└── feature-branch/
-    └── ...                  # Similar structure for other branches
+~/.local/share/agent-vms/my-repo-main/
+├── config.json          # VM metadata and configuration
+├── ssh/
+│   ├── id_ed25519       # Private SSH key (600)
+│   └── id_ed25519.pub   # Public SSH key (644)
+├── workspace/           # Git repository workspace
+└── vm.pid              # VM process ID (when running)
 ```
 
 ## Testing
