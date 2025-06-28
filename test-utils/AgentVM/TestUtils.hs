@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,6 +10,7 @@
 module AgentVM.TestUtils
   ( withTestEnv,
     parseLogLevel, -- Export for testing
+    eventually,
   )
 where
 
@@ -19,11 +21,13 @@ import Data.Generics.Labels ()
 import Lens.Micro ((.~))
 import Plow.Logging (IOTracer (IOTracer), Tracer (Tracer), filterTracer)
 import Plow.Logging.Async (withAsyncHandleTracer)
-import Protolude
+import Protolude hiding (Handler)
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
-import UnliftIO (MonadUnliftIO, withSystemTempDirectory)
+import Test.HUnit.Lang (HUnitFailure)
+import UnliftIO (Handler (Handler), MonadUnliftIO, withSystemTempDirectory)
 import UnliftIO.IORef (IORef, atomicModifyIORef', newIORef)
+import UnliftIO.Retry (fullJitterBackoff, limitRetriesByCumulativeDelay, recovering)
 
 -- | Parse LogLevel from string using Read instance
 parseLogLevel :: Text -> Maybe LogLevel
@@ -61,3 +65,13 @@ withTestEnv fun = do
           <&> #group
             .~ "users" -- FIXME Un-hardcode, fetch from environment
       fun (AgentVmEnv {tracer, vmConfig}, tracesRef)
+
+-- | Retry an assertion several times until a timeout expires
+eventually :: (MonadUnliftIO m) => m a -> m a
+eventually =
+  recovering
+    (limitRetriesByCumulativeDelay 30_000_000 (fullJitterBackoff 10))
+    [ const (Handler (\(_ :: HUnitFailure) -> pure True)),
+      const (Handler (\(_ :: SomeException) -> pure False))
+    ]
+    . const

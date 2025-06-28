@@ -74,11 +74,13 @@ library test-utils
                     , protolude
                     , agent-vm
                     , unliftio
+                    , retry
                     , plow-log
                     , plow-log-async
                     , filepath
                     , microlens
                     , generic-lens
+                    , HUnit
     hs-source-dirs:   test-utils
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude

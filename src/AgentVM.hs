@@ -50,14 +50,14 @@ import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
 import qualified Data.Text as T
 import Lens.Micro
-import Protolude hiding (bracket, throwIO, trace, try, tryJust)
+import Protolude hiding (bracket, handleJust, throwIO, trace, try, tryJust)
 import System.Directory (doesDirectoryExist, doesFileExist, removeDirectoryRecursive, removeFile)
 import System.FilePath (takeDirectory)
 import System.IO.Error (isDoesNotExistError)
 import System.Posix.Signals (sigKILL, sigTERM, signalProcess)
 import System.Posix.Types (ProcessID)
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Exception (catchAny, throwIO, try, tryJust)
+import UnliftIO.Exception (catchAny, handleJust, throwIO, try, tryJust)
 
 -- | Extract global state directory from VM state directory
 -- e.g., "/home/user/.local/share/agent-vm/my-vm" -> Just "/home/user/.local/share/agent-vm"
@@ -247,15 +247,17 @@ stopVM config = do
           liftIO $ throwIO $ WorkspaceError ("Invalid PID format in " <> toS pidFilePath)
         Just (pid :: ProcessID) -> do
           -- Try to terminate the process gracefully with SIGTERM
-          liftIO $ do
-            signalProcess sigTERM pid
-            let loop :: Int -> IO ()
-                loop 0 = signalProcess sigKILL pid
-                loop n = do
-                  isPidRunning pid >>= \case
-                    True -> delay 1_000 >> loop (n - 1)
-                    False -> pure ()
-            loop 50
+          handleJust (guard . isDoesNotExistError) (const (pure ())) $ do
+            liftIO $ do
+              signalProcess sigTERM pid
+              let loop :: Int -> IO ()
+                  loop 0 = signalProcess sigKILL pid
+                  loop n = do
+                    isPidRunning pid >>= \case
+                      True -> delay 1_000 >> loop (n - 1)
+                      False -> pure ()
+              loop 50
+          liftIO $ removeFile pidFilePath
           trace $ Log.VMStopped config
     Left _ -> do
       trace $ Log.VMFailed config ("VM PID file not found, VM may already be stopped: " <> toS pidFilePath)
