@@ -32,3 +32,6 @@ class (Monad m) => MonadVM m where
 
   -- | Update VM configuration (regenerate start script and nix config without removing qcow2)
   update :: VMConfig -> m (Either VMError ())
+
+  -- | Reset VM by deleting the disk image but keeping configuration
+  reset :: VMConfig -> m (Either VMError ())

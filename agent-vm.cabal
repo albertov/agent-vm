@@ -128,6 +128,7 @@ executable agent-vm-test
     main-is:          Main.hs
     other-modules:    AgentVM.NixSpec
                     , AgentVM.VMLifecycleSpec
+                    , AgentVM.ResetDestroySpec
     build-depends:    protolude
                     , agent-vm
                     , agent-vm:test-utils

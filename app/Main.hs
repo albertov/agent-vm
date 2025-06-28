@@ -40,7 +40,7 @@ import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude hiding (throwIO, trace)
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
-import UnliftIO (MonadUnliftIO, throwIO)
+import UnliftIO (MonadUnliftIO, hFlush, throwIO)
 import UnliftIO.Directory (makeAbsolute)
 
 main :: IO ()
@@ -55,6 +55,8 @@ main = do
       Stop maybeVmName -> flip runVMT handleStop . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
       Status maybeVmName -> flip runVMT handleStatus . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
       Shell maybeVmName -> flip runVMT handleShell . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      Reset maybeVmName -> flip runVMT handleReset . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
+      Destroy maybeVmName -> flip runVMT handleDestroy . mkEnv =<< loadVMConfig' tracer globalOpts maybeVmName
       _ -> do
         traceWith tracer $ MainError ("Haskell agent-vm: " <> show cmd <> " (not yet implemented)")
         exitFailure
@@ -445,8 +447,57 @@ handleShell = do
       trace $ MainInfo ("Shell session ended for VM: " <> name')
       exitSuccess'
 
+-- | Handle the reset command with confirmation
+handleReset :: (MonadVmCli m r) => m ()
+handleReset = do
+  name' <- view (typed @VMConfig . #name)
+  confirmed <- liftIO $ askConfirmation ("Are you sure you want to reset VM '" <> name' <> "'? This will delete the disk image but keep the configuration. [y/N]")
+  if confirmed
+    then do
+      result <- reset =<< view typed
+      case result of
+        Left err -> do
+          trace $ MainError ("Failed to reset VM: " <> show err)
+          exitFailure'
+        Right () -> do
+          trace $ MainInfo ("Successfully reset VM: " <> name')
+          exitSuccess'
+    else do
+      trace $ MainInfo "Reset cancelled"
+      exitSuccess'
+
+-- | Handle the destroy command with confirmation
+handleDestroy :: (MonadVmCli m r) => m ()
+handleDestroy = do
+  name' <- view (typed @VMConfig . #name)
+  confirmed <- liftIO $ askConfirmation ("Are you sure you want to destroy VM '" <> name' <> "'? This will permanently delete all VM data. [y/N]")
+  if confirmed
+    then do
+      result <- destroy =<< view typed
+      case result of
+        Left err -> do
+          trace $ MainError ("Failed to destroy VM: " <> show err)
+          exitFailure'
+        Right () -> do
+          trace $ MainInfo ("Successfully destroyed VM: " <> name')
+          exitSuccess'
+    else do
+      trace $ MainInfo "Destroy cancelled"
+      exitSuccess'
+
 getVmName :: Maybe Text -> IO Text
 getVmName = maybe (generateDefaultName =<< getCurrentDirectory) pure
+
+-- | Ask user for confirmation with a yes/no prompt
+askConfirmation :: Text -> IO Bool
+askConfirmation prompt = do
+  putStr ((toS prompt :: [Char]) <> " ")
+  hFlush stdout
+  response <- getLine
+  pure $ case T.toLower (T.strip (toS response)) of
+    "y" -> True
+    "yes" -> True
+    _ -> False
 
 -- | Show VMState as text
 showVMState :: VMState -> Text

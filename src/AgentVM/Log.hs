@@ -73,6 +73,7 @@ traceLevel traceEvent = case traceEvent of
   VMCreated {} -> Info
   VMUpdated {} -> Info
   VMDestroyed {} -> Info
+  VMReset {} -> Info
   VMConnectingShell {} -> Info
   VMStopped {} -> Info
   WorkspaceCreated {} -> Info
@@ -97,6 +98,7 @@ data AgentVmTrace
   | VMStopped VMConfig
   | VMStatusChecked VMConfig
   | VMDestroyed VMConfig
+  | VMReset VMConfig
   | VMFailed VMConfig Text
   | VMConnectingShell VMConfig
   | -- Process Management
@@ -125,6 +127,7 @@ renderTrace = \case
   VMStopped c -> "⏹️  Stopped VM for " <> name c
   VMStatusChecked c -> "📊 Checked status for VM " <> name c
   VMDestroyed c -> "🗑️  Destroyed VM at " <> toS (stateDir c)
+  VMReset c -> "🔄 Reset VM disk for " <> name c
   VMFailed c r -> "❌ VM failed for " <> name c <> ": " <> r
   VMConnectingShell c -> "🐚 Connecting to shell for " <> name c
   ProcessSpawned c a -> "🔧 Spawned process: " <> c <> " " <> T.unwords a

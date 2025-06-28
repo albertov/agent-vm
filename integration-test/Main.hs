@@ -8,6 +8,7 @@
 module Main (main) where
 
 import qualified AgentVM.NixSpec as NixSpec
+import qualified AgentVM.ResetDestroySpec as ResetDestroySpec
 import AgentVM.TestUtils (withTestEnv)
 import qualified AgentVM.VMLifecycleSpec as VMLifecycleSpec
 import Protolude
@@ -20,6 +21,7 @@ spec :: Spec
 spec = describe "Agent VM Integration Tests" $ do
   NixSpec.spec
   VMLifecycleSpec.spec
+  ResetDestroySpec.spec
   describe "VM Lifecycle" $ around withTestEnv $ do
     it "can start a VM" $ \(_env, _) -> do
       pending -- TODO: Implement start command
@@ -28,11 +30,11 @@ spec = describe "Agent VM Integration Tests" $ do
     it "can show VM status" $ \(_env, _tracesRef) ->
       pending -- TODO: Implement status command
     it "can destroy a VM" $ \(_env, _tracesRef) ->
-      pending -- TODO: Implement destroy command
+      pending -- Implemented in ResetDestroySpec
     it "can list all VMs" $ \(_env, _tracesRef) ->
       pending -- TODO: Implement list command
     it "can reset VM disk" $ \(_env, _tracesRef) ->
-      pending -- TODO: Implement reset command
+      pending -- Implemented in ResetDestroySpec
     it "can update VM configuration" $ \(_env, _tracesRef) ->
       pending -- TODO: Verify update command works end-to-end
     it "can connect to VM shell" $ \(_env, _tracesRef) ->

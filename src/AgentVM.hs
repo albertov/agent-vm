@@ -49,7 +49,7 @@ import Data.Generics.Labels ()
 import qualified Data.Text as T
 import Lens.Micro
 import Protolude hiding (bracket, throwIO, trace, try, tryJust)
-import System.Directory (doesDirectoryExist, doesFileExist, removeFile)
+import System.Directory (doesDirectoryExist, doesFileExist, removeDirectoryRecursive, removeFile)
 import System.IO.Error (isDoesNotExistError)
 import System.Posix.Signals (sigKILL, sigTERM, signalProcess)
 import System.Posix.Types (ProcessID)
@@ -98,13 +98,48 @@ instance (MonadUnliftIO m) => MonadVM (VMT m) where
       trace (Log.VMConnectingShell config)
       connectToVMShell config
 
+  reset config =
+    try $ do
+      resetVM config
+        <* trace (Log.VMReset config)
+
 -- | Destroy a VM and clean up its resources
 destroyVM ::
-  ( MonadTrace AgentVmTrace m
+  ( MonadTrace AgentVmTrace m,
+    MonadUnliftIO m
   ) =>
   VMConfig ->
   m ()
-destroyVM = const (pure ()) -- TODO
+destroyVM config = do
+  -- First stop the VM if it's running
+  vmState <- getVMState config
+  case vmState of
+    Running _ -> stopVM config
+    _ -> pure ()
+
+  -- Remove the entire state directory
+  let stateDir' = stateDir config
+  stateDirExists <- liftIO $ doesDirectoryExist stateDir'
+  when stateDirExists $ liftIO $ removeDirectoryRecursive stateDir'
+
+-- | Reset a VM by deleting its disk image but keeping configuration
+resetVM ::
+  ( MonadTrace AgentVmTrace m,
+    MonadUnliftIO m
+  ) =>
+  VMConfig ->
+  m ()
+resetVM config = do
+  -- First stop the VM if it's running
+  vmState <- getVMState config
+  case vmState of
+    Running _ -> stopVM config
+    _ -> pure ()
+
+  -- Remove only the disk image
+  let diskPath = vmDiskImage config
+  diskExists <- liftIO $ doesFileExist diskPath
+  when diskExists $ liftIO $ removeFile diskPath
 
 -- | Start a VM and relay stdin/stdout using raw streaming process with proper terminal handling
 startVM ::
