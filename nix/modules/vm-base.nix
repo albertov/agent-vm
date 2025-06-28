@@ -133,7 +133,7 @@ in
       memorySize = cfg.memorySize * 1024;
       diskSize = cfg.diskSize * 1024;
       diskImage = cfg.diskImage;
-      graphics = false; # Headless for better performance
+      graphics = cfg.pidFile != null; # -nographics is incompatible with -daemonize
       mountHostNixStore = true;
       additionalPaths = cfg.additionalPaths;
       writableStore = true;
@@ -142,7 +142,7 @@ in
       qemu.options = (lib.optional (cfg.serialSocket != null)
         "-serial unix:${cfg.serialSocket},server,nowait")
         ++ (lib.optional (cfg.pidFile != null)
-        "-deamonize -pidfile ${cfg.pidFile}");
+        "-daemonize -pidfile ${cfg.pidFile} -display none  -vga none");
 
 
       sharedDirectoriesVIO = {
