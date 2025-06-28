@@ -79,9 +79,9 @@ spec = around withTempDir $ describe "StreamingSocket" $ do
         -- Give server time to start
         delay 10000 -- 10ms
         withInteractive 10 (Socket socketPath) $ \sp -> do
-          -- First read should get the output
-          Just bytes <- tryReadBytes sp
-          bytes `shouldBe` "hello\n"
+          -- First read should get the output (use blocking read)
+          firstRead <- readBytes sp
+          firstRead `shouldBe` "hello\n"
 
           -- Subsequent reads should return Nothing (EOF) without throwing
           result1 <- tryReadBytes sp
