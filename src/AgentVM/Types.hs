@@ -44,6 +44,7 @@ import System.FilePath ((</>))
 
 -- | VM states as type-level values
 data VMState = Stopped | Starting | Running VMStatus | Stopping | Failed
+  deriving (Show, Eq)
 
 -- | Detailed VM status information
 data VMStatus = VMStatus

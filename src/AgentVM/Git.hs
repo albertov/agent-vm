@@ -7,6 +7,7 @@ module AgentVM.Git
     GitInfo (..),
 
     -- * Git operations
+    gitInit,
     getGitBranch,
     getGitRepoName,
     getGitInfo,
@@ -29,6 +30,14 @@ newtype GitInfo = GitInfo
   }
   deriving (Show, Eq)
 
+-- | Initialize a git repository in the given directory
+gitInit :: FilePath -> IO ()
+gitInit workingDir = do
+  Sh.shelly $ do
+    Sh.run_ "git" ["-C", toS workingDir, "init"]
+    Sh.run_ "git" ["-C", toS workingDir, "config", "user.email", "test@example.com"]
+    Sh.run_ "git" ["-C", toS workingDir, "config", "user.name", "Test User"]
+
 -- | Get current git branch name from workspace directory
 getGitBranch :: FilePath -> IO (Maybe Text)
 getGitBranch workingDir = do
@@ -43,29 +52,25 @@ getGitRepoName :: FilePath -> IO (Maybe Text)
 getGitRepoName workingDir = do
   result <-
     catchAny
-      (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workingDir, "remote", "show", "origin"]))
+      (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workingDir, "remote", "get-url", "origin"]))
       (\_ -> pure Nothing)
   case result of
     Nothing -> pure Nothing
     Just output -> do
-      let lines' = T.lines (toS output)
-          fetchUrl = find (T.isPrefixOf "  Fetch URL: ") lines'
-      pure $ do
-        url <- fetchUrl
-        let urlPart = T.drop 13 url -- Remove "  Fetch URL: "
-        -- Extract repo name from various URL formats
-            repoName = case T.splitOn "/" urlPart of
+      let url = T.strip (toS output)
+      -- Extract repo name from various URL formats
+      let repoName = case T.splitOn "/" url of
+            [] -> Nothing
+            parts -> case reverse parts of
               [] -> Nothing
-              parts -> case reverse parts of
-                [] -> Nothing
-                lastPart : _ ->
-                  let -- Remove .git suffix if present
-                      cleaned =
-                        if T.isSuffixOf ".git" lastPart
-                          then T.dropEnd 4 lastPart
-                          else lastPart
-                   in if T.null cleaned then Nothing else Just cleaned
-        repoName
+              lastPart : _ ->
+                let -- Remove .git suffix if present
+                    cleaned =
+                      if T.isSuffixOf ".git" lastPart
+                        then T.dropEnd 4 lastPart
+                        else lastPart
+                 in if T.null cleaned then Nothing else Just cleaned
+      pure repoName
 
 -- | Get repository name fallback using workspace directory basename
 getRepoNameFallback :: FilePath -> Text
