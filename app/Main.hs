@@ -2,6 +2,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | Main entry point for agent-vm CLI
 module Main (main) where
@@ -10,16 +12,15 @@ import AgentVM (loadVMConfig)
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
 import qualified AgentVM.Env as Env
-import AgentVM.Log (AgentVmTrace (..), renderTracedMessage)
+import AgentVM.Log (AgentVmTrace (..), LogLevel (..), renderTracedMessage, traceLevel)
 import AgentVM.Monad (runVMT)
 import AgentVM.Types (VMConfig (..), VMError (..), vmConfigFile)
 import qualified AgentVM.Types as Types
 import Control.Concurrent.Thread.Delay (delay)
-import Data.Functor.Contravariant (contramap)
 import Data.Text (split)
 import qualified Data.Text as T
 import Options.Applicative
-import Plow.Logging (traceWith)
+import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude hiding (throwIO)
 import qualified Shelly as Sh
@@ -28,10 +29,27 @@ import System.FilePath (takeBaseName)
 import UnliftIO (catchAny, throwIO)
 import UnliftIO.Directory (makeAbsolute)
 
+-- | Set up async filtered logger based on global options
+-- Verbose flag sets minimum level to Debug, Debug flag sets it to Trace
+withAsyncFilteredLogger :: GlobalOpts -> (IOTracer AgentVmTrace -> IO a) -> IO a
+withAsyncFilteredLogger globalOpts tracerAction = do
+  let minLevel = case (optDebug globalOpts, optVerbose globalOpts) of
+        (True, _) -> Trace -- Debug flag takes precedence
+        (False, True) -> Debug -- Verbose flag
+        (False, False) -> Info -- Default level
+  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
+    let filteredTracer :: forall m. (MonadIO m) => Tracer m AgentVmTrace
+        filteredTracer = filterTracer (\traceEvent -> traceLevel traceEvent >= minLevel) $
+          Tracer $ \traceEvent -> do
+            let IOTracer (Tracer textTracerFunc) = asyncTracer
+            textTracerFunc (renderTracedMessage traceEvent)
+    tracerAction (IOTracer filteredTracer)
+
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath,
-    _optVerbose :: Bool,
-    _optDebug :: Bool
+    optVerbose :: Bool,
+    optDebug :: Bool,
+    optTimeout :: Int -- Currently unused but intended for future timeout handling
   }
 
 data CreateConfig = CreateConfig
@@ -86,6 +104,14 @@ parseArgs = (,) <$> globalOpts <*> commandParser
           ( long "debug"
               <> short 'd'
               <> help "Enable debug logging"
+          )
+        <*> option
+          auto
+          ( long "timeout"
+              <> short 't'
+              <> metavar "SECONDS"
+              <> value 120
+              <> help "Global timeout for VM operations"
           )
 
     commandParser =
@@ -370,21 +396,19 @@ handleCreate :: GlobalOpts -> CreateConfig -> IO ()
 handleCreate globalOpts createConfig = do
   vmConfig <- createConfigToVMConfig globalOpts createConfig
 
-  -- Set up async logging with a buffer of 1000 messages
-  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    -- Create the final tracer that converts AgentVmTrace to Text
-    let finalTracer = contramap renderTracedMessage asyncTracer
-        env = AgentVmEnv {tracer = finalTracer, Env.stateDir = Types.stateDir vmConfig}
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
 
     -- Run the VM create operation
     result <- runVMT env (create vmConfig)
     case result of
       Left err -> do
-        traceWith finalTracer $ MainError ("Failed to create VM: " <> toS (show err :: [Char]))
+        traceWith tracer $ MainError ("Failed to create VM: " <> toS (show err :: [Char]))
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith finalTracer $ MainInfo ("Successfully created VM: " <> name vmConfig)
+        traceWith tracer $ MainInfo ("Successfully created VM: " <> name vmConfig)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -393,21 +417,19 @@ handleUpdate :: GlobalOpts -> CreateConfig -> IO ()
 handleUpdate globalOpts updateConfig = do
   vmConfig <- updateConfigToVMConfig globalOpts updateConfig
 
-  -- Set up async logging with a buffer of 1000 messages
-  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    -- Create the final tracer that converts AgentVmTrace to Text
-    let finalTracer = contramap renderTracedMessage asyncTracer
-        env = AgentVmEnv {tracer = finalTracer, Env.stateDir = Types.stateDir vmConfig}
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
 
     -- Run the VM update operation
     result <- runVMT env (update vmConfig)
     case result of
       Left err -> do
-        traceWith finalTracer $ MainError ("Failed to update VM: " <> toS (show err :: [Char]))
+        traceWith tracer $ MainError ("Failed to update VM: " <> toS (show err :: [Char]))
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith finalTracer $ MainInfo ("Successfully updated VM: " <> name vmConfig)
+        traceWith tracer $ MainInfo ("Successfully updated VM: " <> name vmConfig)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -427,21 +449,19 @@ startVmWithName :: GlobalOpts -> Text -> IO ()
 startVmWithName globalOpts vmName = do
   vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
 
-  -- Set up async logging with a buffer of 1000 messages
-  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    -- Create the final tracer that converts AgentVmTrace to Text
-    let finalTracer = contramap renderTracedMessage asyncTracer
-        env = AgentVmEnv {tracer = finalTracer, Env.stateDir = Types.stateDir vmConfig}
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
 
     -- Run the VM start operation
     result <- runVMT env (start vmConfig)
     case result of
       Left err -> do
-        traceWith finalTracer $ MainError ("Failed to start VM: " <> toS (show err :: [Char]))
+        traceWith tracer $ MainError ("Failed to start VM: " <> toS (show err :: [Char]))
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith finalTracer $ MainInfo ("Successfully started VM: " <> name vmConfig)
+        traceWith tracer $ MainInfo ("Successfully started VM: " <> name vmConfig)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -461,21 +481,19 @@ connectWithShell :: GlobalOpts -> Text -> IO ()
 connectWithShell globalOpts vmName = do
   vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
 
-  -- Set up async logging with a buffer of 1000 messages
-  withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-    -- Create the final tracer that converts AgentVmTrace to Text
-    let finalTracer = contramap renderTracedMessage asyncTracer
-        env = AgentVmEnv {tracer = finalTracer, Env.stateDir = Types.stateDir vmConfig}
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
 
     -- Run the VM shell connection operation
     result <- runVMT env (shell vmConfig)
     case result of
       Left err -> do
-        traceWith finalTracer $ MainError ("Failed to connect to shell: " <> toS (show err :: [Char]))
+        traceWith tracer $ MainError ("Failed to connect to shell: " <> toS (show err :: [Char]))
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitFailure
       Right () -> do
-        traceWith finalTracer $ MainInfo ("Shell session ended for VM: " <> name vmConfig)
+        traceWith tracer $ MainInfo ("Shell session ended for VM: " <> name vmConfig)
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
@@ -488,13 +506,10 @@ main = do
     Start maybeVmName -> handleStart globalOpts maybeVmName
     Shell maybeVmName -> handleShell globalOpts maybeVmName
     _ -> do
-      -- Set up async logging with a buffer of 1000 messages
-      withAsyncHandleTracer stderr 1000 $ \asyncTracer -> do
-        -- Create the final tracer that converts AgentVmTrace to Text
-        let finalTracer = contramap renderTracedMessage asyncTracer
-
+      -- Set up async filtered logging for unimplemented commands
+      withAsyncFilteredLogger globalOpts $ \tracer -> do
         -- For now, just demonstrate logging is working for other commands
-        traceWith finalTracer $ MainError ("Haskell agent-vm: " <> toS (show cmd :: [Char]) <> " (not yet implemented)")
+        traceWith tracer $ MainError ("Haskell agent-vm: " <> toS (show cmd :: [Char]) <> " (not yet implemented)")
         exitFailure
   where
     opts =
