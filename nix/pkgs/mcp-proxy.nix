@@ -11,6 +11,10 @@ python3.pkgs.buildPythonApplication rec {
 
   src = inputs.mcp-proxy;
 
+  patches = [
+    ./mcp-proxy-configurable-prefix.diff
+  ];
+
   dependencies = with python3.pkgs; [
     uvicorn
     mcp
