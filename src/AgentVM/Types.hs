@@ -34,7 +34,7 @@ module AgentVM.Types
 where
 
 import AgentVM.Git (GitInfo)
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON (..), ToJSON, withObject, (.!=), (.:), (.:?))
 import Data.Time.Clock (NominalDiffTime)
 import Protolude hiding (group)
 import System.Directory (getHomeDirectory)
@@ -99,7 +99,78 @@ data VMConfig = VMConfig
     serverPrefix :: Text
   }
   deriving stock (Eq, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON)
+
+-- | Pure default values for VMConfig (excluding required fields like name, workspace, stateDir)
+vmConfigDefaults :: VMConfig
+vmConfigDefaults =
+  VMConfig
+    { name = panic "name is required",
+      workspace = panic "workspace is required",
+      stateDir = panic "stateDir is required",
+      tmpfs = True,
+      memorySize = 4,
+      cores = 2,
+      diskSize = 4,
+      additionalPaths = [],
+      port = 8000,
+      systemPackages = ["vim", "git"],
+      uid = 1000,
+      gid = 1000,
+      group = "mcp-proxy",
+      shellName = "default",
+      flake = ".",
+      nixBaseConfig = Nothing,
+      shellEscapeKey = "Ctrl-W",
+      serverPrefix = "/servers"
+    }
+
+-- | Custom FromJSON instance that provides defaults for optional fields
+instance FromJSON VMConfig where
+  parseJSON = withObject "VMConfig" $ \o -> do
+    -- Required fields
+    name <- o .: "name"
+    workspace <- o .: "workspace"
+    stateDir <- o .: "stateDir"
+
+    -- Optional fields with defaults from vmConfigDefaults
+    tmpfs <- o .:? "tmpfs" .!= tmpfs vmConfigDefaults
+    memorySize <- o .:? "memorySize" .!= memorySize vmConfigDefaults
+    cores <- o .:? "cores" .!= cores vmConfigDefaults
+    diskSize <- o .:? "diskSize" .!= diskSize vmConfigDefaults
+    additionalPaths <- o .:? "additionalPaths" .!= additionalPaths vmConfigDefaults
+    port <- o .:? "port" .!= port vmConfigDefaults
+    systemPackages <- o .:? "systemPackages" .!= systemPackages vmConfigDefaults
+    uid <- o .:? "uid" .!= uid vmConfigDefaults
+    gid <- o .:? "gid" .!= gid vmConfigDefaults
+    group <- o .:? "group" .!= group vmConfigDefaults
+    shellName <- o .:? "shellName" .!= shellName vmConfigDefaults
+    flake <- o .:? "flake" .!= flake vmConfigDefaults
+    nixBaseConfig <- o .:? "nixBaseConfig" .!= nixBaseConfig vmConfigDefaults
+    shellEscapeKey <- o .:? "shellEscapeKey" .!= shellEscapeKey vmConfigDefaults
+    serverPrefix <- o .:? "serverPrefix" .!= serverPrefix vmConfigDefaults
+
+    pure
+      VMConfig
+        { name,
+          workspace,
+          stateDir,
+          tmpfs,
+          memorySize,
+          cores,
+          diskSize,
+          additionalPaths,
+          port,
+          systemPackages,
+          uid,
+          gid,
+          group,
+          shellName,
+          flake,
+          nixBaseConfig,
+          shellEscapeKey,
+          serverPrefix
+        }
 
 getDefaultBaseStateDir :: (MonadIO m) => m FilePath
 getDefaultBaseStateDir = (</> ".local/share/agent-vm") <$> liftIO getHomeDirectory
@@ -108,25 +179,10 @@ defVMConfig :: (MonadIO m) => Maybe FilePath -> Text -> FilePath -> m VMConfig
 defVMConfig mStateDir name workspace = do
   vmStateDir' <- vmStateDir mStateDir name
   pure
-    VMConfig
-      { tmpfs = True,
-        memorySize = 4,
-        cores = 2,
-        diskSize = 4,
-        additionalPaths = [],
-        name,
-        workspace,
-        port = 8000,
-        systemPackages = ["vim", "git"],
-        uid = 1000,
-        gid = 1000,
-        group = "mcp-proxy",
-        shellName = "default",
-        flake = ".",
-        nixBaseConfig = Nothing,
-        stateDir = toS vmStateDir',
-        shellEscapeKey = "Ctrl-W",
-        serverPrefix = "/servers"
+    vmConfigDefaults
+      { name = name,
+        workspace = workspace,
+        stateDir = toS vmStateDir'
       }
 
 -- | Computes VM state dir from global statedir and VM name
