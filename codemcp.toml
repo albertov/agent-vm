@@ -168,3 +168,6 @@ Runs the .#integration-test flake app with the arguments you pass"
 
 Arguments are passed to the python script. Make sure you quote them properly!
 """
+
+[commands.mcp-proxy]
+command = ["nix", "run", ".#mcp-proxy", "--"]
