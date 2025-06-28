@@ -14,6 +14,11 @@ module AgentVM.Types
     VMConfig (..),
     defVMConfig,
 
+    -- * VM Status Types
+    VMStatus (..),
+    MemoryInfo (..),
+    CPUInfo (..),
+
     -- * Path accessors
     vmDiskImage,
     vmSerialSocket,
@@ -28,7 +33,9 @@ module AgentVM.Types
   )
 where
 
+import AgentVM.Git (GitInfo)
 import Data.Aeson (FromJSON, ToJSON)
+import Data.Time.Clock (NominalDiffTime)
 import Protolude hiding (group)
 import System.Directory (getHomeDirectory)
 import System.FilePath ((</>))
@@ -36,7 +43,31 @@ import System.FilePath ((</>))
 -- import UnliftIO (SomeException)
 
 -- | VM states as type-level values
-data VMState = Stopped | Starting | Running | Stopping | Failed
+data VMState = Stopped | Starting | Running VMStatus | Stopping | Failed
+
+-- | Detailed VM status information
+data VMStatus = VMStatus
+  { vmStatusPid :: Int,
+    vmStatusMemoryInfo :: Maybe MemoryInfo,
+    vmStatusCPUInfo :: Maybe CPUInfo,
+    vmStatusGitInfo :: Maybe GitInfo
+  }
+  deriving (Show, Eq)
+
+-- | Memory information from /proc/[pid]/status
+data MemoryInfo = MemoryInfo
+  { memVmPeak :: Maybe Int64, -- in bytes
+    memVmSize :: Maybe Int64, -- in bytes
+    memVmRSS :: Maybe Int64 -- in bytes
+  }
+  deriving (Show, Eq)
+
+-- | CPU information from /proc/[pid]/stat
+data CPUInfo = CPUInfo
+  { cpuUserTime :: NominalDiffTime,
+    cpuSystemTime :: NominalDiffTime
+  }
+  deriving (Show, Eq)
 
 -- | VM configuration matching vm-base.nix module options
 data VMConfig = VMConfig

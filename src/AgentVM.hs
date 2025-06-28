@@ -43,6 +43,7 @@ import AgentVM.Nix
 import AgentVM.StreamingProcess (Process (..))
 import AgentVM.StreamingSocket (Socket (..))
 import AgentVM.Types
+import AgentVM.VMStatus (getDetailedVMStatus)
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
 import qualified Data.Text as T
@@ -153,7 +154,10 @@ getVMState config = do
                 (signalProcess 0 pid >> return True)
                 (\_ -> return False)
           if isRunning
-            then return Running
+            then do
+              -- Get detailed status when running
+              vmStatus <- liftIO $ getDetailedVMStatus config (fromIntegral pid)
+              return (Running vmStatus)
             else return Stopped
     Left _ -> return Stopped
 

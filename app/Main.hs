@@ -14,56 +14,24 @@ module Main (main) where
 import AgentVM (loadVMConfig)
 import AgentVM.Class (MonadVM (..))
 import AgentVM.Env (AgentVmEnv (..))
+import AgentVM.Git (generateDefaultName)
 import AgentVM.Log (AgentVmTrace (..), LogLevel (..), renderTracedMessage, traceLevel)
 import AgentVM.Monad (runVMT)
 import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile2)
 import qualified AgentVM.Types as Types
+import AgentVM.VMStatus (renderVMStatus)
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
 import Data.Text (split)
 import qualified Data.Text as T
-import Data.Time.Clock (NominalDiffTime)
 import Lens.Micro ((^.))
 import Options.Applicative
 import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude hiding (throwIO)
-import qualified Shelly as Sh
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
-import System.FilePath (takeBaseName)
-import Text.Printf (printf)
-import UnliftIO (catchAny, throwIO)
+import UnliftIO (throwIO)
 import UnliftIO.Directory (makeAbsolute)
-
--- | Detailed VM status information
-data VMStatus = VMStatus
-  { vmStatusPid :: Maybe Int,
-    vmStatusMemoryInfo :: Maybe MemoryInfo,
-    vmStatusCPUInfo :: Maybe CPUInfo,
-    vmStatusGitInfo :: Maybe GitInfo
-  }
-  deriving (Show, Eq)
-
--- | Memory information from /proc/[pid]/status
-data MemoryInfo = MemoryInfo
-  { memVmPeak :: Maybe Int64, -- in bytes
-    memVmSize :: Maybe Int64, -- in bytes
-    memVmRSS :: Maybe Int64 -- in bytes
-  }
-  deriving (Show, Eq)
-
--- | CPU information from /proc/[pid]/stat
-data CPUInfo = CPUInfo
-  { cpuUserTime :: NominalDiffTime,
-    cpuSystemTime :: NominalDiffTime
-  }
-  deriving (Show, Eq)
-
--- | Git repository information
-newtype GitInfo = GitInfo
-  { gitLastCommitDiff :: Text
-  }
-  deriving (Show, Eq)
 
 -- | Set up async filtered logger based on global options
 -- Verbose flag sets minimum level to Debug, Debug flag sets it to Trace
@@ -288,63 +256,6 @@ parseCreateConfig =
           )
       )
 
--- | Get current git branch name from workspace directory
-getGitBranch :: FilePath -> IO (Maybe Text)
-getGitBranch workspaceDir = do
-  result <-
-    catchAny
-      (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "branch", "--show-current"]))
-      (\_ -> pure Nothing)
-  pure $ fmap (T.strip . toS) result
-
--- | Get git repository name from remote origin in workspace directory
-getGitRepoName :: FilePath -> IO (Maybe Text)
-getGitRepoName workspaceDir = do
-  result <-
-    catchAny
-      (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "remote", "show", "origin"]))
-      (\_ -> pure Nothing)
-  case result of
-    Nothing -> pure Nothing
-    Just output -> do
-      let lines' = T.lines (toS output)
-          fetchUrl = find (T.isPrefixOf "  Fetch URL: ") lines'
-      pure $ do
-        url <- fetchUrl
-        let urlPart = T.drop 13 url -- Remove "  Fetch URL: "
-        -- Extract repo name from various URL formats
-            repoName = case T.splitOn "/" urlPart of
-              [] -> Nothing
-              parts -> case reverse parts of
-                [] -> Nothing
-                lastPart : _ ->
-                  let -- Remove .git suffix if present
-                      cleaned =
-                        if T.isSuffixOf ".git" lastPart
-                          then T.dropEnd 4 lastPart
-                          else lastPart
-                   in if T.null cleaned then Nothing else Just cleaned
-        repoName
-
--- | Get repository name fallback using workspace directory basename
-getRepoNameFallback :: FilePath -> Text
-getRepoNameFallback workspaceDir = toS $ takeBaseName workspaceDir
-
--- | Sanitize name by replacing dashes with underscores
-sanitizeName :: Text -> Text
-sanitizeName = T.replace "-" "_"
-
--- | Generate default VM name from git repository and branch in workspace
-generateDefaultName :: FilePath -> IO Text
-generateDefaultName workspaceDir = do
-  maybeBranch <- getGitBranch workspaceDir
-  maybeRepo <- getGitRepoName workspaceDir
-
-  let branch = fromMaybe "main" maybeBranch
-      repo = fromMaybe (getRepoNameFallback workspaceDir) maybeRepo
-
-  pure $ sanitizeName repo <> "-" <> sanitizeName branch
-
 -- | Convert CreateConfig to VMConfig for update, using existing config as defaults
 updateConfigToVMConfig :: GlobalOpts -> CreateConfig -> IO VMConfig
 updateConfigToVMConfig globalOpts updateConfig = do
@@ -544,11 +455,12 @@ statusVmWithName globalOpts vmName =
         -- Display basic VM state
         traceWith (tracer env) $ MainInfo ("VM " <> vmName <> " is " <> showVMState vmState)
 
-        -- Get detailed status information
-        when (isRunning vmState) $ do
-          vmStatus <- liftIO $ getDetailedVMStatus (env ^. #vmConfig)
-          let statusLines = renderVMStatus vmStatus
-          mapM_ (traceWith (tracer env) . MainInfo) statusLines
+        -- Display detailed status information when running
+        case vmState of
+          Running vmStatus -> do
+            let statusLines = renderVMStatus vmStatus
+            mapM_ (traceWith (tracer env) . MainInfo) statusLines
+          _ -> pure ()
 
         delay 1_000_000
         exitSuccess
@@ -557,173 +469,9 @@ statusVmWithName globalOpts vmName =
 showVMState :: VMState -> Text
 showVMState Stopped = "stopped"
 showVMState Starting = "starting"
-showVMState Running = "running"
+showVMState (Running _) = "running"
 showVMState Stopping = "stopping"
 showVMState Failed = "failed"
-
--- | Check if VMState represents a running state
-isRunning :: VMState -> Bool
-isRunning Running = True
-isRunning _ = False
-
--- | Render VMStatus to list of text lines
-renderVMStatus :: VMStatus -> [Text]
-renderVMStatus vmStatus =
-  let pidInfo = case vmStatusPid vmStatus of
-        Nothing -> ["No PID file found"]
-        Just pid -> ["Process ID: " <> toS (show pid :: [Char])]
-
-      memInfo = maybe [] renderMemoryInfo (vmStatusMemoryInfo vmStatus)
-
-      cpuInfo = maybe [] renderCPUInfo (vmStatusCPUInfo vmStatus)
-
-      gitInfo = maybe ["No git repository or no commits"] renderGitInfo (vmStatusGitInfo vmStatus)
-   in pidInfo ++ memInfo ++ cpuInfo ++ gitInfo
-
--- | Render memory information
-renderMemoryInfo :: MemoryInfo -> [Text]
-renderMemoryInfo memInfo =
-  catMaybes
-    [ fmap (formatMemoryBytes "VmPeak:") (memVmPeak memInfo),
-      fmap (formatMemoryBytes "VmSize:") (memVmSize memInfo),
-      fmap (formatMemoryBytes "VmRSS:") (memVmRSS memInfo)
-    ]
-
--- | Format memory bytes to MB/GB with 2 decimals
-formatMemoryBytes :: Text -> Int64 -> Text
-formatMemoryBytes fieldName bytes =
-  let mbValue = fromIntegral bytes / (1024 * 1024) :: Double
-      gbValue = mbValue / 1024
-      formatted =
-        if gbValue >= 1.0
-          then T.pack (printf "%.2f GB" gbValue)
-          else T.pack (printf "%.2f MB" mbValue)
-   in fieldName <> " " <> formatted
-
--- | Render CPU information
-renderCPUInfo :: CPUInfo -> [Text]
-renderCPUInfo cpuInfo =
-  [ "CPU User Time: " <> formatCPUTime (cpuUserTime cpuInfo),
-    "CPU System Time: " <> formatCPUTime (cpuSystemTime cpuInfo)
-  ]
-
--- | Format NominalDiffTime as human-readable text
-formatCPUTime :: NominalDiffTime -> Text
-formatCPUTime time =
-  let seconds = realToFrac time :: Double
-   in T.pack (printf "%.2f seconds" seconds)
-
--- | Render git information
-renderGitInfo :: GitInfo -> [Text]
-renderGitInfo gitInfo =
-  [ "Last commit diff:",
-    gitLastCommitDiff gitInfo
-  ]
-
--- | Get detailed VM status including memory, CPU usage, and git info
-getDetailedVMStatus :: VMConfig -> IO VMStatus
-getDetailedVMStatus config = do
-  let pidFilePath = Types.vmPidFile config
-
-  -- Try to read PID file and get process info
-  ePidContent <- catchAny (Just <$> readFile pidFilePath) (\_ -> pure Nothing)
-
-  case ePidContent of
-    Nothing -> pure $ VMStatus Nothing Nothing Nothing Nothing
-    Just pidContent -> do
-      let pidText = T.strip (toS pidContent)
-      case readMaybe (T.unpack pidText) of
-        Nothing -> pure $ VMStatus Nothing Nothing Nothing Nothing
-        Just pid -> do
-          memInfo <- getMemoryInfo pid
-          cpuInfo <- getCPUInfo pid
-          gitInfo <- getGitInfo (workspace config)
-          pure $ VMStatus (Just pid) memInfo cpuInfo gitInfo
-
--- | Get memory information from /proc filesystem
-getMemoryInfo :: Int -> IO (Maybe MemoryInfo)
-getMemoryInfo pid = do
-  let statusPath = "/proc/" <> show pid <> "/status"
-
-  statusInfo <- catchAny (readFileLines statusPath) (\_ -> pure [])
-
-  let extractAndParseField prefix = do
-        line <- find (T.isPrefixOf prefix) statusInfo
-        parseMemoryLine line
-
-  if null statusInfo
-    then pure Nothing
-    else
-      pure $
-        Just $
-          MemoryInfo
-            (extractAndParseField "VmPeak:")
-            (extractAndParseField "VmSize:")
-            (extractAndParseField "VmRSS:")
-
--- | Parse memory line from /proc/[pid]/status and convert kB to bytes
-parseMemoryLine :: Text -> Maybe Int64
-parseMemoryLine line =
-  case T.words line of
-    (_ : valueStr : "kB" : _) ->
-      case readMaybe (T.unpack valueStr) of
-        Just (kbValue :: Int64) -> Just (kbValue * 1024) -- Convert kB to bytes
-        Nothing -> Nothing
-    _ -> Nothing
-
--- | Get CPU information from /proc filesystem
-getCPUInfo :: Int -> IO (Maybe CPUInfo)
-getCPUInfo pid = do
-  let statPath = "/proc/" <> show pid <> "/stat"
-
-  statInfo <- catchAny (readFile statPath) (\_ -> pure "")
-
-  case T.words (toS statInfo) of
-    fields
-      | length fields > 14 -> do
-          let utimeStr = case drop 13 fields of
-                x : _ -> x
-                [] -> "0"
-              stimeStr = case drop 14 fields of
-                x : _ -> x
-                [] -> "0"
-
-          case (readMaybe (T.unpack utimeStr), readMaybe (T.unpack stimeStr)) of
-            (Just (utime :: Int64), Just (stime :: Int64)) -> do
-              -- Convert clock ticks to seconds (typical USER_HZ is 100)
-              let clockTicksPerSec = 100 :: Double
-                  utimeSeconds = fromIntegral utime / clockTicksPerSec
-                  stimeSeconds = fromIntegral stime / clockTicksPerSec
-              pure $
-                Just $
-                  CPUInfo
-                    (realToFrac utimeSeconds)
-                    (realToFrac stimeSeconds)
-            _ -> pure Nothing
-    _ -> pure Nothing
-
--- | Read file and split into lines
-readFileLines :: FilePath -> IO [Text]
-readFileLines path = T.lines . toS <$> readFile path
-
--- | Get git information from workspace
-getGitInfo :: FilePath -> IO (Maybe GitInfo)
-getGitInfo workspaceDir = do
-  lastCommitDiff <- getLastCommitDiff workspaceDir
-  case lastCommitDiff of
-    Nothing -> pure Nothing
-    Just diffText -> pure $ Just $ GitInfo diffText
-
--- | Get last commit diff using git log -p
-getLastCommitDiff :: FilePath -> IO (Maybe Text)
-getLastCommitDiff workspaceDir = do
-  catchAny
-    ( Sh.shelly $ Sh.silently $ do
-        commitHash <- Sh.run "git" ["-C", toS workspaceDir, "rev-parse", "HEAD"]
-        diffOutput <- Sh.run "git" ["-C", toS workspaceDir, "log", "-p", T.strip (toS commitHash), "-1"]
-        pure $ Just (T.strip (toS diffOutput))
-    )
-    (\_ -> pure Nothing)
 
 -- | Handle the shell command
 handleShell :: GlobalOpts -> Maybe Text -> IO ()

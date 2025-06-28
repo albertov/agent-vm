@@ -35,6 +35,8 @@ library
                     , AgentVM.Interactive
                     , AgentVM.StreamingProcess
                     , AgentVM.StreamingSocket
+                    , AgentVM.Git
+                    , AgentVM.VMStatus
     build-depends:    base
                     , protolude
                     , unliftio
@@ -57,6 +59,7 @@ library
                     , microlens
                     , generic-lens
                     , template-haskell
+                    , time
     hs-source-dirs:   src
     default-language: Haskell2010
     default-extensions: NoImplicitPrelude
@@ -82,16 +85,12 @@ executable agent-vm
     main-is:          Main.hs
     build-depends:    protolude
                     , agent-vm
-                    , base
                     , optparse-applicative
                     , plow-log-async
                     , plow-log
                     , text
-                    , time
                     , directory
-                    , filepath
                     , unliftio
-                    , shelly
                     , unbounded-delays
                     , microlens
                     , generic-lens
