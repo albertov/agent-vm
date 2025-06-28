@@ -86,7 +86,11 @@ instance (MonadUnliftIO m) => MonadVM (VMT m) where
     try $ do
       trace (Log.VMStopping config)
       stopVM config
-  status _ = return (Left (WorkspaceError "status not implemented"))
+  status config = do
+    try $ do
+      vmState <- getVMState config
+      trace (Log.VMStatusChecked config)
+      return vmState
 
   shell config = do
     try $ do
@@ -119,6 +123,39 @@ startVM config = do
 
   trace $ Log.ProcessSpawned (toS scriptPath) []
   interactWith stdin stdout stderr $ Process scriptPath []
+
+-- | Get the current state of a VM by checking its PID file
+getVMState ::
+  ( MonadTrace AgentVmTrace m,
+    MonadUnliftIO m
+  ) =>
+  VMConfig ->
+  m VMState
+getVMState config = do
+  let pidFilePath = vmPidFile config
+  -- Read and parse PID from file
+  ePidContent <-
+    tryJust
+      (guard . isDoesNotExistError)
+      (liftIO (readFile pidFilePath))
+  case ePidContent of
+    Right pidContent -> do
+      let pidText :: Text = T.strip (toS pidContent)
+      case readMaybe (T.unpack pidText) of
+        Nothing -> do
+          trace $ Log.VMFailed config ("Invalid PID in file: " <> toS pidFilePath)
+          return Failed
+        Just (pid :: ProcessID) -> do
+          -- Check if process is still running by trying to send signal 0
+          isRunning <-
+            liftIO $
+              catchAny
+                (signalProcess 0 pid >> return True)
+                (\_ -> return False)
+          if isRunning
+            then return Running
+            else return Stopped
+    Left _ -> return Stopped
 
 -- | Stop a VM by reading its PID file and sending termination signals
 stopVM ::

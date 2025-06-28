@@ -16,7 +16,7 @@ import AgentVM.Env (AgentVmEnv (..))
 import qualified AgentVM.Env as Env
 import AgentVM.Log (AgentVmTrace (..), LogLevel (..), renderTracedMessage, traceLevel)
 import AgentVM.Monad (runVMT)
-import AgentVM.Types (VMConfig (..), VMError (..), vmConfigFile)
+import AgentVM.Types (VMConfig (..), VMError (..), VMState (..), vmConfigFile)
 import qualified AgentVM.Types as Types
 import Control.Concurrent.Thread.Delay (delay)
 import Data.Text (split)
@@ -499,6 +499,142 @@ stopVmWithName globalOpts vmName = do
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
+-- | Handle the status command
+handleStatus :: GlobalOpts -> Maybe Text -> IO ()
+handleStatus globalOpts maybeVmName = do
+  case maybeVmName of
+    Nothing -> do
+      -- No VM name provided, try to infer from current directory
+      currentDir <- getCurrentDirectory
+      vmName <- generateDefaultName currentDir
+      statusVmWithName globalOpts vmName
+    Just vmName -> statusVmWithName globalOpts vmName
+
+-- | Get detailed status for VM with given name
+statusVmWithName :: GlobalOpts -> Text -> IO ()
+statusVmWithName globalOpts vmName = do
+  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
+
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
+
+    -- Run the VM status operation
+    result <- runVMT env (status vmConfig)
+    case result of
+      Left err -> do
+        traceWith tracer $ MainError ("Failed to get VM status: " <> toS (show err :: [Char]))
+        delay 1_000_000
+        exitFailure
+      Right vmState -> do
+        -- Display basic VM state
+        traceWith tracer $ MainInfo ("VM " <> name vmConfig <> " is " <> showVMState vmState)
+
+        -- Get detailed status information
+        when (isRunning vmState) $ do
+          detailedStatus <- liftIO $ getDetailedVMStatus vmConfig
+          mapM_ (traceWith tracer . MainInfo) detailedStatus
+
+        delay 1_000_000
+        exitSuccess
+
+-- | Show VMState as text
+showVMState :: VMState -> Text
+showVMState Stopped = "stopped"
+showVMState Starting = "starting"
+showVMState Running = "running"
+showVMState Stopping = "stopping"
+showVMState Failed = "failed"
+
+-- | Check if VMState represents a running state
+isRunning :: VMState -> Bool
+isRunning Running = True
+isRunning _ = False
+
+-- | Get detailed VM status including memory, CPU usage, and git info
+getDetailedVMStatus :: VMConfig -> IO [Text]
+getDetailedVMStatus config = do
+  let pidFilePath = Types.vmPidFile config
+
+  -- Try to read PID file and get process info
+  ePidContent <- catchAny (Just <$> readFile pidFilePath) (\_ -> pure Nothing)
+
+  case ePidContent of
+    Nothing -> pure ["No PID file found"]
+    Just pidContent -> do
+      let pidText = T.strip (toS pidContent)
+      case readMaybe (T.unpack pidText) of
+        Nothing -> pure ["Invalid PID in file"]
+        Just pid -> do
+          procInfo <- getProcessInfo pid
+          gitInfo <- getGitInfo (workspace config)
+          pure $ procInfo ++ gitInfo
+
+-- | Get process information from /proc filesystem
+getProcessInfo :: Int -> IO [Text]
+getProcessInfo pid = do
+  let statusPath = "/proc/" <> show pid <> "/status"
+      statPath = "/proc/" <> show pid <> "/stat"
+
+  statusInfo <- catchAny (readFileLines statusPath) (\_ -> pure [])
+  statInfo <- catchAny (readFile statPath) (\_ -> pure "")
+
+  let memInfo = extractMemoryInfo statusInfo
+      cpuInfo = extractCPUInfo (toS statInfo)
+
+  pure $ ["Process ID: " <> toS (show pid :: [Char])] ++ memInfo ++ cpuInfo
+
+-- | Read file and split into lines
+readFileLines :: FilePath -> IO [Text]
+readFileLines path = T.lines . toS <$> readFile path
+
+-- | Extract memory information from /proc/[pid]/status
+extractMemoryInfo :: [Text] -> [Text]
+extractMemoryInfo statusLines =
+  let extractField prefix = find (T.isPrefixOf prefix) statusLines
+      vmPeak = extractField "VmPeak:"
+      vmSize = extractField "VmSize:"
+      vmRSS = extractField "VmRSS:"
+   in catMaybes [vmPeak, vmSize, vmRSS]
+
+-- | Extract CPU information from /proc/[pid]/stat
+extractCPUInfo :: Text -> [Text]
+extractCPUInfo statContent =
+  case T.words statContent of
+    fields
+      | length fields > 14 ->
+          let utime = case drop 13 fields of
+                x : _ -> x
+                [] -> "0"
+              stime = case drop 14 fields of
+                x : _ -> x
+                [] -> "0"
+           in ["CPU User Time: " <> utime, "CPU System Time: " <> stime]
+    _ -> ["Could not parse CPU info"]
+
+-- | Get git information from workspace
+getGitInfo :: FilePath -> IO [Text]
+getGitInfo workspaceDir = do
+  lastCommit <- getLastCommitInfo workspaceDir
+  case lastCommit of
+    Nothing -> pure ["No git repository or no commits"]
+    Just (commitHash, message) ->
+      pure
+        [ "Last commit: " <> commitHash,
+          "Commit message: " <> message
+        ]
+
+-- | Get last commit hash and message
+getLastCommitInfo :: FilePath -> IO (Maybe (Text, Text))
+getLastCommitInfo workspaceDir = do
+  catchAny
+    ( do
+        commitHash <- Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "rev-parse", "HEAD"])
+        message <- Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "log", "--format=%s", "-n", "1"])
+        pure $ Just (T.strip (toS commitHash), T.strip (toS message))
+    )
+    (\_ -> pure Nothing)
+
 -- | Handle the shell command
 handleShell :: GlobalOpts -> Maybe Text -> IO ()
 handleShell globalOpts maybeVmName = do
@@ -539,6 +675,7 @@ main = do
     Update updateConfig -> handleUpdate globalOpts updateConfig
     Start maybeVmName -> handleStart globalOpts maybeVmName
     Stop maybeVmName -> handleStop globalOpts maybeVmName
+    Status maybeVmName -> handleStatus globalOpts maybeVmName
     Shell maybeVmName -> handleShell globalOpts maybeVmName
     _ -> do
       -- Set up async filtered logging for unimplemented commands
