@@ -253,6 +253,11 @@
         # Legacy packages for compatibility
         legacyPackages = pkgs;
 
+        packages = rec {
+          inherit (pkgs) agent-vm agent-vm-test;
+          default = agent-vm;
+        };
+
         lib = {
           mk-agent-vm =
             mods:
