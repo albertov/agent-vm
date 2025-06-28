@@ -74,9 +74,11 @@ traceLevel traceEvent = case traceEvent of
   VMUpdated {} -> Info
   VMDestroyed {} -> Info
   VMConnectingShell {} -> Info
+  VMStopped {} -> Info
   WorkspaceCreated {} -> Info
   -- Debug events - detailed operational info
   VMStarting {} -> Debug
+  VMStopping {} -> Debug
   ProcessSpawned {} -> Debug
   NixBuildStarted {} -> Debug
   MainInfo {} -> Info
@@ -90,6 +92,8 @@ data AgentVmTrace
     VMCreated VMConfig
   | VMUpdated VMConfig
   | VMStarting VMConfig
+  | VMStopping VMConfig
+  | VMStopped VMConfig
   | VMDestroyed VMConfig
   | VMFailed VMConfig Text
   | VMConnectingShell VMConfig
@@ -115,6 +119,8 @@ renderTrace = \case
   VMCreated c -> "🆕 Created VM at  " <> toS (stateDir c) <> " for " <> name c
   VMUpdated c -> "🔄 Updated VM configuration for " <> name c
   VMStarting c -> "⏳ Starting VM for " <> name c
+  VMStopping c -> "⏸️  Stopping VM for " <> name c
+  VMStopped c -> "⏹️  Stopped VM for " <> name c
   VMDestroyed c -> "🗑️  Destroyed VM at " <> toS (stateDir c)
   VMFailed c r -> "❌ VM failed for " <> name c <> ": " <> r
   VMConnectingShell c -> "🐚 Connecting to shell for " <> name c

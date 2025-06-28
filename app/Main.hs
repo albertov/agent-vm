@@ -467,6 +467,38 @@ startVmWithName globalOpts vmName = do
         delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
         exitSuccess
 
+-- | Handle the stop command
+handleStop :: GlobalOpts -> Maybe Text -> IO ()
+handleStop globalOpts maybeVmName = do
+  case maybeVmName of
+    Nothing -> do
+      -- No VM name provided, try to infer from current directory
+      currentDir <- getCurrentDirectory
+      vmName <- generateDefaultName currentDir
+      stopVmWithName globalOpts vmName
+    Just vmName -> stopVmWithName globalOpts vmName
+
+-- | Stop VM with given name
+stopVmWithName :: GlobalOpts -> Text -> IO ()
+stopVmWithName globalOpts vmName = do
+  vmConfig <- Types.defVMConfig (optStateDir globalOpts) vmName "."
+
+  -- Set up async filtered logging
+  withAsyncFilteredLogger globalOpts $ \tracer -> do
+    let env = AgentVmEnv {tracer, Env.stateDir = Types.stateDir vmConfig}
+
+    -- Run the VM stop operation
+    result <- runVMT env (stop vmConfig)
+    case result of
+      Left err -> do
+        traceWith tracer $ MainError ("Failed to stop VM: " <> toS (show err :: [Char]))
+        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
+        exitFailure
+      Right () -> do
+        traceWith tracer $ MainInfo ("Successfully stopped VM: " <> name vmConfig)
+        delay 1_000_000 -- work around bug in withAsyncHandleTracer which doesn't wait for messages to finisih printing
+        exitSuccess
+
 -- | Handle the shell command
 handleShell :: GlobalOpts -> Maybe Text -> IO ()
 handleShell globalOpts maybeVmName = do
@@ -506,6 +538,7 @@ main = do
     Create createConfig -> handleCreate globalOpts createConfig
     Update updateConfig -> handleUpdate globalOpts updateConfig
     Start maybeVmName -> handleStart globalOpts maybeVmName
+    Stop maybeVmName -> handleStop globalOpts maybeVmName
     Shell maybeVmName -> handleShell globalOpts maybeVmName
     _ -> do
       -- Set up async filtered logging for unimplemented commands

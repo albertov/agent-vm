@@ -9,6 +9,7 @@ module Main (main) where
 
 import qualified AgentVM.NixSpec as NixSpec
 import AgentVM.TestUtils (withTestEnv)
+import qualified AgentVM.VMLifecycleSpec as VMLifecycleSpec
 import Protolude
 import Test.Hspec
 
@@ -18,6 +19,7 @@ main = hspec spec
 spec :: Spec
 spec = describe "Agent VM Integration Tests" $ do
   NixSpec.spec
+  VMLifecycleSpec.spec
   describe "VM Lifecycle" $ around withTestEnv $ do
     it "can start a VM" $ \(_env, _) -> do
       pending -- TODO: Implement start command

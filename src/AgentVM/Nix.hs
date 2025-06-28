@@ -22,10 +22,10 @@ import AgentVM.Types
   ( VMConfig (..),
     VMError (CommandTimeout),
     vmConfigFile,
-    vmPidFile,
     vmDiskImage,
     vmGCRoot,
     vmNixFile,
+    vmPidFile,
     vmSerialSocket,
   )
 import Control.Concurrent.Timeout (timeout)

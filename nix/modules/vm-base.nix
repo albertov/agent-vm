@@ -139,11 +139,11 @@ in
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
-      qemu.options = (lib.optional (cfg.serialSocket != null)
-        "-serial unix:${cfg.serialSocket},server,nowait")
-        ++ (lib.optional (cfg.pidFile != null)
-        "-daemonize -pidfile ${cfg.pidFile} -display none  -vga none");
-
+      qemu.options =
+        (lib.optional (cfg.serialSocket != null) "-serial unix:${cfg.serialSocket},server,nowait")
+        ++ (lib.optional (
+          cfg.pidFile != null
+        ) "-daemonize -pidfile ${cfg.pidFile} -display none  -vga none");
 
       sharedDirectoriesVIO = {
         workspace = {

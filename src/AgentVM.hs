@@ -42,12 +42,16 @@ import AgentVM.Nix
 import AgentVM.StreamingProcess (Process (..))
 import AgentVM.StreamingSocket (Socket (..))
 import AgentVM.Types
+import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
+import qualified Data.Text as T
 import Lens.Micro
 import Protolude hiding (bracket, throwIO, trace, try)
-import System.Directory (doesDirectoryExist, doesFileExist)
+import System.Directory (doesDirectoryExist, doesFileExist, removeFile)
+import System.Posix.Signals (sigKILL, sigTERM, signalProcess)
+import System.Posix.Types (ProcessID)
 import UnliftIO (MonadUnliftIO)
-import UnliftIO.Exception (throwIO, try)
+import UnliftIO.Exception (catchAny, throwIO, try)
 
 -- | Instance of MonadVM for VMT IO
 instance (MonadUnliftIO m) => MonadVM (VMT m) where
@@ -76,7 +80,10 @@ instance (MonadUnliftIO m) => MonadVM (VMT m) where
     try $ do
       trace (Log.VMStarting config)
       startVM config
-  stop _ = return (Left (WorkspaceError "stop not implemented"))
+  stop config =
+    try $ do
+      trace (Log.VMStopping config)
+      stopVM config
   status _ = return (Left (WorkspaceError "status not implemented"))
 
   shell config = do
@@ -110,6 +117,49 @@ startVM config = do
 
   trace $ Log.ProcessSpawned (toS scriptPath) []
   interactWith stdin stdout stderr $ Process scriptPath []
+
+-- | Stop a VM by reading its PID file and sending termination signals
+stopVM ::
+  ( MonadTrace AgentVmTrace m,
+    MonadIO m
+  ) =>
+  VMConfig ->
+  m ()
+stopVM config = do
+  let pidFilePath = vmPidFile config
+
+  -- Check if PID file exists
+  pidFileExists <- liftIO $ doesFileExist pidFilePath
+  unless pidFileExists $ do
+    trace $ Log.VMFailed config ("VM PID file not found, VM may already be stopped: " <> toS pidFilePath)
+    liftIO $ throwIO $ VMNotFound pidFilePath
+
+  -- Read and parse PID from file
+  pidContent <- liftIO $ readFile pidFilePath
+  let pidText :: Text = T.strip (toS pidContent)
+  case readMaybe (T.unpack pidText) of
+    Nothing -> do
+      trace $ Log.VMFailed config ("Invalid PID in file: " <> toS pidFilePath)
+      liftIO $ throwIO $ WorkspaceError ("Invalid PID format in " <> toS pidFilePath)
+    Just (pid :: ProcessID) -> do
+      -- Try to terminate the process gracefully with SIGTERM
+      liftIO $
+        catchAny
+          ( do
+              signalProcess sigTERM pid
+              -- Wait a moment for graceful shutdown
+              delay 2000000 -- 2 seconds
+              -- Check if process is still running by sending signal 0
+              catchAny
+                (signalProcess sigKILL pid >> removeFile pidFilePath)
+                (\_ -> removeFile pidFilePath) -- Process already dead, just clean up
+          )
+          ( \_ -> do
+              -- Process might already be dead, try to clean up PID file anyway
+              catchAny (removeFile pidFilePath) (\_ -> pure ())
+          )
+
+      trace $ Log.VMStopped config
 
 -- | Connect to VM shell via serial socket with proper terminal handling
 connectToVMShell ::
