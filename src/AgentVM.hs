@@ -1,6 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -183,11 +184,7 @@ getVMState config = do
           return Failed
         Just (pid :: ProcessID) -> do
           -- Check if process is still running by trying to send signal 0
-          isRunning <-
-            liftIO $
-              catchAny
-                (signalProcess 0 pid >> return True)
-                (\_ -> return False)
+          isRunning <- isPidRunning pid
           if isRunning
             then do
               -- Get detailed status when running
@@ -195,6 +192,13 @@ getVMState config = do
               return (Running vmStatus)
             else return Stopped
     Left _ -> return Stopped
+
+isPidRunning :: (MonadIO m) => ProcessID -> m Bool
+isPidRunning pid =
+  liftIO $
+    catchAny
+      (signalProcess 0 pid >> return True)
+      (\_ -> return False)
 
 -- | Stop a VM by reading its PID file and sending termination signals
 stopVM ::
@@ -219,22 +223,15 @@ stopVM config = do
           liftIO $ throwIO $ WorkspaceError ("Invalid PID format in " <> toS pidFilePath)
         Just (pid :: ProcessID) -> do
           -- Try to terminate the process gracefully with SIGTERM
-          liftIO $
-            catchAny
-              ( do
-                  signalProcess sigTERM pid
-                  -- Wait a moment for graceful shutdown
-                  delay 5_000_000 -- 5 seconds
-                  -- Check if process is still running by sending signal 0
-                  catchAny
-                    (signalProcess sigKILL pid >> removeFile pidFilePath)
-                    (\_ -> removeFile pidFilePath) -- Process already dead, just clean up
-              )
-              ( \_ -> do
-                  -- Process might already be dead, try to clean up PID file anyway
-                  catchAny (removeFile pidFilePath) (\_ -> pure ())
-              )
-
+          liftIO $ do
+            signalProcess sigTERM pid
+            let loop :: Int -> IO ()
+                loop 0 = signalProcess sigKILL pid
+                loop n = do
+                  isPidRunning pid >>= \case
+                    True -> delay 1_000 >> loop (n - 1)
+                    False -> pure ()
+            loop 50
           trace $ Log.VMStopped config
     Left _ -> do
       trace $ Log.VMFailed config ("VM PID file not found, VM may already be stopped: " <> toS pidFilePath)
