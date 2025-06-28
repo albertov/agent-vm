@@ -15,7 +15,7 @@ module AgentVM.Interactive
   )
 where
 
-import Control.Concurrent.STM (newTVarIO, readTVar, readTVarIO, writeTVar)
+import Control.Concurrent.STM (newTVarIO, readTVar, writeTVar)
 import Control.Concurrent.STM.TVar (TVar)
 import qualified Data.ByteString as BS
 import Data.STM.RollingQueue (RollingQueue, newIO, write)
@@ -27,7 +27,7 @@ import System.Posix.IO (stdInput)
 import System.Posix.Terminal (TerminalAttributes, TerminalMode (..), getTerminalAttributes, setTerminalAttributes, withoutMode)
 import qualified System.Posix.Terminal as Term
 import UnliftIO.Async (race_)
-import UnliftIO.Exception (bracket, throwIO)
+import UnliftIO.Exception (bracket)
 
 -- | Generic interactive type for bidirectional byte streaming
 data Interactive backend = Interactive
@@ -44,7 +44,7 @@ class InteractiveBackend backend where
   data CleanupData backend
 
   -- | Start the backend and return cleanup data
-  startBackend :: Int -> backend -> RollingQueue (Maybe BS.ByteString) -> RollingQueue BS.ByteString -> TVar Bool -> IO (CleanupData backend)
+  startBackend :: backend -> RollingQueue (Maybe BS.ByteString) -> RollingQueue BS.ByteString -> TVar Bool -> IO (CleanupData backend)
 
   -- | Clean up backend resources
   cleanupBackend :: CleanupData backend -> IO ()
@@ -64,7 +64,7 @@ startInteractive queueSize backend = do
   writeQueue <- newIO queueSize
   writeClosed <- newTVarIO False
   eofReached <- newTVarIO False
-  cleanupData <- startBackend queueSize backend readQueue writeQueue writeClosed
+  cleanupData <- startBackend backend readQueue writeQueue writeClosed
   return $ Interactive readQueue writeQueue writeClosed eofReached cleanupData
 
 -- | Close an interactive session and clean up all resources
@@ -74,49 +74,47 @@ closeInteractive interactive = cleanupBackend (iCleanup interactive)
 -- | Read bytes from the interactive session
 -- Blocks until bytes are available or the session terminates
 readBytes :: Interactive backend -> IO BS.ByteString
-readBytes interactive = do
+readBytes interactive = atomically $ do
   -- First check if we've already reached EOF
-  eofAlready <- readTVarIO (iEofReached interactive)
+  eofAlready <- readTVar (iEofReached interactive)
   if eofAlready
-    then throwIO $ mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
+    then throwSTM $ mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
     else do
-      (maybeBytes, _discardCount) <- atomically $ RQ.read (iReadQueue interactive)
+      (maybeBytes, _discardCount) <- RQ.read (iReadQueue interactive)
       case maybeBytes of
         Nothing -> do
           -- Mark EOF reached for future calls
-          atomically $ writeTVar (iEofReached interactive) True
-          throwIO $ mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
+          writeTVar (iEofReached interactive) True
+          throwSTM $ mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
         Just bytes -> return bytes
 
 -- | Try to read bytes from the interactive session
 -- Returns Nothing on EOF instead of throwing an exception
 tryReadBytes :: Interactive backend -> IO (Maybe BS.ByteString)
-tryReadBytes interactive = do
+tryReadBytes interactive = atomically $ do
   -- First check if we've already reached EOF
-  eofAlready <- readTVarIO (iEofReached interactive)
+  eofAlready <- readTVar (iEofReached interactive)
   if eofAlready
     then return Nothing
     else do
-      (maybeBytes, _discardCount) <- atomically $ RQ.read (iReadQueue interactive)
+      (maybeBytes, _discardCount) <- RQ.read (iReadQueue interactive)
       case maybeBytes of
         Nothing -> do
           -- Mark EOF reached for future calls
-          atomically $ writeTVar (iEofReached interactive) True
+          writeTVar (iEofReached interactive) True
           return Nothing
         Just bytes -> return (Just bytes)
 
 -- | Write bytes to the interactive session
 -- Throws an exception if the session has terminated
 writeBytes :: Interactive backend -> BS.ByteString -> IO ()
-writeBytes interactive bytes = do
-  success <- atomically $ do
-    closed <- readTVar (iWriteClosed interactive)
-    if closed
-      then return False
-      else write (iWriteQueue interactive) bytes >> return True
-  unless success $
-    throwIO $
-      mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
+writeBytes interactive bytes = atomically $ do
+  closed <- readTVar (iWriteClosed interactive)
+  if closed
+    then
+      throwSTM $
+        mkIOError eofErrorType "Interactive stream closed" Nothing Nothing
+    else write (iWriteQueue interactive) bytes
 
 -- | Set terminal to raw mode and return original attributes
 setupRawMode :: IO TerminalAttributes

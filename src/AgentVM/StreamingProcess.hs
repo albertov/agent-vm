@@ -38,7 +38,7 @@ data ProcessCleanup = ProcessCleanup ProcessHandle (Async ()) (Async ()) (Async 
 instance InteractiveBackend Process where
   data CleanupData Process = PipeCleanup ProcessCleanup
 
-  startBackend _queueSize (Process cmd args) readQueue writeQueue writeClosed = do
+  startBackend (Process cmd args) readQueue writeQueue writeClosed = do
     result <-
       try $
         createProcess
@@ -77,7 +77,7 @@ instance InteractiveBackend Process where
 instance InteractiveBackend ProcessPty where
   data CleanupData ProcessPty = PtyCleanup ProcessCleanup
 
-  startBackend _queueSize (ProcessPty cmd args) readQueue writeQueue writeClosed = do
+  startBackend (ProcessPty cmd args) readQueue writeQueue writeClosed = do
     -- Create a pseudo-terminal pair
     (masterFd, slaveFd) <- openPseudoTerminal
 

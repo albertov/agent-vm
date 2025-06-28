@@ -25,7 +25,7 @@ newtype Socket = Socket FilePath
 instance InteractiveBackend Socket where
   data CleanupData Socket = SocketCleanup NS.Socket (Async ()) (Async ())
 
-  startBackend _queueSize (Socket socketPath) readQueue writeQueue writeClosed = do
+  startBackend (Socket socketPath) readQueue writeQueue writeClosed = do
     -- Create and connect to Unix domain socket
     sock <- socket AF_UNIX Stream 0
     connect sock (SockAddrUnix socketPath)
