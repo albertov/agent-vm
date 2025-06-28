@@ -22,6 +22,7 @@ import Control.Concurrent.Thread.Delay (delay)
 import Data.Generics.Labels ()
 import Data.Text (split)
 import qualified Data.Text as T
+import Data.Time.Clock (NominalDiffTime)
 import Lens.Micro ((^.))
 import Options.Applicative
 import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
@@ -30,8 +31,39 @@ import Protolude hiding (throwIO)
 import qualified Shelly as Sh
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
 import System.FilePath (takeBaseName)
+import Text.Printf (printf)
 import UnliftIO (catchAny, throwIO)
 import UnliftIO.Directory (makeAbsolute)
+
+-- | Detailed VM status information
+data VMStatus = VMStatus
+  { vmStatusPid :: Maybe Int,
+    vmStatusMemoryInfo :: Maybe MemoryInfo,
+    vmStatusCPUInfo :: Maybe CPUInfo,
+    vmStatusGitInfo :: Maybe GitInfo
+  }
+  deriving (Show, Eq)
+
+-- | Memory information from /proc/[pid]/status
+data MemoryInfo = MemoryInfo
+  { memVmPeak :: Maybe Int64, -- in bytes
+    memVmSize :: Maybe Int64, -- in bytes
+    memVmRSS :: Maybe Int64 -- in bytes
+  }
+  deriving (Show, Eq)
+
+-- | CPU information from /proc/[pid]/stat
+data CPUInfo = CPUInfo
+  { cpuUserTime :: NominalDiffTime,
+    cpuSystemTime :: NominalDiffTime
+  }
+  deriving (Show, Eq)
+
+-- | Git repository information
+newtype GitInfo = GitInfo
+  { gitLastCommitDiff :: Text
+  }
+  deriving (Show, Eq)
 
 -- | Set up async filtered logger based on global options
 -- Verbose flag sets minimum level to Debug, Debug flag sets it to Trace
@@ -499,7 +531,7 @@ handleStatus globalOpts maybeVmName = do
 
 -- | Get detailed status for VM with given name
 statusVmWithName :: GlobalOpts -> Text -> IO ()
-statusVmWithName globalOpts vmName = do
+statusVmWithName globalOpts vmName =
   withAgentVmEnv globalOpts vmName $ \env -> do
     -- Run the VM status operation
     result <- runVMT env (status (env ^. #vmConfig))
@@ -514,8 +546,9 @@ statusVmWithName globalOpts vmName = do
 
         -- Get detailed status information
         when (isRunning vmState) $ do
-          detailedStatus <- liftIO $ getDetailedVMStatus (vmConfig env)
-          mapM_ (traceWith (tracer env) . MainInfo) detailedStatus
+          vmStatus <- liftIO $ getDetailedVMStatus (env ^. #vmConfig)
+          let statusLines = renderVMStatus vmStatus
+          mapM_ (traceWith (tracer env) . MainInfo) statusLines
 
         delay 1_000_000
         exitSuccess
@@ -533,8 +566,62 @@ isRunning :: VMState -> Bool
 isRunning Running = True
 isRunning _ = False
 
+-- | Render VMStatus to list of text lines
+renderVMStatus :: VMStatus -> [Text]
+renderVMStatus vmStatus =
+  let pidInfo = case vmStatusPid vmStatus of
+        Nothing -> ["No PID file found"]
+        Just pid -> ["Process ID: " <> toS (show pid :: [Char])]
+
+      memInfo = maybe [] renderMemoryInfo (vmStatusMemoryInfo vmStatus)
+
+      cpuInfo = maybe [] renderCPUInfo (vmStatusCPUInfo vmStatus)
+
+      gitInfo = maybe ["No git repository or no commits"] renderGitInfo (vmStatusGitInfo vmStatus)
+   in pidInfo ++ memInfo ++ cpuInfo ++ gitInfo
+
+-- | Render memory information
+renderMemoryInfo :: MemoryInfo -> [Text]
+renderMemoryInfo memInfo =
+  catMaybes
+    [ fmap (formatMemoryBytes "VmPeak:") (memVmPeak memInfo),
+      fmap (formatMemoryBytes "VmSize:") (memVmSize memInfo),
+      fmap (formatMemoryBytes "VmRSS:") (memVmRSS memInfo)
+    ]
+
+-- | Format memory bytes to MB/GB with 2 decimals
+formatMemoryBytes :: Text -> Int64 -> Text
+formatMemoryBytes fieldName bytes =
+  let mbValue = fromIntegral bytes / (1024 * 1024) :: Double
+      gbValue = mbValue / 1024
+      formatted =
+        if gbValue >= 1.0
+          then T.pack (printf "%.2f GB" gbValue)
+          else T.pack (printf "%.2f MB" mbValue)
+   in fieldName <> " " <> formatted
+
+-- | Render CPU information
+renderCPUInfo :: CPUInfo -> [Text]
+renderCPUInfo cpuInfo =
+  [ "CPU User Time: " <> formatCPUTime (cpuUserTime cpuInfo),
+    "CPU System Time: " <> formatCPUTime (cpuSystemTime cpuInfo)
+  ]
+
+-- | Format NominalDiffTime as human-readable text
+formatCPUTime :: NominalDiffTime -> Text
+formatCPUTime time =
+  let seconds = realToFrac time :: Double
+   in T.pack (printf "%.2f seconds" seconds)
+
+-- | Render git information
+renderGitInfo :: GitInfo -> [Text]
+renderGitInfo gitInfo =
+  [ "Last commit diff:",
+    gitLastCommitDiff gitInfo
+  ]
+
 -- | Get detailed VM status including memory, CPU usage, and git info
-getDetailedVMStatus :: VMConfig -> IO [Text]
+getDetailedVMStatus :: VMConfig -> IO VMStatus
 getDetailedVMStatus config = do
   let pidFilePath = Types.vmPidFile config
 
@@ -542,78 +629,99 @@ getDetailedVMStatus config = do
   ePidContent <- catchAny (Just <$> readFile pidFilePath) (\_ -> pure Nothing)
 
   case ePidContent of
-    Nothing -> pure ["No PID file found"]
+    Nothing -> pure $ VMStatus Nothing Nothing Nothing Nothing
     Just pidContent -> do
       let pidText = T.strip (toS pidContent)
       case readMaybe (T.unpack pidText) of
-        Nothing -> pure ["Invalid PID in file"]
+        Nothing -> pure $ VMStatus Nothing Nothing Nothing Nothing
         Just pid -> do
-          procInfo <- getProcessInfo pid
+          memInfo <- getMemoryInfo pid
+          cpuInfo <- getCPUInfo pid
           gitInfo <- getGitInfo (workspace config)
-          pure $ procInfo ++ gitInfo
+          pure $ VMStatus (Just pid) memInfo cpuInfo gitInfo
 
--- | Get process information from /proc filesystem
-getProcessInfo :: Int -> IO [Text]
-getProcessInfo pid = do
+-- | Get memory information from /proc filesystem
+getMemoryInfo :: Int -> IO (Maybe MemoryInfo)
+getMemoryInfo pid = do
   let statusPath = "/proc/" <> show pid <> "/status"
-      statPath = "/proc/" <> show pid <> "/stat"
 
   statusInfo <- catchAny (readFileLines statusPath) (\_ -> pure [])
+
+  let extractAndParseField prefix = do
+        line <- find (T.isPrefixOf prefix) statusInfo
+        parseMemoryLine line
+
+  if null statusInfo
+    then pure Nothing
+    else
+      pure $
+        Just $
+          MemoryInfo
+            (extractAndParseField "VmPeak:")
+            (extractAndParseField "VmSize:")
+            (extractAndParseField "VmRSS:")
+
+-- | Parse memory line from /proc/[pid]/status and convert kB to bytes
+parseMemoryLine :: Text -> Maybe Int64
+parseMemoryLine line =
+  case T.words line of
+    (_ : valueStr : "kB" : _) ->
+      case readMaybe (T.unpack valueStr) of
+        Just (kbValue :: Int64) -> Just (kbValue * 1024) -- Convert kB to bytes
+        Nothing -> Nothing
+    _ -> Nothing
+
+-- | Get CPU information from /proc filesystem
+getCPUInfo :: Int -> IO (Maybe CPUInfo)
+getCPUInfo pid = do
+  let statPath = "/proc/" <> show pid <> "/stat"
+
   statInfo <- catchAny (readFile statPath) (\_ -> pure "")
 
-  let memInfo = extractMemoryInfo statusInfo
-      cpuInfo = extractCPUInfo (toS statInfo)
+  case T.words (toS statInfo) of
+    fields
+      | length fields > 14 -> do
+          let utimeStr = case drop 13 fields of
+                x : _ -> x
+                [] -> "0"
+              stimeStr = case drop 14 fields of
+                x : _ -> x
+                [] -> "0"
 
-  pure $ ["Process ID: " <> toS (show pid :: [Char])] ++ memInfo ++ cpuInfo
+          case (readMaybe (T.unpack utimeStr), readMaybe (T.unpack stimeStr)) of
+            (Just (utime :: Int64), Just (stime :: Int64)) -> do
+              -- Convert clock ticks to seconds (typical USER_HZ is 100)
+              let clockTicksPerSec = 100 :: Double
+                  utimeSeconds = fromIntegral utime / clockTicksPerSec
+                  stimeSeconds = fromIntegral stime / clockTicksPerSec
+              pure $
+                Just $
+                  CPUInfo
+                    (realToFrac utimeSeconds)
+                    (realToFrac stimeSeconds)
+            _ -> pure Nothing
+    _ -> pure Nothing
 
 -- | Read file and split into lines
 readFileLines :: FilePath -> IO [Text]
 readFileLines path = T.lines . toS <$> readFile path
 
--- | Extract memory information from /proc/[pid]/status
-extractMemoryInfo :: [Text] -> [Text]
-extractMemoryInfo statusLines =
-  let extractField prefix = find (T.isPrefixOf prefix) statusLines
-      vmPeak = extractField "VmPeak:"
-      vmSize = extractField "VmSize:"
-      vmRSS = extractField "VmRSS:"
-   in catMaybes [vmPeak, vmSize, vmRSS]
-
--- | Extract CPU information from /proc/[pid]/stat
-extractCPUInfo :: Text -> [Text]
-extractCPUInfo statContent =
-  case T.words statContent of
-    fields
-      | length fields > 14 ->
-          let utime = case drop 13 fields of
-                x : _ -> x
-                [] -> "0"
-              stime = case drop 14 fields of
-                x : _ -> x
-                [] -> "0"
-           in ["CPU User Time: " <> utime, "CPU System Time: " <> stime]
-    _ -> ["Could not parse CPU info"]
-
 -- | Get git information from workspace
-getGitInfo :: FilePath -> IO [Text]
+getGitInfo :: FilePath -> IO (Maybe GitInfo)
 getGitInfo workspaceDir = do
-  lastCommit <- getLastCommitInfo workspaceDir
-  case lastCommit of
-    Nothing -> pure ["No git repository or no commits"]
-    Just (commitHash, message) ->
-      pure
-        [ "Last commit: " <> commitHash,
-          "Commit message: " <> message
-        ]
+  lastCommitDiff <- getLastCommitDiff workspaceDir
+  case lastCommitDiff of
+    Nothing -> pure Nothing
+    Just diffText -> pure $ Just $ GitInfo diffText
 
--- | Get last commit hash and message
-getLastCommitInfo :: FilePath -> IO (Maybe (Text, Text))
-getLastCommitInfo workspaceDir = do
+-- | Get last commit diff using git log -p
+getLastCommitDiff :: FilePath -> IO (Maybe Text)
+getLastCommitDiff workspaceDir = do
   catchAny
-    ( do
-        commitHash <- Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "rev-parse", "HEAD"])
-        message <- Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "log", "--format=%s", "-n", "1"])
-        pure $ Just (T.strip (toS commitHash), T.strip (toS message))
+    ( Sh.shelly $ Sh.silently $ do
+        commitHash <- Sh.run "git" ["-C", toS workspaceDir, "rev-parse", "HEAD"]
+        diffOutput <- Sh.run "git" ["-C", toS workspaceDir, "log", "-p", T.strip (toS commitHash), "-1"]
+        pure $ Just (T.strip (toS diffOutput))
     )
     (\_ -> pure Nothing)
 
