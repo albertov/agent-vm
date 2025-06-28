@@ -103,7 +103,7 @@ vmGCRoot config = stateDir config </> "vm-start"
 -- | Path to the script that starts the vm and allows us to communicate with a
 -- login shell at the virtual qemu terminal
 vmStartScript :: VMConfig -> FilePath
-vmStartScript config = vmGCRoot config </> "bin" </> "run-nixos-vm-virtiofs"
+vmStartScript config = vmGCRoot config </> "bin" </> "run-" <> toS (name config) <> "-vm-virtiofs"
 
 -- | Path to the serial console socket
 vmSerialSocket :: VMConfig -> FilePath

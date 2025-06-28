@@ -1,8 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- | Main entry point for agent-vm CLI
@@ -24,7 +26,7 @@ import Plow.Logging (IOTracer (..), Tracer (..), filterTracer, traceWith)
 import Plow.Logging.Async (withAsyncHandleTracer)
 import Protolude hiding (throwIO)
 import qualified Shelly as Sh
-import System.Directory (getCurrentDirectory)
+import System.Directory (doesDirectoryExist, getCurrentDirectory)
 import System.FilePath (takeBaseName)
 import UnliftIO (catchAny, throwIO)
 import UnliftIO.Directory (makeAbsolute)
@@ -48,13 +50,12 @@ withAsyncFilteredLogger globalOpts tracerAction = do
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath,
     optVerbose :: Bool,
-    optDebug :: Bool,
-    optTimeout :: Int -- Currently unused but intended for future timeout handling
+    optDebug :: Bool
   }
 
 data CreateConfig = CreateConfig
-  { createName :: Maybe Text,
-    createWorkspace :: FilePath,
+  { createWorkspace :: Maybe FilePath,
+    createName :: Maybe Text,
     createTmpfs :: Maybe Bool,
     createMemory :: Maybe Int,
     createCores :: Maybe Int,
@@ -74,11 +75,12 @@ data CreateConfig = CreateConfig
 data Command
   = Create CreateConfig
   | Update CreateConfig
-  | Start (Maybe Text)
-  | Stop
-  | Status
   | List
-  | Destroy
+  | Reset (Maybe Text)
+  | Start (Maybe Text)
+  | Stop (Maybe Text)
+  | Status (Maybe Text)
+  | Destroy (Maybe Text)
   | Shell (Maybe Text)
   deriving (Show)
 
@@ -105,51 +107,31 @@ parseArgs = (,) <$> globalOpts <*> commandParser
               <> short 'd'
               <> help "Enable debug logging"
           )
-        <*> option
-          auto
-          ( long "timeout"
-              <> short 't'
-              <> metavar "SECONDS"
-              <> value 120
-              <> help "Global timeout for VM operations"
-          )
 
     commandParser =
       hsubparser
         ( command "create" (info (Create <$> parseCreateConfig) (progDesc "Create a new VM with workspace directory"))
             <> command "update" (info (Update <$> parseCreateConfig) (progDesc "Update VM configuration without removing qcow2 image"))
-            <> command "start" (info (Start <$> parseStartConfig) (progDesc "Start VM"))
-            <> command "stop" (info (pure Stop) (progDesc "Stop VM"))
-            <> command "status" (info (pure Status) (progDesc "Show VM status"))
+            <> command "start" (info (Start <$> optional nameOption) (progDesc "Start VM"))
+            <> command "stop" (info (Stop <$> optional nameOption) (progDesc "Stop VM"))
+            <> command "status" (info (Status <$> optional nameOption) (progDesc "Show VM status"))
             <> command "list" (info (pure List) (progDesc "List all VMs"))
-            <> command "destroy" (info (pure Destroy) (progDesc "Destroy VM"))
-            <> command "shell" (info (Shell <$> parseShellConfig) (progDesc "Connect to VM shell via serial console"))
+            <> command "reset" (info (Reset <$> optional nameOption) (progDesc "Delete the VM hard disk clearing all persistent state (except workspace)"))
+            <> command "destroy" (info (Destroy <$> optional nameOption) (progDesc "Destroy VM"))
+            <> command "shell" (info (Shell <$> optional nameOption) (progDesc "Connect to VM shell via serial console"))
         )
 
 -- | Parse comma-separated list
 parseCommaSeparated :: Mod OptionFields Text -> Parser [Text]
 parseCommaSeparated opts = fmap (split (== ',')) (strOption opts)
 
--- | Parse start command configuration
-parseStartConfig :: Parser (Maybe Text)
-parseStartConfig =
-  optional
-    ( strOption
-        ( long "name"
-            <> metavar "NAME"
-            <> help "VM name to start (optional)"
-        )
-    )
-
--- | Parse shell command configuration
-parseShellConfig :: Parser (Maybe Text)
-parseShellConfig =
-  optional
-    ( strOption
-        ( long "name"
-            <> metavar "NAME"
-            <> help "VM name to connect to shell (optional)"
-        )
+nameOption :: Parser Text
+nameOption =
+  strOption
+    ( long "name"
+        <> metavar "NAME"
+        <> help "VM name to connect to shell (optional)"
+        <> short 'n'
     )
 
 -- | Parse create command configuration
@@ -157,29 +139,27 @@ parseCreateConfig :: Parser CreateConfig
 parseCreateConfig =
   CreateConfig
     <$> optional
-      ( strOption
-          ( long "name"
-              <> metavar "NAME"
-              <> help "VM name (optional, defaults to repo_name-branch_name)"
+      ( argument
+          str
+          ( metavar "WORKSPACE"
+              <> help "Workspace directory path (default: current directory)"
           )
       )
-    <*> argument
-      str
-      ( metavar "WORKSPACE"
-          <> help "Workspace directory path"
-      )
+    <*> optional nameOption
     <*> optional
       ( switch
-          ( long "tmpfs"
-              <> help "Use tmpfs for root filesystem"
+          ( long "ephemeral"
+              <> help "Use tmpfs for root filesystem (default: false)"
+              <> short 'e'
           )
       )
     <*> optional
       ( option
           auto
-          ( long "memory"
+          ( long "memory-size"
               <> metavar "GB"
               <> help "Memory in GB"
+              <> short 'm'
           )
       )
     <*> optional
@@ -188,6 +168,7 @@ parseCreateConfig =
           ( long "cores"
               <> metavar "CORES"
               <> help "Number of CPU cores"
+              <> short 'c'
           )
       )
     <*> optional
@@ -196,6 +177,7 @@ parseCreateConfig =
           ( long "disk-size"
               <> metavar "GB"
               <> help "Disk size in GB"
+              <> short 'S'
           )
       )
     <*> optional
@@ -211,6 +193,7 @@ parseCreateConfig =
           ( long "port"
               <> metavar "PORT"
               <> help "Port number"
+              <> short 'p'
           )
       )
     <*> optional
@@ -226,6 +209,7 @@ parseCreateConfig =
           ( long "uid"
               <> metavar "UID"
               <> help "User ID"
+              <> short 'u'
           )
       )
     <*> optional
@@ -234,6 +218,7 @@ parseCreateConfig =
           ( long "gid"
               <> metavar "GID"
               <> help "Group ID"
+              <> short 'g'
           )
       )
     <*> optional
@@ -241,13 +226,15 @@ parseCreateConfig =
           ( long "group"
               <> metavar "GROUP"
               <> help "Group name"
+              <> short 'G'
           )
       )
     <*> optional
       ( strOption
-          ( long "shell-name"
+          ( long "shell"
               <> metavar "SHELL"
               <> help "Shell name"
+              <> short 's'
           )
       )
     <*> optional
@@ -255,13 +242,15 @@ parseCreateConfig =
           ( long "flake"
               <> metavar "FLAKE"
               <> help "Flake path"
+              <> short 'F'
           )
       )
     <*> optional
       ( strOption
-          ( long "nix-base-config"
+          ( long "base"
               <> metavar "PATH"
               <> help "Nix base configuration file path"
+              <> short 'b'
           )
       )
 
@@ -271,8 +260,8 @@ getGitBranch workspaceDir = do
   result <-
     catchAny
       (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "branch", "--show-current"]))
-      (\_ -> return Nothing)
-  return $ fmap (T.strip . toS) result
+      (\_ -> pure Nothing)
+  pure $ fmap (T.strip . toS) result
 
 -- | Get git repository name from remote origin in workspace directory
 getGitRepoName :: FilePath -> IO (Maybe Text)
@@ -280,13 +269,13 @@ getGitRepoName workspaceDir = do
   result <-
     catchAny
       (Just <$> Sh.shelly (Sh.run "git" ["-C", toS workspaceDir, "remote", "show", "origin"]))
-      (\_ -> return Nothing)
+      (\_ -> pure Nothing)
   case result of
-    Nothing -> return Nothing
+    Nothing -> pure Nothing
     Just output -> do
       let lines' = T.lines (toS output)
           fetchUrl = find (T.isPrefixOf "  Fetch URL: ") lines'
-      return $ do
+      pure $ do
         url <- fetchUrl
         let urlPart = T.drop 13 url -- Remove "  Fetch URL: "
         -- Extract repo name from various URL formats
@@ -317,17 +306,17 @@ generateDefaultName workspaceDir = do
   maybeBranch <- getGitBranch workspaceDir
   maybeRepo <- getGitRepoName workspaceDir
 
-  let branch = maybe "main" sanitizeName maybeBranch
-      repo = maybe (sanitizeName (getRepoNameFallback workspaceDir)) sanitizeName maybeRepo
+  let branch = fromMaybe "main" maybeBranch
+      repo = fromMaybe (getRepoNameFallback workspaceDir) maybeRepo
 
-  return $ repo <> "-" <> branch
+  pure $ sanitizeName repo <> "-" <> sanitizeName branch
 
 -- | Convert CreateConfig to VMConfig for update, using existing config as defaults
 updateConfigToVMConfig :: GlobalOpts -> CreateConfig -> IO VMConfig
 updateConfigToVMConfig globalOpts updateConfig = do
-  workspaceDir <- makeAbsolute (createWorkspace updateConfig)
+  workspaceDir <- makeAbsolute (fromMaybe "." (createWorkspace updateConfig))
   vmName <- case createName updateConfig of
-    Just vmName -> return vmName
+    Just vmName -> pure vmName
     Nothing -> generateDefaultName workspaceDir
 
   -- First create a temporary config to determine the correct paths
@@ -344,6 +333,7 @@ updateConfigToVMConfig globalOpts updateConfig = do
       throwIO $ WorkspaceError ("VM does not exist. Use 'create' to create a new VM: " <> toS configFilePath)
     Just existing -> do
       nixBaseConfig <- mapM makeAbsolute (createNixBaseConfig updateConfig <|> nixBaseConfig existing)
+      flake <- sanitizeFlake (fromMaybe (flake existing) (createFlake updateConfig))
       -- Merge with existing config, CLI args override existing values
       pure
         existing
@@ -359,7 +349,7 @@ updateConfigToVMConfig globalOpts updateConfig = do
             gid = fromMaybe (gid existing) (createGid updateConfig),
             Types.group = fromMaybe (Types.group existing) (createGroup updateConfig),
             shellName = fromMaybe (shellName existing) (createShellName updateConfig),
-            flake = fromMaybe (flake existing) (createFlake updateConfig),
+            flake,
             nixBaseConfig,
             name = fromMaybe (name existing) (createName updateConfig)
           }
@@ -367,13 +357,14 @@ updateConfigToVMConfig globalOpts updateConfig = do
 -- | Convert CreateConfig to VMConfig using defVMConfig for defaults
 createConfigToVMConfig :: GlobalOpts -> CreateConfig -> IO VMConfig
 createConfigToVMConfig globalOpts createConfig = do
-  workspaceDir <- makeAbsolute (createWorkspace createConfig)
+  workspaceDir <- makeAbsolute (fromMaybe "." (createWorkspace createConfig))
   vmName <- case createName createConfig of
-    Just vmName -> return vmName
+    Just vmName -> pure vmName
     Nothing -> generateDefaultName workspaceDir
 
   defaults <- Types.defVMConfig (optStateDir globalOpts) vmName (toS workspaceDir)
   nixBaseConfig <- mapM makeAbsolute (createNixBaseConfig createConfig <|> nixBaseConfig defaults)
+  flake <- sanitizeFlake (fromMaybe (flake defaults) (createFlake createConfig))
   pure
     defaults
       { tmpfs = fromMaybe (tmpfs defaults) (createTmpfs createConfig),
@@ -387,9 +378,20 @@ createConfigToVMConfig globalOpts createConfig = do
         gid = fromMaybe (gid defaults) (createGid createConfig),
         Types.group = fromMaybe (Types.group defaults) (createGroup createConfig),
         shellName = fromMaybe (shellName defaults) (createShellName createConfig),
-        flake = fromMaybe (flake defaults) (createFlake createConfig),
+        flake,
         nixBaseConfig
       }
+
+sanitizeFlake :: Text -> IO Text
+sanitizeFlake flake
+  | dir : _ <- T.splitOn "#" flake = makeAbsoluteIfDirectory dir
+  | otherwise = makeAbsoluteIfDirectory flake
+  where
+    makeAbsoluteIfDirectory :: Text -> IO Text
+    makeAbsoluteIfDirectory (toS -> dir) =
+      doesDirectoryExist dir >>= \case
+        True -> toS <$> makeAbsolute dir
+        False -> pure flake
 
 -- | Handle the create command
 handleCreate :: GlobalOpts -> CreateConfig -> IO ()

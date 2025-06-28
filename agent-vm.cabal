@@ -77,8 +77,7 @@ library test-utils
 executable agent-vm
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base
-                    , protolude
+    build-depends:    protolude
                     , agent-vm
                     , optparse-applicative
                     , plow-log-async

@@ -297,7 +297,11 @@
           integration-test = flake-utils.lib.mkApp {
             drv = pkgs.writeShellApplication {
               name = "integration-test";
-              runtimeInputs = [ pkgs.agent-vm-test ];
+              runtimeInputs = [
+                pkgs.nix
+                pkgs.git
+                pkgs.agent-vm-test
+              ];
               text = ''
                 exec agent-vm-test "$@"
               '';

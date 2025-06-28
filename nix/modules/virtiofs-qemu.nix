@@ -9,10 +9,11 @@ with lib;
 
 let
   cfg = config.virtualisation;
+  vmName = config.networking.hostName;
 
   # Create wrapper script that starts virtiofsd and modifies the VM script
   mkVirtiofsRunner = pkgs.writeShellApplication {
-    name = "run-nixos-vm-virtiofs";
+    name = "run-${vmName}-vm-virtiofs";
     runtimeInputs = [ pkgs.virtiofsd ];
     text = ''
           set -eu -o pipefail
@@ -79,7 +80,7 @@ let
           # CRITICAL: Override the VM script's memory configuration for virtiofs
           export QEMU_OPTS="-m ${toString cfg.memorySize},slots=32,maxmem=64G -object memory-backend-file,id=mem,size=${toString cfg.memorySize}M,mem-path=/dev/shm,share=on -machine memory-backend=mem $VIRTIOFS_OPTS ''${QEMU_OPTS:-}"
           
-          exec ${config.system.build.vm}/bin/run-nixos-vm "$@"
+          exec ${config.system.build.vm}/bin/run-${vmName}-vm "$@"
     '';
   };
 

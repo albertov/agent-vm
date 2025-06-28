@@ -109,7 +109,7 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
     // (builtins.mapAttrs mapAttr
          (builtins.removeAttrs
             (builtins.fromJSON (builtins.readFile $configPath))
-            ["name" "flake" "shellName" "nixBaseConfig" "stateDir"]));
+            ["flake" "shellName" "nixBaseConfig" "stateDir"]));
 }
 |]
   where

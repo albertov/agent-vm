@@ -15,6 +15,11 @@ in
   ];
   options = {
     agent-vm = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        default = "agent-vm";
+        description = "The VM name";
+      };
       tmpfs = lib.mkOption {
         type = lib.types.bool;
         default = true;
@@ -106,7 +111,9 @@ in
   config = {
     services.qemuGuest.enable = true;
     boot.tmp.useTmpfs = cfg.tmpfs;
+    networking.hostName = cfg.name;
 
+    # Serial console on the serialSocket
     systemd.services."serial-getty@ttyS0" = {
       enable = true;
       serviceConfig = {
@@ -142,7 +149,7 @@ in
           from = "host";
           host.port = cfg.port;
           guest.port = config.services.mcp-proxy.port;
-        } # MCP proxy
+        }
       ];
 
     };
