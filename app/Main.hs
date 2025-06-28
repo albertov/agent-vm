@@ -31,8 +31,7 @@ import UnliftIO.Directory (makeAbsolute)
 data GlobalOpts = GlobalOpts
   { optStateDir :: Maybe FilePath,
     _optVerbose :: Bool,
-    _optDebug :: Bool,
-    _optTimeout :: Int
+    _optDebug :: Bool
   }
 
 data CreateConfig = CreateConfig
@@ -60,7 +59,6 @@ data Command
   | Start (Maybe Text)
   | Stop
   | Status
-  | Logs
   | List
   | Destroy
   | Shell (Maybe Text)
@@ -89,14 +87,6 @@ parseArgs = (,) <$> globalOpts <*> commandParser
               <> short 'd'
               <> help "Enable debug logging"
           )
-        <*> option
-          auto
-          ( long "timeout"
-              <> short 't'
-              <> metavar "SECONDS"
-              <> value 120
-              <> help "Global timeout for VM operations"
-          )
 
     commandParser =
       hsubparser
@@ -105,7 +95,6 @@ parseArgs = (,) <$> globalOpts <*> commandParser
             <> command "start" (info (Start <$> parseStartConfig) (progDesc "Start VM"))
             <> command "stop" (info (pure Stop) (progDesc "Stop VM"))
             <> command "status" (info (pure Status) (progDesc "Show VM status"))
-            <> command "logs" (info (pure Logs) (progDesc "Show VM logs"))
             <> command "list" (info (pure List) (progDesc "List all VMs"))
             <> command "destroy" (info (pure Destroy) (progDesc "Destroy VM"))
             <> command "shell" (info (Shell <$> parseShellConfig) (progDesc "Connect to VM shell via serial console"))
