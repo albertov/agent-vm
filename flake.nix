@@ -28,7 +28,7 @@
 
     # MCP packages
     mcp-proxy = {
-      url = "github:sparfenyuk/mcp-proxy/v0.8.0";
+      url = "github:sparfenyuk/mcp-proxy";
       flake = false;
     };
 

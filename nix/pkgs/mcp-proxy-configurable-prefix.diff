@@ -1,61 +1,28 @@
-diff --git a/src/mcp_proxy/__main__.py b/src/mcp_proxy/__main__.py
-index 1111111..2222222 100644
 --- a/src/mcp_proxy/__main__.py
 +++ b/src/mcp_proxy/__main__.py
-@@ -90,7 +90,7 @@ def _add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
-         nargs=2,
-         metavar=("NAME", "COMMAND_STRING"),
-         help=(
--            "Define a named stdio server. NAME is for the URL path /servers/NAME/. "
-+            "Define a named stdio server. NAME is for the URL path <server-prefix>/NAME/. "
-             "COMMAND_STRING is a single string with the command and its arguments "
-             "(e.g., 'uvx mcp-server-fetch --timeout 10'). "
-             "These servers inherit the proxy's CWD and environment from --pass-environment."
-@@ -109,6 +109,13 @@ def _add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+@@ -208,6 +208,11 @@ def _add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+             "Default is no CORS allowed."
          ),
      )
-
-+    parser.add_argument(
++    mcp_server_group.add_argument(
 +        "--server-prefix",
-+        type=str,
 +        default="/servers",
 +        help="URL prefix for named servers. Default is '/servers'",
 +    )
-+
-     mcp_server_group = parser.add_argument_group("SSE server options")
-     mcp_server_group.add_argument(
-         "--port",
-@@ -297,7 +304,7 @@ def _configure_named_servers_from_cli(
-     return named_stdio_params
 
 
--def _create_mcp_settings(args_parsed: argparse.Namespace) -> MCPServerSettings:
-+def _create_mcp_settings(args_parsed: argparse.Namespace, server_prefix: str) -> MCPServerSettings:
-     """Create MCP server settings from parsed arguments."""
-     return MCPServerSettings(
-         bind_host=args_parsed.host if args_parsed.host is not None else args_parsed.sse_host,
-@@ -305,6 +312,7 @@ def _create_mcp_settings(args_parsed: argparse.Namespace) -> MCPServerSettings:
+ def _setup_logging(*, debug: bool) -> logging.Logger:
+@@ -384,6 +389,7 @@ def _create_mcp_settings(args_parsed: argparse.Namespace) -> MCPServerSettings:
          stateless=args_parsed.stateless,
          allow_origins=args_parsed.allow_origin if len(args_parsed.allow_origin) > 0 else None,
          log_level="DEBUG" if args_parsed.debug else "INFO",
-+        server_prefix=server_prefix,
++        server_prefix=args_parsed.server_prefix,
      )
 
 
-@@ -381,7 +389,7 @@ def main() -> None:
-         sys.exit(1)
-
-     # Create MCP server settings and run the server
--    mcp_settings = _create_mcp_settings(args_parsed)
-+    mcp_settings = _create_mcp_settings(args_parsed, args_parsed.server_prefix)
-     asyncio.run(
-         run_mcp_server(
-             default_server_params=default_stdio_params,
-diff --git a/src/mcp_proxy/mcp_server.py b/src/mcp_proxy/mcp_server.py
-index 3333333..4444444 100644
 --- a/src/mcp_proxy/mcp_server.py
 +++ b/src/mcp_proxy/mcp_server.py
-@@ -30,6 +30,7 @@ class MCPServerSettings:
+@@ -32,6 +32,7 @@ class MCPServerSettings:
      stateless: bool = False
      allow_origins: list[str] | None = None
      log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
@@ -63,25 +30,21 @@ index 3333333..4444444 100644
 
 
  # To store last activity for multiple servers if needed, though status endpoint is global for now.
-@@ -193,8 +194,9 @@ async def run_mcp_server(
-                 http_manager_named.run(),
+@@ -178,7 +179,7 @@ async def run_mcp_server(
              )  # Manage lifespan by calling run()
 
--            # Mount these routes under /servers/{name}/
+             # Mount these routes under /servers/<name>/
 -            server_mount = Mount(f"/servers/{name}", routes=instance_routes_named)
-+            # Mount these routes under <server-prefix>/{name}/
-+            server_prefix = mcp_settings.server_prefix.rstrip('/')
-+            server_mount = Mount(f"{server_prefix}/{name}", routes=instance_routes_named)
++            server_mount = Mount(f"{mcp_settings.server_prefix}/{name}", routes=instance_routes_named)
              all_routes.append(server_mount)
              _global_status["server_instances"][name] = "configured"
 
-@@ -236,7 +238,8 @@ async def run_mcp_server(
+@@ -217,7 +218,7 @@ async def run_mcp_server(
              sse_urls.append(f"{base_url}/sse")
 
          # Add named servers
 -        sse_urls.extend([f"{base_url}/servers/{name}/sse" for name in named_server_params])
-+        server_prefix = mcp_settings.server_prefix.rstrip('/')
-+        sse_urls.extend([f"{base_url}{server_prefix}/{name}/sse" for name in named_server_params])
++        sse_urls.extend([f"{base_url}{mcp_settings.server_prefix}/{name}/sse" for name in named_server_params])
 
          # Display the SSE URLs prominently
          if sse_urls:

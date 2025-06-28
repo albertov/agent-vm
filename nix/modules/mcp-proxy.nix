@@ -86,6 +86,10 @@ let
             "--allow-origin"
             x
           ]) cfg.allowOrigins
+        ++ optionals (cfg.serverPrefix != "/servers") [
+          "--server-prefix"
+          cfg.serverPrefix
+        ]
         )
         ++ flatten (
           mapAttrsToList (name: server: [
@@ -231,6 +235,13 @@ in
         "*"
         "https://example.com"
       ];
+    };
+
+    serverPrefix = mkOption {
+      type = types.str;
+      default = "/servers";
+      description = "URL prefix for named servers.";
+      example = "/api/servers";
     };
 
     defaultServer = {

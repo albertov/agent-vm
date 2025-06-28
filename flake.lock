@@ -986,15 +986,15 @@
     "mcp-proxy": {
       "flake": false,
       "locked": {
-        "lastModified": 1748675725,
+        "lastModified": 1749160220,
+        "narHash": "sha256-aI7WGgDZLa+HJukp56KgAk6Ts5OoS4RJRNBuDEZYxzY=",
         "owner": "sparfenyuk",
         "repo": "mcp-proxy",
-        "rev": "04c92e471ab5b1b828383c64f0a10aeb3636fb39",
+        "rev": "24939b850bc3c8749c3607d91e567f78d1404abe",
         "type": "github"
       },
       "original": {
         "owner": "sparfenyuk",
-        "ref": "v0.8.0",
         "repo": "mcp-proxy",
         "type": "github"
       }
