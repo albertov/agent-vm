@@ -12,6 +12,7 @@ module AgentVM.Interactive
     tryReadBytes,
     writeBytes,
     interactWith,
+    parseEscapeKey,
   )
 where
 

@@ -3,7 +3,7 @@
 
 module AgentVM.StreamingSocketSpec (spec) where
 
-import AgentVM.Interactive (readBytes, tryReadBytes, withInteractive, writeBytes)
+import AgentVM.Interactive (parseEscapeKey, readBytes, tryReadBytes, withInteractive, writeBytes)
 import AgentVM.StreamingSocket (Socket (..))
 import Control.Concurrent.Thread.Delay (delay)
 import qualified Data.ByteString as BS
@@ -201,6 +201,99 @@ spec = around withTempDir $ describe "StreamingSocket" $ do
           -- Further reads should fail with EOF
           tryReadBytes sp >>= (`shouldBe` Nothing)
 
+  describe "escape sequence handling" $ do
+    it "should handle control character sequences over socket" $ \tmpDir -> do
+      let socketPath = tmpDir <> "/escape-test.sock"
+
+      withAsync (runEscapeTestServer socketPath) $ \_ -> do
+        -- Give server time to start
+        delay 10000 -- 10ms
+        withInteractive 10 (Socket socketPath) $ \sp -> do
+          -- Read initial output
+          initialOutput <- readBytes sp
+          show initialOutput `shouldSatisfy` ("Escape test ready" `isInfixOf`)
+          show initialOutput `shouldSatisfy` ("> " `isInfixOf`)
+
+          -- Send regular text
+          writeBytes sp "test\n"
+          response1 <- readBytes sp
+          response1 `shouldSatisfy` (\out -> "Test response" `isInfixOf` show out)
+
+          -- Send control character (Ctrl-W = byte 23)
+          let ctrlW = BS.pack [23]
+          writeBytes sp (ctrlW <> "x\n")
+          response2 <- readBytes sp
+          -- Should get echo response for the control sequence
+          response2 `shouldSatisfy` (\out -> "Echo:" `isInfixOf` show out)
+
+          -- Send quit to exit cleanly
+          writeBytes sp "quit\n"
+          quitOutput <- readBytes sp
+          quitOutput `shouldSatisfy` (\out -> "Goodbye" `isInfixOf` show out)
+
+    it "should parse escape key bytes correctly over socket" $ \tmpDir -> do
+      let socketPath = tmpDir <> "/escape-test2.sock"
+
+      withAsync (runEscapeTestServer socketPath) $ \_ -> do
+        -- Give server time to start
+        delay 10000 -- 10ms
+        withInteractive 10 (Socket socketPath) $ \sp -> do
+          -- Read initial output
+          _ <- readBytes sp
+
+          -- Test different control characters
+          let ctrlA = BS.pack [1] -- Ctrl-A
+          let ctrlC = BS.pack [3] -- Ctrl-C
+          let ctrlZ = BS.pack [26] -- Ctrl-Z
+
+          -- Send Ctrl-A
+          writeBytes sp (ctrlA <> "test\n")
+          response1 <- readBytes sp
+          response1 `shouldSatisfy` (\out -> "Echo:" `isInfixOf` show out)
+
+          -- Send Ctrl-C
+          writeBytes sp (ctrlC <> "test\n")
+          response2 <- readBytes sp
+          response2 `shouldSatisfy` (\out -> "Echo:" `isInfixOf` show out)
+
+          -- Send Ctrl-Z
+          writeBytes sp (ctrlZ <> "test\n")
+          response3 <- readBytes sp
+          response3 `shouldSatisfy` (\out -> "Echo:" `isInfixOf` show out)
+
+          -- Clean exit
+          writeBytes sp "quit\n"
+          void $ readBytes sp
+
+    it "should handle escape sequence detection with parseEscapeKey integration over socket" $ \tmpDir -> do
+      let socketPath = tmpDir <> "/escape-test3.sock"
+
+      -- Test that parseEscapeKey matches the byte values we're sending
+      parseEscapeKey "ctrl-w" `shouldBe` 23
+      parseEscapeKey "ctrl-a" `shouldBe` 1
+      parseEscapeKey "ctrl-c" `shouldBe` 3
+      parseEscapeKey "ctrl-z" `shouldBe` 26
+
+      withAsync (runEscapeTestServer socketPath) $ \_ -> do
+        -- Give server time to start
+        delay 10000 -- 10ms
+        withInteractive 10 (Socket socketPath) $ \sp -> do
+          -- Read initial output
+          void $ readBytes sp
+
+          -- Use parseEscapeKey to get the correct byte value
+          let escapeKeyByte = parseEscapeKey "ctrl-w"
+          let ctrlWBytes = BS.pack [escapeKeyByte]
+
+          -- Send the escape key sequence
+          writeBytes sp (ctrlWBytes <> "hello\n")
+          response <- readBytes sp
+          response `shouldSatisfy` (\out -> "Echo:" `isInfixOf` show out)
+
+          -- Clean exit
+          writeBytes sp "quit\n"
+          void $ readBytes sp
+
 -- Helper function to provide temp directory fixture
 withTempDir :: (FilePath -> IO a) -> IO a
 withTempDir = withSystemTempDirectory "streaming-socket-test"
@@ -367,5 +460,49 @@ runCommandServer socketPath = do
                 loop
 
   loop `finally` do
+    close clientSock
+    close serverSock
+
+-- | Escape test server that mimics the behavior of escape-test-simple.sh
+runEscapeTestServer :: FilePath -> IO ()
+runEscapeTestServer socketPath = do
+  serverSock <- socket AF_UNIX Stream 0
+  bind serverSock (SockAddrUnix socketPath)
+  listen serverSock 1
+  (clientSock, _) <- accept serverSock
+
+  -- Send welcome message
+  sendAll clientSock "Escape test ready\n> "
+
+  let readLine buffer = do
+        bytes <- recv clientSock 4096
+        if BS.null bytes
+          then pure Nothing
+          else do
+            let newBuffer = buffer <> bytes
+            case BS8.elemIndex '\n' newBuffer of
+              Nothing -> readLine newBuffer
+              Just idx -> pure $ Just $ BS.take idx newBuffer
+
+  let loop = do
+        maybeLine <- readLine BS.empty
+        case maybeLine of
+          Nothing -> pure ()
+          Just line -> do
+            let lineText = decodeUtf8With lenientDecode line
+            case lineText of
+              "quit" -> do
+                sendAll clientSock "Goodbye\nTest finished\n"
+              "test" -> do
+                sendAll clientSock "Test response\n> "
+                loop
+              "" -> do
+                sendAll clientSock "Empty input received\n> "
+                loop
+              _ -> do
+                sendAll clientSock ("Echo: " <> encodeUtf8 lineText <> "\n> ")
+                loop
+
+  loop `catchAny` (\_ -> pure ()) `finally` do
     close clientSock
     close serverSock

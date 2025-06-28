@@ -112,6 +112,12 @@ in
           The path to a file with the output of nix print-dev-env flake#shell
         '';
       };
+
+      shellEscapeKey = lib.mkOption {
+        type = lib.types.str;
+        default = "Ctrl-W";
+        description = "The escape key sequence for exiting the VM shell console (e.g., Ctrl-W, Ctrl-A)";
+      };
     };
   };
   config = {
