@@ -177,10 +177,13 @@
                 let self = builtins.getFlake \"${self}\";
                     mkVM = mods: (self.lib.$SYSTEM.mk-agent-vm mods).config.system.build.vmWithVirtioFS;
                     lib = self.legacyPackages.$SYSTEM.lib;
+                    userFlake = builtins.getFlake \"$FLAKE\";
                 in mkVM
                     [$CONFIG
                       { agent-vm = {
                           shellEnv= lib.mkDefault \"$SHELLENV\";
+                          shellName = \"$DEVSHELL\";
+                          flake = userFlake;
                           port= lib.mkDefault $PORT;
                           memorySize= lib.mkDefault $MEMORY_SIZE;
                           diskSize= lib.mkDefault $DISK_SIZE;

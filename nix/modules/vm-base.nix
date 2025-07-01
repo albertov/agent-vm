@@ -6,6 +6,8 @@
 }:
 let
   cfg = config.agent-vm;
+
+  shell = cfg.flake.devShells."${pkgs.system}"."${cfg.shellName}";
 in
 {
   imports = [
@@ -113,6 +115,20 @@ in
         '';
       };
 
+      shellName = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The name of the shell in the flake's devShells set
+        '';
+      };
+
+      flake = lib.mkOption {
+        type = lib.types.unspecified;
+        description = ''
+          The user's project flake
+        '';
+      };
+
       shellEscapeKey = lib.mkOption {
         type = lib.types.str;
         default = "Ctrl-W";
@@ -147,7 +163,7 @@ in
       diskImage = cfg.diskImage;
       graphics = cfg.pidFile != null; # -nographics is incompatible with -daemonize
       mountHostNixStore = true;
-      additionalPaths = cfg.additionalPaths;
+      additionalPaths = [ shell ] ++ cfg.additionalPaths;
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;

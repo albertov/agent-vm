@@ -97,21 +97,23 @@ generateVMNixContent vmConfig (toS -> shellEnvPath) = do
   agent-vm =
     let
        resolvePackages = builtins.map (p: pkgs."$${p}");
+       rawConfig = builtins.fromJSON (builtins.readFile $configPath);
        mapAttr = name:
          { additionalPaths = resolvePackages;
            systemPackages = resolvePackages;
          }."$${name}" or lib.mkDefault;
 
-    in {
+    in rec {
       shellEnv = $shellEnvPath;
+      flake = (builtins.getFlake rawConfig.flake);
       serialSocket = "$serialSocket";
       pidFile = "$pidFile";
       diskImage = "$diskImage";
     }
     // (builtins.mapAttrs mapAttr
          (builtins.removeAttrs
-            (builtins.fromJSON (builtins.readFile $configPath))
-            ["flake" "shellName" "nixBaseConfig" "stateDir"]));
+            rawConfig
+            ["flake" "nixBaseConfig" "stateDir"]));
 }
 |]
   where
@@ -139,7 +141,7 @@ buildVMImage vmConfig = do
   nixFilePath <- buildVMNixFile vmConfig shellEnvPath
   let gcRootPath = vmGCRoot vmConfig
       nixFilePathVar = toS nixFilePath
-  selfRef <- maybe getFlakeReference pure $(TH.runIO (TH.lift . fmap (toS @_ @Text) =<< lookupEnv "AGENT_VM_SELF"))
+  selfRef <- maybe (getFlakeReference Nothing) pure $(TH.runIO (TH.lift . fmap (toS @_ @Text) =<< lookupEnv "AGENT_VM_SELF"))
   let buildExpression =
         [text|
         let self = builtins.getFlake "$selfRef";
