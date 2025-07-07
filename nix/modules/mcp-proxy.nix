@@ -62,10 +62,16 @@ let
       mkServerScript =
         name: server:
         let
+          serverEnvVars = concatStringsSep "\n" (
+            mapAttrsToList (k: v: ''export ${k}="${v}"'') server.environment
+          );
           app = pkgs.writeShellApplication {
             inherit name;
             inherit (server) runtimeInputs;
-            text = "exec ${server.command} ${escapeShellArgs server.args}";
+            text = ''
+              ${serverEnvVars}
+              exec ${server.command} ${escapeShellArgs server.args}
+            '';
           };
         in
         "${app}/bin/${name}";
@@ -82,7 +88,7 @@ let
         ]
         ++ optionals cfg.stateless [ "--stateless" ]
         ++ optionals (cfg.allowOrigins != [ ]) (
-          lib.concatMap (x: [
+          concatMap (x: [
             "--allow-origin"
             x
           ]) cfg.allowOrigins
@@ -139,19 +145,19 @@ in
       description = "The mcp-proxy package to use.";
     };
 
-    openFirewall = lib.mkOption {
-      type = lib.types.bool;
+    openFirewall = mkOption {
+      type = types.bool;
       default = false;
       description = "Open firewall port for the service";
     };
 
-    pkgs = lib.mkOption {
+    pkgs = mkOption {
       description = "The package set";
       default = pkgs;
     };
 
-    shellEnv = lib.mkOption {
-      type = lib.types.path;
+    shellEnv = mkOption {
+      type = types.path;
       description = ''
         '
                 The path to a file with the output of nix print-dev-env flake#shell
@@ -300,7 +306,7 @@ in
       }
     ];
 
-    networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall cfg.port;
+    networking.firewall.allowedTCPPorts = optional cfg.openFirewall cfg.port;
 
     users.users.${cfg.user} = mkIf (cfg.user == "mcp-proxy") {
       group = cfg.group;
