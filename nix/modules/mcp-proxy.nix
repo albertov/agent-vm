@@ -68,7 +68,11 @@ let
           app = pkgs.writeShellApplication {
             inherit name;
             inherit (server) runtimeInputs;
+            excludeShellChecks = [
+              "SC1091" # So we can 'source' the shellHook
+            ];
             text = ''
+              source ${cfg.shellEnv}
               ${serverEnvVars}
               exec ${server.command} ${escapeShellArgs server.args}
             '';
@@ -159,8 +163,7 @@ in
     shellEnv = mkOption {
       type = types.path;
       description = ''
-        '
-                The path to a file with the output of nix print-dev-env flake#shell
+        The path to a file with the output of nix print-dev-env flake#shell
       '';
     };
 

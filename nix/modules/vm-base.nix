@@ -7,8 +7,7 @@
 let
   cfg = config.agent-vm;
 
-  shellInputs = with cfg.shell;
-    buildInputs ++ nativeBuildInputs ++ propagatedBuildInputs;
+  shellInputs = with cfg.shell; buildInputs ++ nativeBuildInputs ++ propagatedBuildInputs;
 in
 {
   imports = [
