@@ -7,7 +7,8 @@
 let
   cfg = config.agent-vm;
 
-  shell = cfg.flake.devShells."${pkgs.system}"."${cfg.shellName}";
+  shellInputs = with cfg.shell;
+    buildInputs ++ nativeBuildInputs ++ propagatedBuildInputs;
 in
 {
   imports = [
@@ -26,6 +27,11 @@ in
         type = lib.types.bool;
         default = true;
         description = "Whether to use tmpfs for /tmp";
+      };
+      shell = lib.mkOption {
+        type = lib.types.package;
+        default = cfg.flake.devShells."${pkgs.system}"."${cfg.shellName}";
+        internal = true;
       };
 
       memorySize = lib.mkOption {
@@ -163,7 +169,7 @@ in
       diskImage = cfg.diskImage;
       graphics = cfg.pidFile != null; # -nographics is incompatible with -daemonize
       mountHostNixStore = true;
-      additionalPaths = [ shell ] ++ cfg.additionalPaths;
+      additionalPaths = [ cfg.shell ] ++ cfg.additionalPaths;
       writableStore = true;
       writableStoreUseTmpfs = false;
       useNixStoreImage = false;
@@ -246,6 +252,7 @@ in
       uid = cfg.uid;
       gid = cfg.gid;
       group = cfg.group;
+      runtimeInputs = shellInputs;
       shellEnv = lib.mkDefault cfg.shellEnv;
       serverPrefix = cfg.serverPrefix;
       namedServers.codemcp = {

@@ -271,6 +271,12 @@ in
         example = [ "mcp-server-fetch" ];
       };
     };
+    runtimeInputs = mkOption {
+      type = types.listOf types.package;
+      default = with pkgs; [ ];
+      description = "Runtime inputs common to all servers";
+      example = [ "mcp-server-fetch" ];
+    };
 
     namedServers = mkOption {
       type = types.attrsOf (types.submodule namedServerOptions);
@@ -325,12 +331,10 @@ in
       let
         startService = pkgs.writeShellApplication {
           name = "start";
-          runtimeInputs = with pkgs; [
-            git
-            nix
-            bash
+          runtimeInputs = [
+            pkgs.bash
             cfg.package
-          ];
+          ] ++ cfg.runtimeInputs;
           excludeShellChecks = [
             "SC1091" # So we can 'source' the shellHook
           ];
